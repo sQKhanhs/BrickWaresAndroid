@@ -1,0 +1,28 @@
+<!-- Crate/box — Sets stat + Collection nav. From design SET_ICON (viewBox 40, stroke 1.6). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <path
+        android:pathData="M34,15 L30,6 L10,6 L6,15 L6,34 L34,34 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9.688,14 L11.938,9 L28,9 L30.25,14 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9,17 L31,17 L31,31 L9,31 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

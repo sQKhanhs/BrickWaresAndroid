@@ -1,0 +1,14 @@
+<!-- Heart — Wishlist nav. From design HEART_ICON (viewBox 24, stroke 1.6). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,20.5 C12,20.5 3,15 3,8.8 C3,5.9 5.2,4 7.8,4 C9.6,4 11.1,5 12,6.4 C12.9,5 14.4,4 16.2,4 C18.8,4 21,5.9 21,8.8 C21,15 12,20.5 12,20.5 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
