@@ -1,6 +1,5 @@
 package com.senniapp.brickwares.ui.home
 
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,7 +29,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,7 +54,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.gif.repeatCount
+import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.StatCardRow
+import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -70,8 +76,13 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // Play the intro GIF only on the first Home composition of the session; mark it played
+    // immediately so returning to the Home tab shows the static hero instead of replaying.
+    val showGif = remember { !viewModel.hasHeroGifPlayed }
+    LaunchedEffect(Unit) { if (showGif) viewModel.onHeroGifPlayed() }
     HomeContent(
         state = state,
+        showHeroGif = showGif,
         onShareClick = viewModel::onShareClick,
         onSignInPrompt = viewModel::onSignInPrompt,
         onDismissSignInDialog = viewModel::onDismissSignInDialog,
@@ -84,6 +95,7 @@ fun HomeScreen(
 @Composable
 private fun HomeContent(
     state: HomeUiState,
+    showHeroGif: Boolean,
     onShareClick: () -> Unit,
     onSignInPrompt: () -> Unit,
     onDismissSignInDialog: () -> Unit,
@@ -106,9 +118,15 @@ private fun HomeContent(
             Header(canShare = state.canShare, onShareClick = onShareClick)
             Spacer(Modifier.height(14.dp))
             state.summary?.let { summary ->
-                HeroCard(summary = summary, currency = state.currency, showGif = state.showHeroGif)
+                HeroCard(summary = summary, currency = state.currency, showGif = showHeroGif)
                 Spacer(Modifier.height(14.dp))
-                StatRow(summary = summary)
+                StatCardRow(
+                    entries = listOf(
+                        StatEntry(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets"),
+                        StatEntry(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs"),
+                        StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
+                    ),
+                )
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -174,9 +192,13 @@ private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif:
             .background(Color(0xFF1A1A1A)),
     ) {
         // Layer 1: animated Lego-drop GIF (loaded via Coil's animated decoder).
+        // repeatCount(0) => play the animation once, then hold on the last frame.
         if (showGif) {
             AsyncImage(
-                model = "file:///android_asset/lego_drop.gif",
+                model = ImageRequest.Builder(LocalPlatformContext.current)
+                    .data("file:///android_asset/lego_drop.gif")
+                    .repeatCount(0)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
@@ -244,53 +266,6 @@ private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif:
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun StatRow(summary: CollectionSummary) {
-    val colors = BwTheme.colors
-    // Faithful yellow "frame": 2dp yellow padding (radius 16) around the card (radius 14).
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.brandYellow)
-            .padding(2.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(colors.card)
-                .padding(vertical = 18.dp, horizontal = 8.dp),
-        ) {
-            StatItem(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets", Modifier.weight(1f))
-            StatItem(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs", Modifier.weight(1f))
-            StatItem(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces", Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun StatItem(
-    @DrawableRes iconRes: Int,
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier,
-) {
-    val colors = BwTheme.colors
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = colors.textMuted2,
-            modifier = Modifier.size(22.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(value, style = BwType.statNumber, color = colors.text)
-        Spacer(Modifier.height(2.dp))
-        Text(label, style = BwType.statLabel, color = colors.textMuted)
     }
 }
 
@@ -374,6 +349,7 @@ private fun HomeLoggedInPreview() {
     BrickWaresTheme {
         HomeContent(
             state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
+            showHeroGif = false,
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }
@@ -385,6 +361,7 @@ private fun HomeLoggedOutPreview() {
     BrickWaresTheme {
         HomeContent(
             state = HomeUiState(isLoading = false, isLoggedIn = false, summary = previewSummary),
+            showHeroGif = false,
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }
@@ -396,6 +373,7 @@ private fun HomeDarkPreview() {
     BrickWaresTheme(darkTheme = true) {
         HomeContent(
             state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
+            showHeroGif = false,
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }

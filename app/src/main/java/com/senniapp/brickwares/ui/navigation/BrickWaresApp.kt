@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -64,6 +65,7 @@ fun BrickWaresApp() {
         ) {
             when (selectedTab) {
                 BwTab.Home -> HomeScreen()
+                BwTab.Collection -> CollectionScreen()
                 else -> PlaceholderScreen(title = selectedTab.label)
             }
         }

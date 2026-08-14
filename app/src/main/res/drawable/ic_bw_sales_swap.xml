@@ -1,0 +1,22 @@
+<!-- Sales swap — from design SALES_SWAP_ICON (circular refresh arrows). The "$" in the
+     centre is drawn as a Compose Text overlay, since vector drawables can't embed text. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.5,11.5 a7.5,7.5 0 0 1 12.3,-5.7 M19.5,4.5 v4 h-4"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M19.5,12.5 a7.5,7.5 0 0 1 -12.3,5.7 M4.5,19.5 v-4 h4"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

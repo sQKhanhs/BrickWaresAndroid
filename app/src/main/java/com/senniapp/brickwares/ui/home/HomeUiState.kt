@@ -13,11 +13,6 @@ data class HomeUiState(
     val currency: AppCurrency = AppCurrency.VND,
     val summary: CollectionSummary? = null,
     val showSignInDialog: Boolean = false,
-    /**
-     * Whether the animated Lego-drop GIF shows behind the hero. Currently forced on so the
-     * animation is visible; later this becomes state-driven (e.g. empty/cold-start value state).
-     */
-    val showHeroGif: Boolean = false,
 ) {
     /** The header share action only appears when signed in with a non-empty collection. */
     val canShare: Boolean

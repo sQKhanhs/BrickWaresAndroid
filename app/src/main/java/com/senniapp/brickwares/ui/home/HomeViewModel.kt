@@ -20,9 +20,20 @@ class HomeViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
 ) : ViewModel() {
 
-    // showHeroGif forced on for now so the animation is visible while we evaluate it.
-    private val _uiState = MutableStateFlow(HomeUiState(showHeroGif = true))
+    private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    /**
+     * Whether the intro hero GIF has already played this app session. Held here (not in the
+     * Flow state) because this ViewModel is Activity-scoped, so the flag survives leaving and
+     * re-entering the Home tab — the GIF plays once on app open and never again.
+     */
+    var hasHeroGifPlayed: Boolean = false
+        private set
+
+    fun onHeroGifPlayed() {
+        hasHeroGifPlayed = true
+    }
 
     init {
         loadSummary()

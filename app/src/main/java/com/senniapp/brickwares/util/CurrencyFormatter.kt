@@ -30,6 +30,9 @@ fun formatMoney(amount: Long, currency: AppCurrency): String = when (currency) {
 fun formatCount(value: Int): String =
     NumberFormat.getNumberInstance(Locale.US).format(value)
 
+/** Formats a set's release as the design's "T{month}/{year}" label, e.g. (1, 2023) -> "T1/2023". */
+fun formatRelease(month: Int, year: Int): String = "T$month/$year"
+
 /** Formats a signed growth percentage, e.g. 9.0 -> "+9%", -3.5 -> "-3.5%". */
 fun formatGrowth(percent: Double): String {
     val rounded = if (percent % 1.0 == 0.0) percent.toInt().toString()
