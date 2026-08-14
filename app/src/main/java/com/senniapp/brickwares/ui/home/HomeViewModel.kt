@@ -20,7 +20,8 @@ class HomeViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    // showHeroGif forced on for now so the animation is visible while we evaluate it.
+    private val _uiState = MutableStateFlow(HomeUiState(showHeroGif = true))
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {

@@ -39,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
@@ -104,7 +106,7 @@ private fun HomeContent(
             Header(canShare = state.canShare, onShareClick = onShareClick)
             Spacer(Modifier.height(14.dp))
             state.summary?.let { summary ->
-                HeroCard(summary = summary, currency = state.currency)
+                HeroCard(summary = summary, currency = state.currency, showGif = state.showHeroGif)
                 Spacer(Modifier.height(14.dp))
                 StatRow(summary = summary)
             }
@@ -163,25 +165,40 @@ private fun Header(canShare: Boolean, onShareClick: () -> Unit) {
 }
 
 @Composable
-private fun HeroCard(summary: CollectionSummary, currency: AppCurrency) {
+private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 260.dp)
             .clip(RoundedCornerShape(16.dp))
-            // Base near-black + top-weighted dark gradient (per spec). When a real collection
-            // photo/gif is wired later it sits behind this gradient for text legibility.
-            .background(Color(0xFF1A1A1A))
-            .background(
-                Brush.verticalGradient(
-                    0f to Color(0xD11A1A1A),
-                    0.42f to Color(0x261A1A1A),
-                    1f to Color(0x1A1A1A1A),
-                ),
-            )
-            .padding(28.dp),
+            .background(Color(0xFF1A1A1A)),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Layer 1: animated Lego-drop GIF (loaded via Coil's animated decoder).
+        if (showGif) {
+            AsyncImage(
+                model = "file:///android_asset/lego_drop.gif",
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+        // Layer 2: top-weighted dark gradient — keeps the label/value legible over any image.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color(0xD11A1A1A),
+                        0.42f to Color(0x261A1A1A),
+                        1f to Color(0x1A1A1A1A),
+                    ),
+                ),
+        )
+        // Layer 3: content.
+        Column(
+            modifier = Modifier.padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Text(
                 text = "Collection Value",
                 style = BwType.heroLabel,
