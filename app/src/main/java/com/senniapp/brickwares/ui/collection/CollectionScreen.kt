@@ -7,8 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,64 +20,53 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
-import com.senniapp.brickwares.data.model.Availability
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.Condition
+import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.SalesSummary
+import com.senniapp.brickwares.data.model.SoldItem
+import com.senniapp.brickwares.ui.components.AddToCollectionSheet
+import com.senniapp.brickwares.ui.components.Banner
+import com.senniapp.brickwares.ui.components.ChipItem
+import com.senniapp.brickwares.ui.components.GrowthPill
+import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
+import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRelease
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.input.KeyboardType
-import com.senniapp.brickwares.data.model.CatalogSet
-import com.senniapp.brickwares.data.model.Condition
-import com.senniapp.brickwares.data.model.Copy
-import com.senniapp.brickwares.data.model.SalesSummary
-import com.senniapp.brickwares.data.model.SoldItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import java.time.LocalDate
 import kotlin.math.roundToInt
 
 @Composable
@@ -237,71 +224,11 @@ private fun CollectionContent(
 }
 
 @Composable
-private fun Banner(imageAsset: String, title: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(150.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF2C2C2C)),
-    ) {
-        AsyncImage(
-            model = imageAsset,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.matchParentSize(),
-        )
-        // Scrim so the title stays legible over any image.
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(0f to Color(0x33000000), 1f to Color(0x99000000)),
-                ),
-        )
-        Text(
-            text = title,
-            style = BwType.wordmark,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(horizontal = 20.dp),
-        )
-    }
-}
-
-@Composable
 private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ChipItem(R.drawable.ic_bw_all, "All", selected == CollectionFilter.ALL, { onSelect(CollectionFilter.ALL) }, Modifier.weight(1f))
         ChipItem(R.drawable.ic_bw_set, "Set", selected == CollectionFilter.SET, { onSelect(CollectionFilter.SET) }, Modifier.weight(1f))
         ChipItem(R.drawable.ic_bw_minifig, "Minifig", selected == CollectionFilter.MINIFIG, { onSelect(CollectionFilter.MINIFIG) }, Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun ChipItem(
-    iconRes: Int,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = BwTheme.colors
-    val bg = if (selected) colors.brandYellow else colors.card
-    val fg = if (selected) colors.onYellow else colors.text
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .then(if (selected) Modifier else Modifier.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(12.dp)))
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painter = painterResource(iconRes), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(6.dp))
-        Text(label, style = BwType.navLabel, color = fg, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -387,85 +314,6 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit) {
                 Text("See Detail", style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
             }
         }
-    }
-}
-
-/**
- * A meta line (label + value). Uses [FlowRow] with a non-wrapping value so that when the
- * value doesn't fit beside the label it drops to the next line *whole* (e.g. "3066 / 5"),
- * instead of breaking in the middle.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun MetaLine(label: String, value: String) {
-    val colors = BwTheme.colors
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(label, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-        Text(
-            value,
-            style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-            color = colors.textSecondary,
-            softWrap = false,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun StatusBadge(status: Availability) {
-    val colors = BwTheme.colors
-    val (text, color) = when (status) {
-        Availability.RETIRED -> "Retired" to colors.error
-        Availability.EXCLUSIVE -> "Exclusive" to colors.linkAccent2
-        Availability.AVAILABLE -> "Available" to colors.success
-    }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 9.dp, vertical = 3.dp),
-    ) {
-        Text(text, style = BwType.micro, color = color)
-    }
-}
-
-@Composable
-private fun PriceLine(label: String, value: String) {
-    val colors = BwTheme.colors
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-        Spacer(Modifier.width(6.dp))
-        Text(
-            value,
-            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
-            color = colors.text,
-        )
-    }
-}
-
-@Composable
-private fun GrowthPill(percent: Double) {
-    val colors = BwTheme.colors
-    val pct = percent.roundToInt()
-    val (text, color) = when {
-        pct > 0 -> "▲ +$pct% Growth" to colors.success
-        pct < 0 -> "▼ $pct% Growth" to colors.error
-        else -> "0% Growth" to colors.textMuted
-    }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(text, style = BwType.micro, color = color)
     }
 }
 
@@ -714,238 +562,5 @@ private fun SeeDetailsDialog(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddToCollectionSheet(
-    initialSet: CatalogSet?,
-    initialCopy: Copy?,
-    onDismiss: () -> Unit,
-    onSearch: (String) -> List<CatalogSet>,
-    onAdd: (CollectionItem) -> Unit,
-) {
-    val colors = BwTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isEdit = initialCopy != null
-
-    var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf(initialSet) }
-    var paid by remember { mutableStateOf(initialCopy?.pricePaid?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
-    var qty by remember { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
-    var condition by remember { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
-    var note by remember { mutableStateOf(initialCopy?.note ?: "") }
-    var dateAdded by remember { mutableStateOf(initialCopy?.dateAdded ?: LocalDate.now().toString()) }
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    val suggestions = if (selected == null) onSearch(query) else emptyList()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.card,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp)
-                .imePadding()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(if (isEdit) "Edit Item" else "Add to Collection", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
-
-            val currentSelection = selected
-            if (currentSelection == null) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("Enter set number, e.g. 75192") },
-                )
-                suggestions.take(6).forEach { set ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                selected = set
-                                query = ""
-                                if (paid.isBlank()) paid = set.retailPrice.toString()
-                            }
-                            .padding(vertical = 10.dp, horizontal = 12.dp),
-                    ) {
-                        Column {
-                            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
-                            Text("${set.theme} · ${set.pieces} pcs", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-                        }
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(colors.surface)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${currentSelection.setNumber} ${currentSelection.name}", style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.text)
-                        Text(currentSelection.theme, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-                    }
-                    Text(
-                        "✕",
-                        color = colors.textMuted,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable { selected = null }
-                            .padding(8.dp),
-                    )
-                }
-            }
-
-            FieldLabel("Paid")
-            OutlinedTextField(
-                value = paid,
-                onValueChange = { input -> paid = input.filter { it.isDigit() } },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                suffix = { Text("₫", color = colors.textMuted) },
-                placeholder = { Text("0") },
-            )
-
-            FieldLabel("Qty")
-            OutlinedTextField(
-                value = qty,
-                onValueChange = { input -> qty = input.filter { it.isDigit() } },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-
-            FieldLabel("Condition")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ConditionChip("New", condition == Condition.NEW, { condition = Condition.NEW }, Modifier.weight(1f))
-                ConditionChip("Used", condition == Condition.USED, { condition = Condition.USED }, Modifier.weight(1f))
-            }
-
-            FieldLabel("Date Added")
-            Box {
-                OutlinedTextField(
-                    value = dateAdded,
-                    onValueChange = {},
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = true,
-                )
-                // Transparent overlay so tapping the read-only field opens the date picker.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { showDatePicker = true },
-                )
-            }
-            if (showDatePicker) {
-                val initMillis = runCatching {
-                    LocalDate.parse(dateAdded).toEpochDay() * 86_400_000L
-                }.getOrDefault(System.currentTimeMillis())
-                val dpState = rememberDatePickerState(initialSelectedDateMillis = initMillis)
-                DatePickerDialog(
-                    onDismissRequest = { showDatePicker = false },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            dpState.selectedDateMillis?.let { millis ->
-                                dateAdded = LocalDate.ofEpochDay(millis / 86_400_000L).toString()
-                            }
-                            showDatePicker = false
-                        }) { Text("OK") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
-                    },
-                ) {
-                    DatePicker(state = dpState)
-                }
-            }
-
-            FieldLabel("Note")
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                modifier = Modifier.fillMaxWidth().height(90.dp),
-                placeholder = { Text("Optional") },
-            )
-
-            Spacer(Modifier.height(4.dp))
-            val canAdd = currentSelection != null && paid.isNotBlank()
-            Button(
-                onClick = {
-                    val set = selected ?: return@Button
-                    onAdd(
-                        CollectionItem(
-                            setNumber = set.setNumber, name = set.name, itemType = set.itemType,
-                            theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                            pieces = set.pieces, minifigs = set.minifigs,
-                            retailPrice = set.retailPrice,
-                            currentValue = null, growthPercent = null, status = set.status,
-                            copies = listOf(
-                                Copy(
-                                    id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
-                                    condition = condition,
-                                    qty = qty.toIntOrNull() ?: 1,
-                                    pricePaid = paid.toLongOrNull() ?: 0L,
-                                    dateAdded = dateAdded,
-                                    note = note.ifBlank { null },
-                                ),
-                            ),
-                        ),
-                    )
-                },
-                enabled = canAdd,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.brandYellow,
-                    contentColor = colors.onYellow,
-                    disabledContainerColor = colors.track,
-                    disabledContentColor = colors.textMuted,
-                ),
-            ) {
-                Text(if (isEdit) "Save" else "Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun FieldLabel(text: String) {
-    Text(
-        text,
-        style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-        color = BwTheme.colors.textMuted,
-    )
-}
-
-@Composable
-private fun ConditionChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = BwTheme.colors
-    val bg = if (selected) colors.brandYellow else colors.card
-    val fg = if (selected) colors.onYellow else colors.text
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg)
-            .then(if (selected) Modifier else Modifier.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp)))
-            .clickable(onClick = onClick)
-            .padding(vertical = 11.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = fg)
     }
 }

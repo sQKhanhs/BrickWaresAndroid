@@ -7,6 +7,7 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
+import com.senniapp.brickwares.data.model.WishlistItem
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -42,4 +43,15 @@ interface CollectionRepository {
     suspend fun getSoldItems(): List<SoldItem>
 
     suspend fun getSalesSummary(): SalesSummary
+
+    // ---- Wishlist ----
+
+    /** Sets/minifigs the user wants but doesn't own yet, exposed as a [Flow] like the collection. */
+    fun getWishlistItems(): Flow<List<WishlistItem>>
+
+    /** Adds a set to the wishlist. No-op if the set is already wishlisted. */
+    fun addToWishlist(item: WishlistItem)
+
+    /** Removes a set from the wishlist (e.g. after moving it into the collection). */
+    fun removeFromWishlist(setNumber: String)
 }

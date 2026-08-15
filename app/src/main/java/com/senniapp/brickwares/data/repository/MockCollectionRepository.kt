@@ -10,6 +10,7 @@ import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
+import com.senniapp.brickwares.data.model.WishlistItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,11 @@ import kotlinx.coroutines.flow.update
  */
 class MockCollectionRepository : CollectionRepository {
 
-    private val _items = MutableStateFlow(MOCK_ITEMS)
+    // Backed by process-wide flows (declared in the companion) so every constructed instance
+    // shares the same in-memory data — e.g. moving a set from the Wishlist tab into the
+    // collection is visible on the Collection tab even though each ViewModel news up its own repo.
+    private val _items get() = itemsFlow
+    private val _wishlist get() = wishlistFlow
 
     override suspend fun getCollectionSummary(): CollectionSummary {
         delay(300)
@@ -112,6 +117,20 @@ class MockCollectionRepository : CollectionRepository {
             avgProfitPercent = avg,
             profitPercent = overall,
         )
+    }
+
+    // ---- Wishlist ----
+
+    override fun getWishlistItems(): Flow<List<WishlistItem>> = _wishlist.asStateFlow()
+
+    override fun addToWishlist(item: WishlistItem) {
+        _wishlist.update { current ->
+            if (current.any { it.setNumber == item.setNumber }) current else current + item
+        }
+    }
+
+    override fun removeFromWishlist(setNumber: String) {
+        _wishlist.update { current -> current.filterNot { it.setNumber == setNumber } }
     }
 
     private companion object {
@@ -215,5 +234,40 @@ class MockCollectionRepository : CollectionRepository {
                 retailPrice = 1_499_740, pricePaid = 1_300_000, saleValue = 1_100_000,
             ),
         )
+
+        val MOCK_WISHLIST = listOf(
+            WishlistItem(
+                setNumber = "75313", name = "AT-AT", itemType = ItemType.SET,
+                theme = "Star Wars", releaseYear = 2021, releaseMonth = 11,
+                pieces = 6785, minifigs = 9, retailPrice = 19_999_740,
+                currentValue = 26_500_000, growthPercent = 32.5,
+                status = Availability.RETIRED, imageUrl = SET_IMG,
+            ),
+            WishlistItem(
+                setNumber = "10307", name = "Eiffel Tower", itemType = ItemType.SET,
+                theme = "Icons", releaseYear = 2022, releaseMonth = 11,
+                pieces = 10001, minifigs = 0, retailPrice = 16_999_740,
+                currentValue = null, growthPercent = null,
+                status = Availability.AVAILABLE, imageUrl = SET_IMG,
+            ),
+            WishlistItem(
+                setNumber = "42143", name = "Ferrari Daytona SP3", itemType = ItemType.SET,
+                theme = "Technic", releaseYear = 2022, releaseMonth = 6,
+                pieces = 3778, minifigs = 0, retailPrice = 11_499_740,
+                currentValue = 13_200_000, growthPercent = 14.8,
+                status = Availability.AVAILABLE, imageUrl = SET_IMG,
+            ),
+            WishlistItem(
+                setNumber = "fig-042", name = "Boba Fett", itemType = ItemType.MINIFIG,
+                theme = "Star Wars", releaseYear = 2019, releaseMonth = 5,
+                pieces = 4, minifigs = 1, retailPrice = 650_000,
+                currentValue = 980_000, growthPercent = 50.8,
+                status = Availability.RETIRED, imageUrl = MINIFIG_IMG,
+            ),
+        )
+
+        // Process-wide stores shared by all repository instances (see [_items] / [_wishlist]).
+        val itemsFlow = MutableStateFlow(MOCK_ITEMS)
+        val wishlistFlow = MutableStateFlow(MOCK_WISHLIST)
     }
 }
