@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -55,12 +55,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
+import coil3.gif.onAnimationEnd
 import coil3.gif.repeatCount
 import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.data.model.CollectionSummary
+import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -76,13 +78,14 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    // Play the intro GIF only on the first Home composition of the session; mark it played
-    // immediately so returning to the Home tab shows the static hero instead of replaying.
+    // Animate the intro GIF until it has fully played once this session. "Played" is marked
+    // only when the animation completes (onGifFinished), so leaving mid-play replays it next
+    // visit; once finished, the static poster is shown instead.
     val showGif = remember { !viewModel.hasHeroGifPlayed }
-    LaunchedEffect(Unit) { if (showGif) viewModel.onHeroGifPlayed() }
     HomeContent(
         state = state,
         showHeroGif = showGif,
+        onGifFinished = viewModel::onHeroGifPlayed,
         onShareClick = viewModel::onShareClick,
         onSignInPrompt = viewModel::onSignInPrompt,
         onDismissSignInDialog = viewModel::onDismissSignInDialog,
@@ -96,6 +99,7 @@ fun HomeScreen(
 private fun HomeContent(
     state: HomeUiState,
     showHeroGif: Boolean,
+    onGifFinished: () -> Unit,
     onShareClick: () -> Unit,
     onSignInPrompt: () -> Unit,
     onDismissSignInDialog: () -> Unit,
@@ -118,7 +122,12 @@ private fun HomeContent(
             Header(canShare = state.canShare, onShareClick = onShareClick)
             Spacer(Modifier.height(14.dp))
             state.summary?.let { summary ->
-                HeroCard(summary = summary, currency = state.currency, showGif = showHeroGif)
+                HeroCard(
+                    summary = summary,
+                    currency = state.currency,
+                    showGif = showHeroGif,
+                    onGifFinished = onGifFinished,
+                )
                 Spacer(Modifier.height(14.dp))
                 StatCardRow(
                     entries = listOf(
@@ -127,6 +136,10 @@ private fun HomeContent(
                         StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
                     ),
                 )
+            }
+            if (state.themes.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                ThemesCard(themes = state.themes)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -191,6 +204,12 @@ private object HeroAssets {
     const val SMALL_GIF = "file:///android_asset/lego_drop_small.gif"
 
     /**
+     * Static last frame of [SMALL_GIF], shown as the resting hero background so returning to
+     * the tab shows where the gif stopped (not a dark card). Supplied by the user.
+     */
+    const val POSTER = "file:///android_asset/lego_drop_poster.png"
+
+    /**
      * Larger drop for 100+ sets. Kept OUT of the APK (it's ~16 MB) — host it in Supabase
      * Storage and put the public URL here. Add the `coil-network-okhttp` dependency when set.
      * While blank, the small bundled gif is used for everyone.
@@ -199,7 +218,12 @@ private object HeroAssets {
 }
 
 @Composable
-private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif: Boolean) {
+private fun HeroCard(
+    summary: CollectionSummary,
+    currency: AppCurrency,
+    showGif: Boolean,
+    onGifFinished: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -207,10 +231,17 @@ private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif:
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF1A1A1A)),
     ) {
-        // Layer 1: animated Lego-drop GIF (loaded via Coil's animated decoder).
-        // repeatCount(0) => play the animation once, then hold on the last frame.
-        // Collectors with 100+ sets get the larger celebratory drop (hosted remotely,
-        // cached by Coil); everyone else gets the small bundled gif.
+        // Layer 0: static last-frame poster — the resting hero background (shown once the gif
+        // has finished, and on every later visit).
+        AsyncImage(
+            model = HeroAssets.POSTER,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize(),
+        )
+        // Layer 1: animated Lego-drop GIF, played over the poster. repeatCount(0) => play once.
+        // onAnimationEnd marks it played *only on completion*, so leaving mid-play replays it
+        // next visit. Collectors with 100+ sets get the larger remote drop; others the small gif.
         if (showGif) {
             val heroGif = if (summary.setCount > HeroAssets.SET_THRESHOLD &&
                 HeroAssets.BIG_GIF_URL.isNotBlank()
@@ -223,6 +254,7 @@ private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif:
                 model = ImageRequest.Builder(LocalPlatformContext.current)
                     .data(heroGif)
                     .repeatCount(0)
+                    .onAnimationEnd { onGifFinished() }
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -357,6 +389,56 @@ private fun SignInDialog(onDismiss: () -> Unit, onSignIn: () -> Unit) {
     }
 }
 
+@Composable
+private fun ThemesCard(themes: List<ThemeSummary>) {
+    val colors = BwTheme.colors
+    val maxCount = themes.maxOfOrNull { it.setCount } ?: 1
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, colors.borderSoft),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Collection by Theme", style = BwType.cardTitle, color = colors.text)
+            themes.forEach { theme ->
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        theme.theme,
+                        style = BwType.body.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.text,
+                    )
+                    Text(
+                        "${theme.setCount} ${if (theme.setCount == 1) "set" else "sets"}",
+                        style = BwType.body.copy(fontSize = 12.sp),
+                        color = colors.textMuted,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.track),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction = theme.setCount.toFloat() / maxCount)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.brandYellow),
+                    )
+                }
+            }
+        }
+    }
+}
+
 // ---- Previews ----
 
 private val previewSummary = CollectionSummary(
@@ -368,13 +450,21 @@ private val previewSummary = CollectionSummary(
     growthPercent = 9.0,
 )
 
+private val previewThemes = listOf(
+    ThemeSummary("Icons", 3, 34_200_000),
+    ThemeSummary("City", 2, 12_400_000),
+    ThemeSummary("Star Wars", 1, 22_500_000),
+    ThemeSummary("Architecture", 1, 3_900_000),
+)
+
 @Preview(name = "Home – logged in", showBackground = true, heightDp = 720)
 @Composable
 private fun HomeLoggedInPreview() {
     BrickWaresTheme {
         HomeContent(
-            state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
+            state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
             showHeroGif = false,
+            onGifFinished = {},
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }
@@ -387,6 +477,7 @@ private fun HomeLoggedOutPreview() {
         HomeContent(
             state = HomeUiState(isLoading = false, isLoggedIn = false, summary = previewSummary),
             showHeroGif = false,
+            onGifFinished = {},
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }
@@ -399,6 +490,7 @@ private fun HomeDarkPreview() {
         HomeContent(
             state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
             showHeroGif = false,
+            onGifFinished = {},
             onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
         )
     }

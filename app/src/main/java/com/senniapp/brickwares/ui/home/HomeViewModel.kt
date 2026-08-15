@@ -43,7 +43,8 @@ class HomeViewModel(
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val summary = repository.getCollectionSummary()
-            _uiState.update { it.copy(isLoading = false, summary = summary) }
+            val themes = repository.getThemeSummaries()
+            _uiState.update { it.copy(isLoading = false, summary = summary, themes = themes) }
         }
     }
 

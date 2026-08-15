@@ -1,19 +1,25 @@
 package com.senniapp.brickwares.data.repository
 
 import com.senniapp.brickwares.data.model.Availability
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.ThemeSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
- * In-memory mock repository. Values mirror the design handoff screenshots so the
- * UI looks like the reference. The small [delay] simulates async loading so the
- * ViewModel's loading state is exercised.
+ * In-memory mock repository. Values mirror the design handoff screenshots so the UI looks
+ * like the reference. Items are held in a [MutableStateFlow] so additions from the Add sheet
+ * appear live in the Collection list.
  */
 class MockCollectionRepository : CollectionRepository {
+
+    private val _items = MutableStateFlow(MOCK_ITEMS)
 
     override suspend fun getCollectionSummary(): CollectionSummary {
         delay(300)
@@ -28,7 +34,24 @@ class MockCollectionRepository : CollectionRepository {
         )
     }
 
-    override fun getCollectionItems(): Flow<List<CollectionItem>> = flowOf(MOCK_ITEMS)
+    override suspend fun getThemeSummaries(): List<ThemeSummary> {
+        delay(300)
+        return MOCK_THEMES
+    }
+
+    override fun getCollectionItems(): Flow<List<CollectionItem>> = _items.asStateFlow()
+
+    override fun searchCatalog(query: String): List<CatalogSet> {
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        return MOCK_CATALOG.filter {
+            it.setNumber.contains(q, ignoreCase = true) || it.name.contains(q, ignoreCase = true)
+        }
+    }
+
+    override fun addItem(item: CollectionItem) {
+        _items.update { current -> current + item }
+    }
 
     private companion object {
         val MOCK_ITEMS = listOf(
@@ -67,6 +90,25 @@ class MockCollectionRepository : CollectionRepository {
                 retailPrice = 320_000, pricePaid = 280_000,
                 currentValue = 450_000, growthPercent = 60.7, status = Availability.EXCLUSIVE,
             ),
+        )
+
+        val MOCK_THEMES = listOf(
+            ThemeSummary("Icons", setCount = 3, totalValue = 34_200_000),
+            ThemeSummary("City", setCount = 2, totalValue = 12_400_000),
+            ThemeSummary("Star Wars", setCount = 1, totalValue = 22_500_000),
+            ThemeSummary("Harry Potter", setCount = 1, totalValue = 14_500_000),
+            ThemeSummary("Architecture", setCount = 1, totalValue = 3_900_000),
+        )
+
+        val MOCK_CATALOG = listOf(
+            CatalogSet("10300", "Back to the Future Time Machine", ItemType.SET, "Icons", 2022, 4, 1856, 2, 4_299_740, Availability.AVAILABLE),
+            CatalogSet("10307", "Eiffel Tower", ItemType.SET, "Icons", 2022, 11, 10001, 0, 16_999_740, Availability.AVAILABLE),
+            CatalogSet("42143", "Ferrari Daytona SP3", ItemType.SET, "Technic", 2022, 6, 3778, 0, 11_499_740, Availability.AVAILABLE),
+            CatalogSet("75313", "AT-AT", ItemType.SET, "Star Wars", 2021, 11, 6785, 9, 19_999_740, Availability.RETIRED),
+            CatalogSet("21344", "The Orient Express Train", ItemType.SET, "Ideas", 2024, 3, 2540, 6, 8_999_740, Availability.AVAILABLE),
+            CatalogSet("10281", "Bonsai Tree", ItemType.SET, "Botanical", 2021, 1, 878, 0, 1_499_740, Availability.AVAILABLE),
+            CatalogSet("31203", "World Map", ItemType.SET, "Art", 2021, 6, 11695, 0, 6_999_740, Availability.RETIRED),
+            CatalogSet("76989", "Horizon Adventures Tallneck", ItemType.SET, "Gaming", 2023, 5, 1222, 1, 2_299_740, Availability.AVAILABLE),
         )
     }
 }

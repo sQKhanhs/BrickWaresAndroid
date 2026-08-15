@@ -51,6 +51,23 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRelease
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
+import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.Condition
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 @Composable
@@ -65,6 +82,9 @@ fun CollectionScreen(
         onToggleMode = viewModel::onToggleMode,
         onAddClick = viewModel::onAddClick,
         onItemDetail = viewModel::onItemDetail,
+        onDismissAddSheet = viewModel::onDismissAddSheet,
+        onSearchCatalog = viewModel::searchCatalog,
+        onAddItem = viewModel::addToCollection,
         modifier = modifier,
     )
 }
@@ -76,6 +96,9 @@ private fun CollectionContent(
     onToggleMode: () -> Unit,
     onAddClick: () -> Unit,
     onItemDetail: (CollectionItem) -> Unit,
+    onDismissAddSheet: () -> Unit,
+    onSearchCatalog: (String) -> List<CatalogSet>,
+    onAddItem: (CollectionItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -153,6 +176,14 @@ private fun CollectionContent(
                 contentDescription = "Add to collection",
                 tint = colors.onYellow,
                 modifier = Modifier.size(26.dp),
+            )
+        }
+
+        if (state.showAddSheet) {
+            AddToCollectionSheet(
+                onDismiss = onDismissAddSheet,
+                onSearch = onSearchCatalog,
+                onAdd = onAddItem,
             )
         }
     }
@@ -399,5 +430,192 @@ private fun SalesPlaceholder() {
         contentAlignment = Alignment.Center,
     ) {
         Text("Sales view — coming soon", style = BwType.cardTitle, color = colors.textMuted)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddToCollectionSheet(
+    onDismiss: () -> Unit,
+    onSearch: (String) -> List<CatalogSet>,
+    onAdd: (CollectionItem) -> Unit,
+) {
+    val colors = BwTheme.colors
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var query by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf<CatalogSet?>(null) }
+    var paid by remember { mutableStateOf("") }
+    var qty by remember { mutableStateOf("1") }
+    var condition by remember { mutableStateOf(Condition.NEW) }
+    var note by remember { mutableStateOf("") }
+
+    val suggestions = if (selected == null) onSearch(query) else emptyList()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.card,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Add to Collection", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
+
+            val currentSelection = selected
+            if (currentSelection == null) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Enter set number, e.g. 75192") },
+                )
+                suggestions.take(6).forEach { set ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                selected = set
+                                query = ""
+                                if (paid.isBlank()) paid = set.retailPrice.toString()
+                            }
+                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                    ) {
+                        Column {
+                            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
+                            Text("${set.theme} · ${set.pieces} pcs", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.surface)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${currentSelection.setNumber} ${currentSelection.name}", style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.text)
+                        Text(currentSelection.theme, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+                    }
+                    Text(
+                        "✕",
+                        color = colors.textMuted,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { selected = null }
+                            .padding(8.dp),
+                    )
+                }
+            }
+
+            FieldLabel("Paid")
+            OutlinedTextField(
+                value = paid,
+                onValueChange = { input -> paid = input.filter { it.isDigit() } },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                suffix = { Text("₫", color = colors.textMuted) },
+                placeholder = { Text("0") },
+            )
+
+            FieldLabel("Qty")
+            OutlinedTextField(
+                value = qty,
+                onValueChange = { input -> qty = input.filter { it.isDigit() } },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+
+            FieldLabel("Condition")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ConditionChip("New", condition == Condition.NEW, { condition = Condition.NEW }, Modifier.weight(1f))
+                ConditionChip("Used", condition == Condition.USED, { condition = Condition.USED }, Modifier.weight(1f))
+            }
+
+            FieldLabel("Date Added")
+            OutlinedTextField(
+                value = LocalDate.now().toString(),
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                readOnly = true,
+            )
+
+            FieldLabel("Note")
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                modifier = Modifier.fillMaxWidth().height(90.dp),
+                placeholder = { Text("Optional") },
+            )
+
+            Spacer(Modifier.height(4.dp))
+            val canAdd = currentSelection != null && paid.isNotBlank()
+            Button(
+                onClick = {
+                    val set = selected ?: return@Button
+                    onAdd(
+                        CollectionItem(
+                            setNumber = set.setNumber, name = set.name, itemType = set.itemType,
+                            theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
+                            pieces = set.pieces, minifigs = set.minifigs,
+                            retailPrice = set.retailPrice, pricePaid = paid.toLongOrNull() ?: 0L,
+                            currentValue = null, growthPercent = null, status = set.status,
+                        ),
+                    )
+                },
+                enabled = canAdd,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.brandYellow,
+                    contentColor = colors.onYellow,
+                    disabledContainerColor = colors.track,
+                    disabledContentColor = colors.textMuted,
+                ),
+            ) {
+                Text("Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldLabel(text: String) {
+    Text(
+        text,
+        style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        color = BwTheme.colors.textMuted,
+    )
+}
+
+@Composable
+private fun ConditionChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = BwTheme.colors
+    val bg = if (selected) colors.brandYellow else colors.card
+    val fg = if (selected) colors.onYellow else colors.text
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .then(if (selected) Modifier else Modifier.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp)))
+            .clickable(onClick = onClick)
+            .padding(vertical = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = fg)
     }
 }

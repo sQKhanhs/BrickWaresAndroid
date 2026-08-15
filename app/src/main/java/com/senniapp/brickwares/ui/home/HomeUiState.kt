@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.home
 
 import com.senniapp.brickwares.data.model.CollectionSummary
+import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.util.AppCurrency
 
 /**
@@ -12,6 +13,7 @@ data class HomeUiState(
     val isLoggedIn: Boolean = true,
     val currency: AppCurrency = AppCurrency.VND,
     val summary: CollectionSummary? = null,
+    val themes: List<ThemeSummary> = emptyList(),
     val showSignInDialog: Boolean = false,
 ) {
     /** The header share action only appears when signed in with a non-empty collection. */

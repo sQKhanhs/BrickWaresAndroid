@@ -2,6 +2,7 @@ package com.senniapp.brickwares.ui.collection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.MockCollectionRepository
@@ -46,7 +47,20 @@ class CollectionViewModel(
     }
 
     fun onAddClick() {
-        // TODO: open the Add-to-Collection sheet.
+        _uiState.update { it.copy(showAddSheet = true) }
+    }
+
+    fun onDismissAddSheet() {
+        _uiState.update { it.copy(showAddSheet = false) }
+    }
+
+    /** Catalog search backing the Add sheet's set-number field. */
+    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+
+    /** Adds the item and closes the sheet; it appears live in the list via the items Flow. */
+    fun addToCollection(item: CollectionItem) {
+        repository.addItem(item)
+        _uiState.update { it.copy(showAddSheet = false) }
     }
 
     fun onItemDetail(item: CollectionItem) {

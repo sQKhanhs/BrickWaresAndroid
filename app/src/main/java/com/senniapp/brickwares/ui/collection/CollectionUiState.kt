@@ -20,6 +20,7 @@ data class CollectionUiState(
     val filter: CollectionFilter = CollectionFilter.ALL,
     val summary: CollectionSummary? = null,
     val items: List<CollectionItem> = emptyList(),
+    val showAddSheet: Boolean = false,
 ) {
     val visibleItems: List<CollectionItem>
         get() = when (filter) {

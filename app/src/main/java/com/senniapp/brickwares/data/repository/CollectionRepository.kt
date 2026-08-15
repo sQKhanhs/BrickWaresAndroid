@@ -1,7 +1,9 @@
 package com.senniapp.brickwares.data.repository
 
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
+import com.senniapp.brickwares.data.model.ThemeSummary
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -15,5 +17,13 @@ import kotlinx.coroutines.flow.Flow
 interface CollectionRepository {
     suspend fun getCollectionSummary(): CollectionSummary
 
+    suspend fun getThemeSummaries(): List<ThemeSummary>
+
     fun getCollectionItems(): Flow<List<CollectionItem>>
+
+    /** Catalog search for the Add-to-Collection sheet (by set number or name). */
+    fun searchCatalog(query: String): List<CatalogSet>
+
+    /** Adds an owned item to the collection (updates [getCollectionItems]). */
+    fun addItem(item: CollectionItem)
 }
