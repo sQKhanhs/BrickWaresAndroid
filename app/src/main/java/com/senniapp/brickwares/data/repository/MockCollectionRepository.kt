@@ -107,6 +107,7 @@ class MockCollectionRepository : CollectionRepository {
         val overall = if (totalPaid == 0L) 0.0 else totalProfit.toDouble() / totalPaid * 100.0
         return SalesSummary(
             totalSold = sold.size,
+            totalSaleValue = sold.sumOf { it.saleValue },
             totalProfit = totalProfit,
             avgProfitPercent = avg,
             profitPercent = overall,

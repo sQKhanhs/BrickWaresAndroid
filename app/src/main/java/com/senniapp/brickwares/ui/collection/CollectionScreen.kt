@@ -159,7 +159,7 @@ private fun CollectionContent(
             } else {
                 state.salesSummary?.let { s ->
                     item {
-                        SalesStatsGrid(s)
+                        SalesStatsRow(s)
                         Spacer(Modifier.height(12.dp))
                         ProfitBar(s)
                         Spacer(Modifier.height(14.dp))
@@ -477,44 +477,48 @@ private fun signedMoney(v: Long): String =
 private fun signedPct(p: Double): String = "${if (p >= 0) "+" else ""}${p.roundToInt()}%"
 
 @Composable
-private fun SalesStatsGrid(summary: SalesSummary) {
+private fun SalesStatsRow(summary: SalesSummary) {
     val colors = BwTheme.colors
-    val profitColor = if (summary.totalProfit >= 0) colors.success else colors.error
-    // Yellow frame, matching the collection stat card.
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.brandYellow)
-            .padding(2.dp),
+    val cream = colors.brandYellow.copy(alpha = 0.16f)
+    val gold = colors.linkAccent2
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Total Sold — circular badge (the taller element)
+        Column(
+            modifier = Modifier.size(112.dp).clip(CircleShape).background(cream),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(painterResource(R.drawable.ic_bw_set), null, tint = gold, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.height(6.dp))
+            Text("TOTAL SOLD", style = BwType.micro, color = gold)
+            Spacer(Modifier.height(2.dp))
+            Text(summary.totalSold.toString(), style = BwType.statNumber, color = colors.text)
+        }
+        // Sale Value — card, shorter than the circle and vertically centered against it
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(colors.card)
-                .padding(vertical = 18.dp, horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .weight(1f)
+                .height(88.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(cream)
+                .padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Row {
-                SalesStatCell("Total Sold", summary.totalSold.toString(), colors.text, Modifier.weight(1f))
-                SalesStatCell("Total Profit", signedMoney(summary.totalProfit), profitColor, Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("$", style = BwType.cardTitle.copy(fontSize = 18.sp), color = gold)
+                Text("SALE VALUE", style = BwType.micro.copy(fontSize = 12.sp), color = gold)
             }
-            Row {
-                SalesStatCell("Avg Profit %", signedPct(summary.avgProfitPercent), if (summary.avgProfitPercent >= 0) colors.success else colors.error, Modifier.weight(1f))
-                SalesStatCell("Profit %", signedPct(summary.profitPercent), profitColor, Modifier.weight(1f))
-            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                formatMoney(summary.totalSaleValue, AppCurrency.VND),
+                style = BwType.statNumber.copy(fontSize = 22.sp),
+                color = colors.text,
+            )
         }
-    }
-}
-
-@Composable
-private fun SalesStatCell(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
-    val colors = BwTheme.colors
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = BwType.statNumber.copy(fontSize = 18.sp), color = valueColor)
-        Spacer(Modifier.height(3.dp))
-        Text(label, style = BwType.statLabel, color = colors.textMuted)
     }
 }
 

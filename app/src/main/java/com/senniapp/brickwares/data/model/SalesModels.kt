@@ -18,9 +18,10 @@ data class SoldItem(
         get() = if (pricePaid == 0L) 0.0 else (profit.toDouble() / pricePaid) * 100.0
 }
 
-/** Aggregated Sales stats for the 2×2 grid + profit summary bar. */
+/** Aggregated Sales stats: Total Sold + Sale Value tiles and the profit summary bar. */
 data class SalesSummary(
     val totalSold: Int,
+    val totalSaleValue: Long,
     val totalProfit: Long,
     val avgProfitPercent: Double,
     val profitPercent: Double,
