@@ -57,7 +57,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -67,6 +71,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.input.KeyboardType
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.Condition
+import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.model.SalesSummary
+import com.senniapp.brickwares.data.model.SoldItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -84,7 +96,11 @@ fun CollectionScreen(
         onItemDetail = viewModel::onItemDetail,
         onDismissAddSheet = viewModel::onDismissAddSheet,
         onSearchCatalog = viewModel::searchCatalog,
-        onAddItem = viewModel::addToCollection,
+        onAddItem = viewModel::submitAddSheet,
+        onDismissDetail = viewModel::onDismissDetail,
+        onDeleteCopy = viewModel::onDeleteCopy,
+        onAddCopyForSet = viewModel::onAddCopyForSet,
+        onEditCopy = viewModel::onEditCopy,
         modifier = modifier,
     )
 }
@@ -99,6 +115,10 @@ private fun CollectionContent(
     onDismissAddSheet: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddItem: (CollectionItem) -> Unit,
+    onDismissDetail: () -> Unit,
+    onDeleteCopy: (String, String) -> Unit,
+    onAddCopyForSet: (CollectionItem) -> Unit,
+    onEditCopy: (CollectionItem, Copy) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -107,23 +127,27 @@ private fun CollectionContent(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
+            val sales = state.mode == CollectionMode.SALES
             item {
-                Banner(title = if (state.mode == CollectionMode.SALES) "My Sales" else "My Collection")
+                Banner(
+                    imageAsset = if (sales) "file:///android_asset/sales_banner.png" else "file:///android_asset/collection_banner.png",
+                    title = if (sales) "My Sales" else "My Collection",
+                )
                 Spacer(Modifier.height(16.dp))
             }
-            state.summary?.let { summary ->
-                item {
-                    StatCardRow(
-                        entries = listOf(
-                            StatEntry(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets"),
-                            StatEntry(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs"),
-                            StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
-                        ),
-                    )
-                    Spacer(Modifier.height(16.dp))
+            if (!sales) {
+                state.summary?.let { summary ->
+                    item {
+                        StatCardRow(
+                            entries = listOf(
+                                StatEntry(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets"),
+                                StatEntry(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs"),
+                                StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
+                            ),
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
                 }
-            }
-            if (state.mode == CollectionMode.COLLECTION) {
                 item {
                     FilterChips(selected = state.filter, onSelect = onFilterSelected)
                     Spacer(Modifier.height(14.dp))
@@ -133,7 +157,18 @@ private fun CollectionContent(
                     Spacer(Modifier.height(12.dp))
                 }
             } else {
-                item { SalesPlaceholder() }
+                state.salesSummary?.let { s ->
+                    item {
+                        SalesStatsGrid(s)
+                        Spacer(Modifier.height(12.dp))
+                        ProfitBar(s)
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
+                items(state.soldItems, key = { it.setNumber }) { sold ->
+                    SoldCard(sold)
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
@@ -181,16 +216,28 @@ private fun CollectionContent(
 
         if (state.showAddSheet) {
             AddToCollectionSheet(
+                initialSet = state.addSheetPreselect,
+                initialCopy = state.editingCopy,
                 onDismiss = onDismissAddSheet,
                 onSearch = onSearchCatalog,
                 onAdd = onAddItem,
+            )
+        }
+
+        state.detailItem?.let { detail ->
+            SeeDetailsDialog(
+                item = detail,
+                onDismiss = onDismissDetail,
+                onDeleteCopy = onDeleteCopy,
+                onEditCopy = { copy -> onEditCopy(detail, copy) },
+                onAddItem = { onAddCopyForSet(detail) },
             )
         }
     }
 }
 
 @Composable
-private fun Banner(title: String) {
+private fun Banner(imageAsset: String, title: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,7 +246,7 @@ private fun Banner(title: String) {
             .background(Color(0xFF2C2C2C)),
     ) {
         AsyncImage(
-            model = "file:///android_asset/collection_banner.png",
+            model = imageAsset,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
@@ -321,7 +368,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine("Retail", formatMoney(item.retailPrice, AppCurrency.VND))
-            PriceLine("Paid", formatMoney(item.pricePaid, AppCurrency.VND))
+            PriceLine("Paid", formatMoney(item.totalPaid, AppCurrency.VND))
             if (item.currentValue != null) {
                 PriceLine("Value", formatMoney(item.currentValue, AppCurrency.VND))
                 item.growthPercent?.let { GrowthPill(it) }
@@ -422,33 +469,271 @@ private fun GrowthPill(percent: Double) {
     }
 }
 
+// ---- Sales mode ----
+
+private fun signedMoney(v: Long): String =
+    (if (v > 0) "+" else "") + formatMoney(v, AppCurrency.VND)
+
+private fun signedPct(p: Double): String = "${if (p >= 0) "+" else ""}${p.roundToInt()}%"
+
 @Composable
-private fun SalesPlaceholder() {
+private fun SalesStatsGrid(summary: SalesSummary) {
     val colors = BwTheme.colors
+    val profitColor = if (summary.totalProfit >= 0) colors.success else colors.error
+    // Yellow frame, matching the collection stat card.
     Box(
-        modifier = Modifier.fillMaxWidth().height(200.dp),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.brandYellow)
+            .padding(2.dp),
     ) {
-        Text("Sales view — coming soon", style = BwType.cardTitle, color = colors.textMuted)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(colors.card)
+                .padding(vertical = 18.dp, horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row {
+                SalesStatCell("Total Sold", summary.totalSold.toString(), colors.text, Modifier.weight(1f))
+                SalesStatCell("Total Profit", signedMoney(summary.totalProfit), profitColor, Modifier.weight(1f))
+            }
+            Row {
+                SalesStatCell("Avg Profit %", signedPct(summary.avgProfitPercent), if (summary.avgProfitPercent >= 0) colors.success else colors.error, Modifier.weight(1f))
+                SalesStatCell("Profit %", signedPct(summary.profitPercent), profitColor, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SalesStatCell(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
+    val colors = BwTheme.colors
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = BwType.statNumber.copy(fontSize = 18.sp), color = valueColor)
+        Spacer(Modifier.height(3.dp))
+        Text(label, style = BwType.statLabel, color = colors.textMuted)
+    }
+}
+
+@Composable
+private fun ProfitBar(summary: SalesSummary) {
+    val colors = BwTheme.colors
+    val positive = summary.totalProfit >= 0
+    val color = if (positive) colors.success else colors.error
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "${if (positive) "▲" else "▼"} Profit ${signedMoney(summary.totalProfit)}",
+            style = BwType.body.copy(fontWeight = FontWeight.Bold),
+            color = color,
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(color.copy(alpha = 0.18f))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        ) {
+            Text(signedPct(summary.profitPercent), style = BwType.micro, color = color)
+        }
+    }
+}
+
+@Composable
+private fun SoldCard(sold: SoldItem) {
+    val colors = BwTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.card)
+            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
+            .padding(14.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sold.imageUrl != null) {
+                AsyncImage(model = sold.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
+            } else {
+                Icon(painterResource(R.drawable.ic_bw_set), null, tint = colors.textFaint, modifier = Modifier.size(30.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
+            MetaLine("Theme", sold.theme)
+            MetaLine("Release", formatRelease(sold.releaseMonth, sold.releaseYear))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            PriceLine("Retail", formatMoney(sold.retailPrice, AppCurrency.VND))
+            PriceLine("Sale", formatMoney(sold.saleValue, AppCurrency.VND))
+            val profitColor = if (sold.profit >= 0) colors.success else colors.error
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Profit", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+                Spacer(Modifier.width(6.dp))
+                Text(signedMoney(sold.profit), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
+            }
+            GrowthPill(sold.profitPercent)
+        }
+    }
+}
+
+// ---- See Details ----
+
+@Composable
+private fun SeeDetailsDialog(
+    item: CollectionItem,
+    onDismiss: () -> Unit,
+    onDeleteCopy: (String, String) -> Unit,
+    onEditCopy: (Copy) -> Unit,
+    onAddItem: () -> Unit,
+) {
+    val colors = BwTheme.colors
+    val expanded = remember { mutableStateListOf<String>() }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = colors.card,
+            modifier = Modifier.fillMaxWidth(0.92f),
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(item.name, style = BwType.cardTitle, color = colors.text)
+                        Text(item.setNumber, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                    }
+                    Text(
+                        "✕",
+                        color = colors.textMuted,
+                        modifier = Modifier.clip(CircleShape).clickable(onClick = onDismiss).padding(6.dp),
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+
+                // Column header
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                    Text("Cond.", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1f))
+                    Text("Date", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.3f))
+                    Text("Qty", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(0.5f))
+                    Text("Paid", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.5f))
+                    Spacer(Modifier.width(84.dp))
+                }
+                HorizontalDivider(color = colors.borderSoft)
+
+                item.copies.forEachIndexed { index, copy ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (copy.condition == Condition.NEW) "New" else "Used", style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
+                        Text(copy.dateAdded, style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
+                        Text(copy.qty.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
+                        Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
+                        Row(modifier = Modifier.width(84.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bw_note),
+                                contentDescription = "Toggle note",
+                                tint = if (copy.note != null) colors.linkAccent else colors.borderStrong,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        if (copy.id in expanded) expanded.remove(copy.id) else expanded.add(copy.id)
+                                    },
+                            )
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bw_edit),
+                                contentDescription = "Edit copy",
+                                tint = colors.textMuted2,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onEditCopy(copy) },
+                            )
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bw_delete),
+                                contentDescription = "Delete copy",
+                                tint = colors.error,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onDeleteCopy(item.setNumber, copy.id) },
+                            )
+                        }
+                    }
+                    if (copy.id in expanded && copy.note != null) {
+                        Text(
+                            copy.note,
+                            style = BwType.body.copy(fontSize = 11.sp),
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    if (index < item.copies.lastIndex) HorizontalDivider(color = colors.borderSoft)
+                }
+
+                HorizontalDivider(color = colors.borderStrong)
+                // Avg row
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Avg", style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.weight(1.3f))
+                    Text(item.totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
+                    Text(formatMoney(item.avgPaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
+                    Spacer(Modifier.width(84.dp))
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = onAddItem,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.brandYellow, contentColor = colors.onYellow),
+                ) {
+                    Text("Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+                }
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddToCollectionSheet(
+    initialSet: CatalogSet?,
+    initialCopy: Copy?,
     onDismiss: () -> Unit,
     onSearch: (String) -> List<CatalogSet>,
     onAdd: (CollectionItem) -> Unit,
 ) {
     val colors = BwTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isEdit = initialCopy != null
 
     var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf<CatalogSet?>(null) }
-    var paid by remember { mutableStateOf("") }
-    var qty by remember { mutableStateOf("1") }
-    var condition by remember { mutableStateOf(Condition.NEW) }
-    var note by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf(initialSet) }
+    var paid by remember { mutableStateOf(initialCopy?.pricePaid?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
+    var qty by remember { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
+    var condition by remember { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
+    var note by remember { mutableStateOf(initialCopy?.note ?: "") }
+    var dateAdded by remember { mutableStateOf(initialCopy?.dateAdded ?: LocalDate.now().toString()) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val suggestions = if (selected == null) onSearch(query) else emptyList()
 
@@ -466,7 +751,7 @@ private fun AddToCollectionSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Add to Collection", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
+            Text(if (isEdit) "Edit Item" else "Add to Collection", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
 
             val currentSelection = selected
             if (currentSelection == null) {
@@ -546,13 +831,44 @@ private fun AddToCollectionSheet(
             }
 
             FieldLabel("Date Added")
-            OutlinedTextField(
-                value = LocalDate.now().toString(),
-                onValueChange = {},
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                readOnly = true,
-            )
+            Box {
+                OutlinedTextField(
+                    value = dateAdded,
+                    onValueChange = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    readOnly = true,
+                )
+                // Transparent overlay so tapping the read-only field opens the date picker.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { showDatePicker = true },
+                )
+            }
+            if (showDatePicker) {
+                val initMillis = runCatching {
+                    LocalDate.parse(dateAdded).toEpochDay() * 86_400_000L
+                }.getOrDefault(System.currentTimeMillis())
+                val dpState = rememberDatePickerState(initialSelectedDateMillis = initMillis)
+                DatePickerDialog(
+                    onDismissRequest = { showDatePicker = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            dpState.selectedDateMillis?.let { millis ->
+                                dateAdded = LocalDate.ofEpochDay(millis / 86_400_000L).toString()
+                            }
+                            showDatePicker = false
+                        }) { Text("OK") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                    },
+                ) {
+                    DatePicker(state = dpState)
+                }
+            }
 
             FieldLabel("Note")
             OutlinedTextField(
@@ -572,8 +888,18 @@ private fun AddToCollectionSheet(
                             setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                             theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                             pieces = set.pieces, minifigs = set.minifigs,
-                            retailPrice = set.retailPrice, pricePaid = paid.toLongOrNull() ?: 0L,
+                            retailPrice = set.retailPrice,
                             currentValue = null, growthPercent = null, status = set.status,
+                            copies = listOf(
+                                Copy(
+                                    id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
+                                    condition = condition,
+                                    qty = qty.toIntOrNull() ?: 1,
+                                    pricePaid = paid.toLongOrNull() ?: 0L,
+                                    dateAdded = dateAdded,
+                                    note = note.ifBlank { null },
+                                ),
+                            ),
                         ),
                     )
                 },
@@ -587,7 +913,7 @@ private fun AddToCollectionSheet(
                     disabledContentColor = colors.textMuted,
                 ),
             ) {
-                Text("Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+                Text(if (isEdit) "Save" else "Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }

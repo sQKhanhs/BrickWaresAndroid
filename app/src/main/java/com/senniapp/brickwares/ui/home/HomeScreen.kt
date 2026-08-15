@@ -392,7 +392,7 @@ private fun SignInDialog(onDismiss: () -> Unit, onSignIn: () -> Unit) {
 @Composable
 private fun ThemesCard(themes: List<ThemeSummary>) {
     val colors = BwTheme.colors
-    val maxCount = themes.maxOfOrNull { it.setCount } ?: 1
+    val maxValue = themes.maxOfOrNull { it.totalValue } ?: 1L
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = colors.card,
@@ -412,11 +412,18 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
                         style = BwType.body.copy(fontWeight = FontWeight.SemiBold),
                         color = colors.text,
                     )
-                    Text(
-                        "${theme.setCount} ${if (theme.setCount == 1) "set" else "sets"}",
-                        style = BwType.body.copy(fontSize = 12.sp),
-                        color = colors.textMuted,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${theme.setCount} ${if (theme.setCount == 1) "set" else "sets"} · ",
+                            style = BwType.body.copy(fontSize = 12.sp),
+                            color = colors.textMuted,
+                        )
+                        Text(
+                            formatMoney(theme.totalValue, AppCurrency.VND),
+                            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                            color = colors.text,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(6.dp))
                 Box(
@@ -428,7 +435,7 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(fraction = theme.setCount.toFloat() / maxCount)
+                            .fillMaxWidth(fraction = (theme.totalValue.toFloat() / maxValue).coerceIn(0.02f, 1f))
                             .height(6.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(colors.brandYellow),

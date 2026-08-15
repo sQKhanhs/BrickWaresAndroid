@@ -10,10 +10,22 @@ enum class ItemType { SET, MINIFIG }
 enum class Availability { AVAILABLE, EXCLUSIVE, RETIRED }
 
 /**
- * One entry in the user's collection, as shown on a Collection-tab card.
- *
- * Money is whole VND (Long) at the mock stage. [currentValue]/[growthPercent] are nullable
- * because "current value" is crowdsourced and often absent — cards must render without them.
+ * One owned copy of a set. A set can hold several copies bought at different times, conditions
+ * and prices — this is what the See Details modal lists and what the Add sheet creates.
+ */
+data class Copy(
+    val id: String,
+    val condition: Condition,
+    val qty: Int,
+    val pricePaid: Long,
+    val dateAdded: String, // ISO yyyy-MM-dd
+    val note: String? = null,
+)
+
+/**
+ * An owned item (a set or minifig) plus its copies. Money is whole VND (Long) at the mock stage.
+ * [currentValue]/[growthPercent] are nullable because "current value" is crowdsourced and often
+ * absent — cards must render without them.
  */
 data class CollectionItem(
     val setNumber: String,
@@ -25,9 +37,18 @@ data class CollectionItem(
     val pieces: Int,
     val minifigs: Int,
     val retailPrice: Long,
-    val pricePaid: Long,
     val currentValue: Long? = null,
     val growthPercent: Double? = null,
     val status: Availability = Availability.AVAILABLE,
     val imageUrl: String? = null,
-)
+    val copies: List<Copy> = emptyList(),
+) {
+    /** Total paid across all copies (the card's "Paid"). */
+    val totalPaid: Long get() = copies.sumOf { it.pricePaid }
+
+    /** Total number of pieces/units owned across copies. */
+    val totalQty: Int get() = copies.sumOf { it.qty }
+
+    /** Average paid per copy (shown in the See Details "Avg" row). */
+    val avgPaid: Long get() = if (copies.isEmpty()) 0L else copies.sumOf { it.pricePaid } / copies.size
+}
