@@ -182,6 +182,22 @@ private fun Header(canShare: Boolean, onShareClick: () -> Unit) {
     }
 }
 
+/** Hero background gif sources. */
+private object HeroAssets {
+    /** Collections above this many sets show the larger celebratory drop. */
+    const val SET_THRESHOLD = 100
+
+    /** Bundled default intro (compressed, ~5.5 MB) — works offline on first launch. */
+    const val SMALL_GIF = "file:///android_asset/lego_drop_small.gif"
+
+    /**
+     * Larger drop for 100+ sets. Kept OUT of the APK (it's ~16 MB) — host it in Supabase
+     * Storage and put the public URL here. Add the `coil-network-okhttp` dependency when set.
+     * While blank, the small bundled gif is used for everyone.
+     */
+    const val BIG_GIF_URL = "" // TODO(supabase): Supabase Storage URL for LegoDrop.gif
+}
+
 @Composable
 private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif: Boolean) {
     Box(
@@ -193,10 +209,19 @@ private fun HeroCard(summary: CollectionSummary, currency: AppCurrency, showGif:
     ) {
         // Layer 1: animated Lego-drop GIF (loaded via Coil's animated decoder).
         // repeatCount(0) => play the animation once, then hold on the last frame.
+        // Collectors with 100+ sets get the larger celebratory drop (hosted remotely,
+        // cached by Coil); everyone else gets the small bundled gif.
         if (showGif) {
+            val heroGif = if (summary.setCount > HeroAssets.SET_THRESHOLD &&
+                HeroAssets.BIG_GIF_URL.isNotBlank()
+            ) {
+                HeroAssets.BIG_GIF_URL
+            } else {
+                HeroAssets.SMALL_GIF
+            }
             AsyncImage(
                 model = ImageRequest.Builder(LocalPlatformContext.current)
-                    .data("file:///android_asset/lego_drop.gif")
+                    .data(heroGif)
                     .repeatCount(0)
                     .build(),
                 contentDescription = null,
