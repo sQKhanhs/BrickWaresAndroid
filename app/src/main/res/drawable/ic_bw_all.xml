@@ -5,8 +5,10 @@
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="108"
-    android:viewportHeight="76">
-    <group android:translateX="-3" android:translateY="-16">
+    android:viewportHeight="108">
+    <!-- Square viewport (content is 108x76) so the icon isn't stretched in the square Icon
+         bounds; translateY centers the wide two-brick content vertically. -->
+    <group android:translateX="-3" android:translateY="0">
 
         <!-- Big brick -->
         <path android:pathData="M5,35 L35,50 L35,80 L5,65 Z" android:fillColor="#00000000" android:strokeColor="#111111" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" />
