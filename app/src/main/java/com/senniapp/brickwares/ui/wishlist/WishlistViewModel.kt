@@ -28,7 +28,7 @@ class WishlistViewModel(
     init {
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
-                _uiState.update { it.copy(isLoading = false, items = items) }
+                _uiState.update { it.copy(itemsLoaded = true, items = items) }
             }
         }
     }
@@ -39,28 +39,16 @@ class WishlistViewModel(
 
     fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
 
-    fun onRemove(setNumber: String) = repository.removeFromWishlist(setNumber)
-
-    // ---- Add to wishlist ----
-
-    fun onAddClick() {
-        _uiState.update { it.copy(showAddSheet = true) }
+    fun onRemove(setNumber: String) {
+        val item = _uiState.value.items.find { it.setNumber == setNumber }
+        repository.removeFromWishlist(setNumber)
+        if (item != null) {
+            _uiState.update { it.copy(toastMessage = "${item.name} removed from Wishlist") }
+        }
     }
 
-    fun onDismissAddSheet() {
-        _uiState.update { it.copy(showAddSheet = false) }
-    }
-
-    fun onAddToWishlist(set: CatalogSet) {
-        repository.addToWishlist(
-            WishlistItem(
-                setNumber = set.setNumber, name = set.name, itemType = set.itemType,
-                theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                pieces = set.pieces, minifigs = set.minifigs,
-                retailPrice = set.retailPrice, status = set.status,
-            ),
-        )
-        _uiState.update { it.copy(showAddSheet = false) }
+    fun onToastShown() {
+        _uiState.update { it.copy(toastMessage = null) }
     }
 
     // ---- Move to collection ----

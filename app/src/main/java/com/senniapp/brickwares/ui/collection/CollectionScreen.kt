@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -54,13 +55,16 @@ import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
+import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.GrowthPill
+import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
+import com.senniapp.brickwares.ui.components.SwipeToDelete
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -88,6 +92,10 @@ fun CollectionScreen(
         onDeleteCopy = viewModel::onDeleteCopy,
         onAddCopyForSet = viewModel::onAddCopyForSet,
         onEditCopy = viewModel::onEditCopy,
+        onRequestDeleteItem = viewModel::onRequestDeleteItem,
+        onConfirmDeleteItem = viewModel::onConfirmDeleteItem,
+        onCancelDeleteItem = viewModel::onCancelDeleteItem,
+        onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
 }
@@ -106,10 +114,18 @@ private fun CollectionContent(
     onDeleteCopy: (String, String) -> Unit,
     onAddCopyForSet: (CollectionItem) -> Unit,
     onEditCopy: (CollectionItem, Copy) -> Unit,
+    onRequestDeleteItem: (CollectionItem) -> Unit,
+    onConfirmDeleteItem: () -> Unit,
+    onCancelDeleteItem: () -> Unit,
+    onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        if (state.isLoading) {
+            LoadingScreen()
+            return@Box
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
@@ -140,7 +156,9 @@ private fun CollectionContent(
                     Spacer(Modifier.height(14.dp))
                 }
                 items(state.visibleItems, key = { it.setNumber }) { item ->
-                    ItemCard(item = item, onDetail = { onItemDetail(item) })
+                    SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
+                        ItemCard(item = item, onDetail = { onItemDetail(item) })
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
             } else {
@@ -219,6 +237,66 @@ private fun CollectionContent(
                 onEditCopy = { copy -> onEditCopy(detail, copy) },
                 onAddItem = { onAddCopyForSet(detail) },
             )
+        }
+
+        state.pendingDeleteItem?.let { item ->
+            ConfirmDeleteDialog(
+                message = "Delete \"${item.name}\" and all its copies from your collection?",
+                onConfirm = onConfirmDeleteItem,
+                onCancel = onCancelDeleteItem,
+            )
+        }
+
+        BwToast(message = state.toastMessage, onDismiss = onToastShown)
+    }
+}
+
+@Composable
+private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onCancel) {
+        Surface(shape = RoundedCornerShape(18.dp), color = colors.card) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("Delete set", style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    message,
+                    style = BwType.body.copy(fontSize = 13.sp),
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(18.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(999.dp))
+                            .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                            .clickable(onClick = onCancel)
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cancel", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.error)
+                            .clickable(onClick = onConfirm)
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Delete", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
+                    }
+                }
+            }
         }
     }
 }

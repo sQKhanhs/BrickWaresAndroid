@@ -13,12 +13,16 @@ enum class WishlistFilter { ALL, SET, MINIFIG }
  * collection.
  */
 data class WishlistUiState(
-    val isLoading: Boolean = true,
+    /** Whether the wishlist Flow has emitted at least once (empty list is a valid loaded state). */
+    val itemsLoaded: Boolean = false,
     val filter: WishlistFilter = WishlistFilter.ALL,
     val items: List<WishlistItem> = emptyList(),
-    val showAddSheet: Boolean = false,
     val moveTarget: CatalogSet? = null,
+    /** Transient toast message (e.g. after a remove); cleared once shown. */
+    val toastMessage: String? = null,
 ) {
+    val isLoading: Boolean get() = !itemsLoaded
+
     val visibleItems: List<WishlistItem>
         get() = when (filter) {
             WishlistFilter.ALL -> items

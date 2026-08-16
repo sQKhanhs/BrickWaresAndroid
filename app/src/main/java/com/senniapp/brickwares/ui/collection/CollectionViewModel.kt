@@ -27,14 +27,19 @@ class CollectionViewModel(
     init {
         viewModelScope.launch {
             val summary = repository.getCollectionSummary()
-            val sold = repository.getSoldItems()
-            val salesSummary = repository.getSalesSummary()
-            _uiState.update { it.copy(summary = summary, soldItems = sold, salesSummary = salesSummary) }
+            _uiState.update { it.copy(summary = summary) }
         }
         viewModelScope.launch {
             repository.getCollectionItems().collect { items ->
-                _uiState.update { it.copy(isLoading = false, items = items) }
+                _uiState.update { it.copy(itemsLoaded = true, items = items) }
             }
+        }
+        // Sales data isn't needed for the first frame — load it in the background so it doesn't
+        // hold up the initial Collection view.
+        viewModelScope.launch {
+            val sold = repository.getSoldItems()
+            val salesSummary = repository.getSalesSummary()
+            _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummary) }
         }
     }
 
@@ -96,6 +101,28 @@ class CollectionViewModel(
 
     fun onDeleteCopy(setNumber: String, copyId: String) {
         repository.removeCopy(setNumber, copyId)
+    }
+
+    // ---- Swipe-to-delete (whole item, with confirmation) ----
+
+    fun onRequestDeleteItem(item: CollectionItem) {
+        _uiState.update { it.copy(pendingDeleteSetNumber = item.setNumber) }
+    }
+
+    fun onCancelDeleteItem() {
+        _uiState.update { it.copy(pendingDeleteSetNumber = null) }
+    }
+
+    fun onConfirmDeleteItem() {
+        val item = _uiState.value.pendingDeleteItem ?: return
+        repository.removeItem(item.setNumber)
+        _uiState.update {
+            it.copy(pendingDeleteSetNumber = null, toastMessage = "${item.name} removed from Collection")
+        }
+    }
+
+    fun onToastShown() {
+        _uiState.update { it.copy(toastMessage = null) }
     }
 
     /** From the See Details "Add Item" button: open the Add sheet pre-filled with this set. */

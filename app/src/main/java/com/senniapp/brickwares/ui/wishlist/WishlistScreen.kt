@@ -20,20 +20,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,13 +43,16 @@ import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
+import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.GrowthPill
+import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
+import com.senniapp.brickwares.ui.components.SwipeToDelete
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -65,6 +62,7 @@ import com.senniapp.brickwares.util.formatRelease
 
 @Composable
 fun WishlistScreen(
+    onNavigateToSearch: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WishlistViewModel = viewModel(),
 ) {
@@ -72,14 +70,13 @@ fun WishlistScreen(
     WishlistContent(
         state = state,
         onFilterSelected = viewModel::onFilterSelected,
-        onAddClick = viewModel::onAddClick,
-        onDismissAddSheet = viewModel::onDismissAddSheet,
+        onNavigateToSearch = onNavigateToSearch,
         onSearchCatalog = viewModel::searchCatalog,
-        onAddToWishlist = viewModel::onAddToWishlist,
         onMoveClick = viewModel::onMoveClick,
         onDismissMove = viewModel::onDismissMove,
         onMoveSubmit = viewModel::onMoveSubmit,
         onRemove = viewModel::onRemove,
+        onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
 }
@@ -88,18 +85,21 @@ fun WishlistScreen(
 private fun WishlistContent(
     state: WishlistUiState,
     onFilterSelected: (WishlistFilter) -> Unit,
-    onAddClick: () -> Unit,
-    onDismissAddSheet: () -> Unit,
+    onNavigateToSearch: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
-    onAddToWishlist: (CatalogSet) -> Unit,
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
     onMoveSubmit: (CollectionItem) -> Unit,
     onRemove: (String) -> Unit,
+    onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        if (state.isLoading) {
+            LoadingScreen()
+            return@Box
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
@@ -129,16 +129,18 @@ private fun WishlistContent(
                 item { EmptyState() }
             }
             items(state.visibleItems, key = { it.setNumber }) { item ->
-                WishlistCard(
-                    item = item,
-                    onMove = { onMoveClick(item) },
-                    onRemove = { onRemove(item.setNumber) },
-                )
+                SwipeToDelete(onSwiped = { onRemove(item.setNumber) }, autoDismiss = true) {
+                    WishlistCard(
+                        item = item,
+                        onMove = { onMoveClick(item) },
+                        onRemove = { onRemove(item.setNumber) },
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
             }
         }
 
-        // Add FAB (bottom-end) — opens catalog search to add a set to the wishlist.
+        // Search FAB (bottom-end) — sends the user to the Search tab to find sets to wishlist.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -146,22 +148,14 @@ private fun WishlistContent(
                 .size(56.dp)
                 .clip(CircleShape)
                 .background(colors.brandYellow)
-                .clickable(onClick = onAddClick),
+                .clickable(onClick = onNavigateToSearch),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_bw_plus),
-                contentDescription = "Add to wishlist",
+                painter = painterResource(R.drawable.ic_bw_search),
+                contentDescription = "Search for sets",
                 tint = colors.onYellow,
                 modifier = Modifier.size(26.dp),
-            )
-        }
-
-        if (state.showAddSheet) {
-            AddToWishlistSheet(
-                onDismiss = onDismissAddSheet,
-                onSearch = onSearchCatalog,
-                onAdd = onAddToWishlist,
             )
         }
 
@@ -174,6 +168,8 @@ private fun WishlistContent(
                 onAdd = onMoveSubmit,
             )
         }
+
+        BwToast(message = state.toastMessage, onDismiss = onToastShown)
     }
 }
 
@@ -185,6 +181,9 @@ private fun FilterChips(selected: WishlistFilter, onSelect: (WishlistFilter) -> 
         ChipItem(R.drawable.ic_bw_minifig, "Minifig", selected == WishlistFilter.MINIFIG, { onSelect(WishlistFilter.MINIFIG) }, Modifier.weight(1f))
     }
 }
+
+/** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
+private val WishlistHeart = Color(0xFFC9506F)
 
 @Composable
 private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit) {
@@ -241,9 +240,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
 
         Spacer(Modifier.width(10.dp))
 
-        // Price column + wishlist actions.
+        // Price column + wishlist actions (swipe the card to remove).
         Column(
-            modifier = Modifier.width(132.dp),
+            modifier = Modifier.width(120.dp),
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -252,34 +251,36 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 PriceLine("Value", formatMoney(item.currentValue, AppCurrency.VND))
                 item.growthPercent?.let { GrowthPill(it) }
             }
+            // Move to collection — full-width yellow button (matches design).
             Row(
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(colors.brandYellow)
+                    .clickable(onClick = onMove)
+                    .padding(vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.Center,
             ) {
-                // Remove from wishlist.
-                Icon(
-                    painter = painterResource(R.drawable.ic_bw_delete),
-                    contentDescription = "Remove from wishlist",
-                    tint = colors.error,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onRemove),
-                )
-                // Move to collection.
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(colors.brandYellow)
-                        .clickable(onClick = onMove)
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(painter = painterResource(R.drawable.ic_bw_plus), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(13.dp))
-                    Text("Collection", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
-                }
+                Icon(painter = painterResource(R.drawable.ic_bw_set), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
+            }
+            // "Wishlisted" button — tap (or swipe the card) to remove from the wishlist.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(999.dp))
+                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                    .clickable(onClick = onRemove)
+                    .padding(vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(painter = painterResource(R.drawable.ic_bw_heart), contentDescription = "Remove from wishlist", tint = WishlistHeart, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Wishlisted", style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
             }
         }
     }
@@ -304,66 +305,9 @@ private fun EmptyState() {
         Text("Your wishlist is empty", style = BwType.cardTitle, color = colors.textMuted)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Tap + to add sets you're eyeing.",
+            "Tap the search button to find sets you're eyeing.",
             style = BwType.body.copy(fontSize = 13.sp),
             color = colors.textFaint,
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddToWishlistSheet(
-    onDismiss: () -> Unit,
-    onSearch: (String) -> List<CatalogSet>,
-    onAdd: (CatalogSet) -> Unit,
-) {
-    val colors = BwTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var query by remember { mutableStateOf("") }
-    val suggestions = onSearch(query)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.card,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Add to Wishlist", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Enter set number, e.g. 75313") },
-            )
-            suggestions.take(6).forEach { set ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onAdd(set) }
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
-                        Text("${set.theme} · ${set.pieces} pcs", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-                    }
-                    Icon(
-                        painter = painterResource(R.drawable.ic_bw_plus),
-                        contentDescription = "Add ${set.setNumber} to wishlist",
-                        tint = colors.linkAccent,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-        }
     }
 }

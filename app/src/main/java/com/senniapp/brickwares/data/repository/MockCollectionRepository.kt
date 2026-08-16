@@ -86,6 +86,10 @@ class MockCollectionRepository : CollectionRepository {
         }
     }
 
+    override fun removeItem(setNumber: String) {
+        _items.update { current -> current.filterNot { it.setNumber == setNumber } }
+    }
+
     override fun updateCopy(setNumber: String, copy: Copy) {
         _items.update { current ->
             current.map { item ->

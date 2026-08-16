@@ -37,6 +37,9 @@ interface CollectionRepository {
     /** Removes a single copy; if it was the set's last copy, the set is removed too. */
     fun removeCopy(setNumber: String, copyId: String)
 
+    /** Removes an entire item (all copies of the set) from the collection. */
+    fun removeItem(setNumber: String)
+
     /** Replaces an existing copy (matched by id) with an edited version. */
     fun updateCopy(setNumber: String, copy: Copy)
 

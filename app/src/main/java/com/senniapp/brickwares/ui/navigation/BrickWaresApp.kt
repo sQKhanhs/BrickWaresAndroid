@@ -67,7 +67,7 @@ fun BrickWaresApp() {
             when (selectedTab) {
                 BwTab.Home -> HomeScreen()
                 BwTab.Collection -> CollectionScreen()
-                BwTab.Wishlist -> WishlistScreen()
+                BwTab.Wishlist -> WishlistScreen(onNavigateToSearch = { selectedTab = BwTab.Search })
                 else -> PlaceholderScreen(title = selectedTab.label)
             }
         }

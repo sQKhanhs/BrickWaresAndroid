@@ -19,10 +19,11 @@ enum class CollectionFilter { ALL, SET, MINIFIG }
  * [detailItem] resolves the open See Details set from the live list (so edits/deletes reflect).
  */
 data class CollectionUiState(
-    val isLoading: Boolean = true,
     val mode: CollectionMode = CollectionMode.COLLECTION,
     val filter: CollectionFilter = CollectionFilter.ALL,
     val summary: CollectionSummary? = null,
+    /** Whether the item Flow has emitted at least once (empty list is a valid loaded state). */
+    val itemsLoaded: Boolean = false,
     val items: List<CollectionItem> = emptyList(),
     val soldItems: List<SoldItem> = emptyList(),
     val salesSummary: SalesSummary? = null,
@@ -32,7 +33,18 @@ data class CollectionUiState(
     val editingCopy: Copy? = null,
     val editingSetNumber: String? = null,
     val detailSetNumber: String? = null,
+    /** When non-null, the swipe-to-delete confirmation dialog is open for this set. */
+    val pendingDeleteSetNumber: String? = null,
+    /** Transient toast message (e.g. after a delete); cleared once shown. */
+    val toastMessage: String? = null,
 ) {
+    /** The first Collection frame needs the summary *and* the items, so gate on both. */
+    val isLoading: Boolean get() = summary == null || !itemsLoaded
+
+    /** The item awaiting delete confirmation, resolved from the live list. */
+    val pendingDeleteItem: CollectionItem?
+        get() = pendingDeleteSetNumber?.let { sn -> items.find { it.setNumber == sn } }
+
     val visibleItems: List<CollectionItem>
         get() = when (filter) {
             CollectionFilter.ALL -> items
