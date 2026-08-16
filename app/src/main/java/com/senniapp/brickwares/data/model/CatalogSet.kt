@@ -19,4 +19,6 @@ data class CatalogSet(
     val minifigs: Int,
     val retailPrice: Long,
     val status: Availability,
+    /** Sub-grouping within a theme (e.g. "Landmarks"). Defaults for catalog rows built from owned items. */
+    val subtheme: String = "General",
 )

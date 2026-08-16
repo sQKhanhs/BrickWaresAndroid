@@ -263,7 +263,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(painter = painterResource(R.drawable.ic_bw_set), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
+                Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Add", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
             }

@@ -23,6 +23,7 @@ class SearchViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
 ) : ViewModel() {
 
+    private val catalog = repository.getCatalog()
     private val _uiState = MutableStateFlow(SearchUiState(themes = buildThemes()))
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
@@ -65,11 +66,62 @@ class SearchViewModel(
         }
     }
 
-    /** Tapping a theme card shows all of that theme's sets. */
-    fun onThemeClick(theme: String) {
-        val results = repository.getCatalog().filter { it.theme.equals(theme, ignoreCase = true) }
-        _uiState.update { it.copy(query = theme, submittedQuery = theme, results = results, suggestions = emptyList()) }
+    /** Tapping a theme card opens the theme-detail list (all subthemes). */
+    fun onThemeClick(theme: String) = openThemeDetail(theme, ALL_SUBTHEMES)
+
+    /** Tapping a subtheme link opens the theme-detail list filtered to that subtheme. */
+    fun onSubthemeClick(theme: String, subtheme: String) = openThemeDetail(theme, subtheme)
+
+    private fun openThemeDetail(theme: String, sub: String) {
+        _uiState.update {
+            it.copy(
+                themeDetail = theme,
+                themeDetailSub = sub,
+                themeDetailSort = ThemeDetailSort.NEWEST,
+                themeDetailSubOptions = subthemesFor(theme),
+                themeDetailResults = themeDetailResults(theme, sub, ThemeDetailSort.NEWEST),
+            )
+        }
     }
+
+    fun onThemeDetailSubChange(sub: String) {
+        _uiState.update {
+            val theme = it.themeDetail ?: return@update it
+            it.copy(themeDetailSub = sub, themeDetailResults = themeDetailResults(theme, sub, it.themeDetailSort))
+        }
+    }
+
+    fun onThemeDetailSortChange(sort: ThemeDetailSort) {
+        _uiState.update {
+            val theme = it.themeDetail ?: return@update it
+            it.copy(themeDetailSort = sort, themeDetailResults = themeDetailResults(theme, it.themeDetailSub, sort))
+        }
+    }
+
+    fun onThemeDetailBack() {
+        _uiState.update {
+            it.copy(themeDetail = null, themeDetailResults = emptyList(), themeDetailSubOptions = emptyList())
+        }
+    }
+
+    private fun themeDetailResults(theme: String, sub: String, sort: ThemeDetailSort): List<CatalogSet> {
+        val filtered = catalog.filter {
+            it.theme.equals(theme, ignoreCase = true) && (sub == ALL_SUBTHEMES || it.subtheme == sub)
+        }
+        return when (sort) {
+            ThemeDetailSort.NEWEST -> filtered.sortedByDescending { it.releaseYear * 100 + it.releaseMonth }
+            ThemeDetailSort.OLDEST -> filtered.sortedBy { it.releaseYear * 100 + it.releaseMonth }
+            ThemeDetailSort.PRICE_HIGH -> filtered.sortedByDescending { it.retailPrice }
+            ThemeDetailSort.PRICE_LOW -> filtered.sortedBy { it.retailPrice }
+            ThemeDetailSort.NAME -> filtered.sortedBy { it.name }
+        }
+    }
+
+    private fun subthemesFor(theme: String): List<SubthemeCount> =
+        catalog.filter { it.theme.equals(theme, ignoreCase = true) }
+            .groupingBy { it.subtheme }.eachCount()
+            .map { (name, count) -> SubthemeCount(name, count) }
+            .sortedBy { it.name }
 
     fun onClearSearch() {
         _uiState.update { it.copy(query = "", submittedQuery = null, results = emptyList(), suggestions = emptyList()) }
@@ -122,10 +174,14 @@ class SearchViewModel(
     }
 
     private fun buildThemes(): List<ThemeGroup> =
-        repository.getCatalog()
-            .groupBy { it.theme }
-            .map { (theme, sets) -> ThemeGroup(theme, sets.size, themeLogo(theme)) }
-            .sortedWith(compareByDescending<ThemeGroup> { it.setCount }.thenBy { it.theme })
+        catalog.groupBy { it.theme }
+            .map { (theme, sets) ->
+                val subs = sets.groupingBy { it.subtheme }.eachCount()
+                    .map { (name, count) -> SubthemeCount(name, count) }
+                    .sortedBy { it.name }
+                ThemeGroup(theme, sets.size, themeLogo(theme), subs)
+            }
+            .sortedBy { it.theme }
 
     private fun themeLogo(theme: String): String? = when (theme.lowercase()) {
         "architecture" -> "file:///android_asset/themelogo-architecture.png"

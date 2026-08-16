@@ -2,12 +2,16 @@ package com.senniapp.brickwares.ui.search
 
 import com.senniapp.brickwares.data.model.CatalogSet
 
+/** A subtheme within a theme, with how many catalog sets it has. */
+data class SubthemeCount(val name: String, val count: Int)
+
 /** A theme grouping shown in the Search tab's default browse view (logo + name + set count). */
 data class ThemeGroup(
     val theme: String,
     val setCount: Int,
     /** `file:///android_asset/...` for the themes that have a logo, else null (placeholder). */
     val logoAsset: String?,
+    val subthemes: List<SubthemeCount> = emptyList(),
 )
 
 /** Ordering for the theme browser. */
@@ -16,6 +20,18 @@ enum class ThemeSort(val label: String) {
     COUNT("Amount of sets"),
     FAVORITE("Favorites"),
 }
+
+/** Ordering for the sets listed inside a theme-detail view. */
+enum class ThemeDetailSort(val label: String) {
+    NEWEST("Newest"),
+    OLDEST("Oldest"),
+    PRICE_HIGH("Price: high to low"),
+    PRICE_LOW("Price: low to high"),
+    NAME("Name"),
+}
+
+/** Sentinel meaning "all subthemes" in the theme-detail subtheme filter. */
+const val ALL_SUBTHEMES = "__all"
 
 /**
  * Immutable UI state for the Search tab. Three display modes derive from [query]/[submittedQuery]:
@@ -32,10 +48,17 @@ data class SearchUiState(
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
     val favoriteThemes: Set<String> = emptySet(),
     val wishlistedNumbers: Set<String> = emptySet(),
+    // Theme-detail view (non-null theme = open, overrides the search/browse views).
+    val themeDetail: String? = null,
+    val themeDetailSub: String = ALL_SUBTHEMES,
+    val themeDetailSort: ThemeDetailSort = ThemeDetailSort.NEWEST,
+    val themeDetailResults: List<CatalogSet> = emptyList(),
+    val themeDetailSubOptions: List<SubthemeCount> = emptyList(),
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
     val toastMessage: String? = null,
 ) {
+    val showThemeDetail: Boolean get() = themeDetail != null
     val showBrowse: Boolean get() = submittedQuery == null && query.isBlank()
     val showSuggestions: Boolean get() = submittedQuery == null && query.isNotBlank()
     val showResults: Boolean get() = submittedQuery != null

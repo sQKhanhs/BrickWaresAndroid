@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -82,8 +84,12 @@ fun SearchScreen(
         onClearSearch = viewModel::onClearSearch,
         onSuggestionClick = viewModel::onSuggestionClick,
         onThemeClick = viewModel::onThemeClick,
+        onSubthemeClick = viewModel::onSubthemeClick,
         onThemeSortChange = viewModel::onThemeSortChange,
         onToggleFavorite = viewModel::onToggleFavorite,
+        onThemeDetailBack = viewModel::onThemeDetailBack,
+        onThemeDetailSubChange = viewModel::onThemeDetailSubChange,
+        onThemeDetailSortChange = viewModel::onThemeDetailSortChange,
         onAddToWishlist = viewModel::onAddToWishlist,
         onAddToCollectionClick = viewModel::onAddToCollectionClick,
         onDismissAdd = viewModel::onDismissAdd,
@@ -102,8 +108,12 @@ private fun SearchContent(
     onClearSearch: () -> Unit,
     onSuggestionClick: (CatalogSet) -> Unit,
     onThemeClick: (String) -> Unit,
+    onSubthemeClick: (String, String) -> Unit,
     onThemeSortChange: (ThemeSort) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onThemeDetailBack: () -> Unit,
+    onThemeDetailSubChange: (String) -> Unit,
+    onThemeDetailSortChange: (ThemeDetailSort) -> Unit,
     onAddToWishlist: (CatalogSet) -> Unit,
     onAddToCollectionClick: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
@@ -114,6 +124,32 @@ private fun SearchContent(
 ) {
     val colors = BwTheme.colors
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        if (state.showThemeDetail) {
+            ThemeDetailView(
+                theme = state.themeDetail.orEmpty(),
+                results = state.themeDetailResults,
+                sub = state.themeDetailSub,
+                subOptions = state.themeDetailSubOptions,
+                sort = state.themeDetailSort,
+                wishlistedNumbers = state.wishlistedNumbers,
+                onBack = onThemeDetailBack,
+                onSubChange = onThemeDetailSubChange,
+                onSortChange = onThemeDetailSortChange,
+                onAddCollection = onAddToCollectionClick,
+                onAddWishlist = onAddToWishlist,
+            )
+            state.addTarget?.let { target ->
+                AddToCollectionSheet(
+                    initialSet = target,
+                    initialCopy = null,
+                    onDismiss = onDismissAdd,
+                    onSearch = onSearchCatalog,
+                    onAdd = onAddToCollectionSubmit,
+                )
+            }
+            BwToast(message = state.toastMessage, onDismiss = onToastShown)
+            return@Box
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
@@ -144,6 +180,7 @@ private fun SearchContent(
                             isFavorite = group.theme in state.favoriteThemes,
                             onClick = { onThemeClick(group.theme) },
                             onToggleFavorite = { onToggleFavorite(group.theme) },
+                            onSubthemeClick = { sub -> onSubthemeClick(group.theme, sub) },
                         )
                         Spacer(Modifier.height(12.dp))
                     }
@@ -240,12 +277,14 @@ private fun SectionLabel(text: String) {
     Text(text, style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = BwTheme.colors.textMuted)
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemeCard(
     group: ThemeGroup,
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onSubthemeClick: (String) -> Unit,
 ) {
     val colors = BwTheme.colors
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -283,6 +322,22 @@ private fun ThemeCard(
                 Text(group.theme, style = BwType.cardTitle, color = colors.text)
                 Text("(${group.setCount})", style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
             }
+            if (group.subthemes.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    group.subthemes.forEach { sub ->
+                        Text(
+                            "${sub.name} (${sub.count})",
+                            style = BwType.body.copy(fontSize = 12.sp),
+                            color = colors.linkAccent,
+                            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { onSubthemeClick(sub.name) }.padding(horizontal = 2.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
         }
         // Favorite star (top-right overlay).
         Icon(
@@ -297,6 +352,117 @@ private fun ThemeCard(
                 .padding(6.dp)
                 .size(22.dp),
         )
+    }
+}
+
+@Composable
+private fun ThemeDetailView(
+    theme: String,
+    results: List<CatalogSet>,
+    sub: String,
+    subOptions: List<SubthemeCount>,
+    sort: ThemeDetailSort,
+    wishlistedNumbers: Set<String>,
+    onBack: () -> Unit,
+    onSubChange: (String) -> Unit,
+    onSortChange: (ThemeDetailSort) -> Unit,
+    onAddCollection: (CatalogSet) -> Unit,
+    onAddWishlist: (CatalogSet) -> Unit,
+) {
+    val colors = BwTheme.colors
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(colors.surface)
+                        .border(BorderStroke(1.dp, colors.borderStrong), CircleShape)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("‹", style = BwType.cardTitle.copy(fontSize = 20.sp), color = colors.text)
+                }
+                Text(theme, style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${results.size} ${if (results.size == 1) "set" else "sets"}",
+                    style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.weight(1f))
+                if (subOptions.size > 1) {
+                    val subLabel = if (sub == ALL_SUBTHEMES) "All Subthemes" else sub
+                    OptionDropdown(
+                        selectedLabel = subLabel,
+                        options = listOf(ALL_SUBTHEMES to "All Subthemes") + subOptions.map { it.name to "${it.name} (${it.count})" },
+                        onSelect = onSubChange,
+                    )
+                }
+                OptionDropdown(
+                    selectedLabel = sort.label,
+                    options = ThemeDetailSort.entries.map { it to it.label },
+                    onSelect = onSortChange,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        items(results, key = { it.setNumber }) { set ->
+            ResultCard(
+                set = set,
+                wishlisted = set.setNumber in wishlistedNumbers,
+                onAddCollection = { onAddCollection(set) },
+                onAddWishlist = { onAddWishlist(set) },
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun <T> OptionDropdown(
+    selectedLabel: String,
+    options: List<Pair<T, String>>,
+    onSelect: (T) -> Unit,
+) {
+    val colors = BwTheme.colors
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(selectedLabel, style = BwType.body.copy(fontSize = 12.sp), color = colors.textSecondary, maxLines = 1)
+            Text("▾", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (value, label) ->
+                DropdownMenuItem(
+                    text = { Text(label, style = BwType.body.copy(fontSize = 13.sp), color = colors.text) },
+                    onClick = {
+                        onSelect(value)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -424,7 +590,7 @@ private fun ResultCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(painter = painterResource(R.drawable.ic_bw_set), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
+                Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Add", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
             }

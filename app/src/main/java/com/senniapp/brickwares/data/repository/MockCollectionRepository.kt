@@ -221,48 +221,48 @@ class MockCollectionRepository : CollectionRepository {
 
         val MOCK_CATALOG = listOf(
             // Architecture
-            CatalogSet("21058", "Great Pyramid of Giza", ItemType.SET, "Architecture", 2022, 6, 1476, 0, 3_499_740, Availability.EXCLUSIVE),
-            CatalogSet("21060", "Himeji Castle", ItemType.SET, "Architecture", 2023, 8, 2125, 0, 4_999_740, Availability.AVAILABLE),
-            CatalogSet("21028", "New York City", ItemType.SET, "Architecture", 2016, 6, 598, 0, 1_299_740, Availability.RETIRED),
-            CatalogSet("21044", "Paris", ItemType.SET, "Architecture", 2019, 1, 649, 0, 1_499_740, Availability.AVAILABLE),
+            CatalogSet("21058", "Great Pyramid of Giza", ItemType.SET, "Architecture", 2022, 6, 1476, 0, 3_499_740, Availability.EXCLUSIVE, "Landmarks"),
+            CatalogSet("21060", "Himeji Castle", ItemType.SET, "Architecture", 2023, 8, 2125, 0, 4_999_740, Availability.AVAILABLE, "Landmarks"),
+            CatalogSet("21028", "New York City", ItemType.SET, "Architecture", 2016, 6, 598, 0, 1_299_740, Availability.RETIRED, "Skylines"),
+            CatalogSet("21044", "Paris", ItemType.SET, "Architecture", 2019, 1, 649, 0, 1_499_740, Availability.AVAILABLE, "Skylines"),
             // Batman
-            CatalogSet("76240", "Batmobile Tumbler", ItemType.SET, "Batman", 2021, 11, 2049, 2, 6_299_740, Availability.RETIRED),
-            CatalogSet("76252", "Batcave Shadow Box", ItemType.SET, "Batman", 2023, 8, 3981, 6, 9_999_740, Availability.AVAILABLE),
-            CatalogSet("76271", "Batman Gotham City", ItemType.SET, "Batman", 2024, 6, 4210, 5, 8_499_740, Availability.AVAILABLE),
-            CatalogSet("76139", "1989 Batmobile", ItemType.SET, "Batman", 2019, 11, 3306, 3, 6_999_740, Availability.RETIRED),
-            CatalogSet("col-bat-01", "Batman Classic Suit", ItemType.MINIFIG, "Batman", 2020, 3, 5, 1, 350_000, Availability.AVAILABLE),
+            CatalogSet("76240", "Batmobile Tumbler", ItemType.SET, "Batman", 2021, 11, 2049, 2, 6_299_740, Availability.RETIRED, "Vehicles"),
+            CatalogSet("76252", "Batcave Shadow Box", ItemType.SET, "Batman", 2023, 8, 3981, 6, 9_999_740, Availability.AVAILABLE, "Buildings"),
+            CatalogSet("76271", "Batman Gotham City", ItemType.SET, "Batman", 2024, 6, 4210, 5, 8_499_740, Availability.AVAILABLE, "Buildings"),
+            CatalogSet("76139", "1989 Batmobile", ItemType.SET, "Batman", 2019, 11, 3306, 3, 6_999_740, Availability.RETIRED, "Vehicles"),
+            CatalogSet("col-bat-01", "Batman Classic Suit", ItemType.MINIFIG, "Batman", 2020, 3, 5, 1, 350_000, Availability.AVAILABLE, "Minifigures"),
             // Star Wars
-            CatalogSet("75313", "AT-AT", ItemType.SET, "Star Wars", 2021, 11, 6785, 9, 19_999_740, Availability.RETIRED),
-            CatalogSet("75257", "Millennium Falcon", ItemType.SET, "Star Wars", 2019, 10, 1351, 7, 4_499_740, Availability.AVAILABLE),
-            CatalogSet("75355", "X-Wing Starfighter", ItemType.SET, "Star Wars", 2023, 5, 1949, 4, 6_299_740, Availability.AVAILABLE),
-            CatalogSet("col-sw-01", "Boba Fett", ItemType.MINIFIG, "Star Wars", 2019, 5, 6, 1, 650_000, Availability.RETIRED),
+            CatalogSet("75313", "AT-AT", ItemType.SET, "Star Wars", 2021, 11, 6785, 9, 19_999_740, Availability.RETIRED, "Ultimate Collector Series"),
+            CatalogSet("75257", "Millennium Falcon", ItemType.SET, "Star Wars", 2019, 10, 1351, 7, 4_499_740, Availability.AVAILABLE, "The Rise of Skywalker"),
+            CatalogSet("75355", "X-Wing Starfighter", ItemType.SET, "Star Wars", 2023, 5, 1949, 4, 6_299_740, Availability.AVAILABLE, "Ultimate Collector Series"),
+            CatalogSet("col-sw-01", "Boba Fett", ItemType.MINIFIG, "Star Wars", 2019, 5, 6, 1, 650_000, Availability.RETIRED, "Minifigures"),
             // Technic
-            CatalogSet("42115", "Lamborghini Sian FKP 37", ItemType.SET, "Technic", 2020, 6, 3696, 0, 9_999_740, Availability.RETIRED),
-            CatalogSet("42143", "Ferrari Daytona SP3", ItemType.SET, "Technic", 2022, 6, 3778, 0, 11_499_740, Availability.AVAILABLE),
-            CatalogSet("42154", "2022 Ford GT", ItemType.SET, "Technic", 2023, 3, 1466, 0, 3_299_740, Availability.AVAILABLE),
+            CatalogSet("42115", "Lamborghini Sian FKP 37", ItemType.SET, "Technic", 2020, 6, 3696, 0, 9_999_740, Availability.RETIRED, "Vehicles"),
+            CatalogSet("42143", "Ferrari Daytona SP3", ItemType.SET, "Technic", 2022, 6, 3778, 0, 11_499_740, Availability.AVAILABLE, "Vehicles"),
+            CatalogSet("42154", "2022 Ford GT", ItemType.SET, "Technic", 2023, 3, 1466, 0, 3_299_740, Availability.AVAILABLE, "Vehicles"),
             // Icons
-            CatalogSet("10297", "Boutique Hotel", ItemType.SET, "Icons", 2022, 1, 3066, 5, 5_899_740, Availability.RETIRED),
-            CatalogSet("10307", "Eiffel Tower", ItemType.SET, "Icons", 2022, 11, 10001, 0, 16_999_740, Availability.AVAILABLE),
-            CatalogSet("10327", "Dune Atreides Royal Ornithopter", ItemType.SET, "Icons", 2023, 8, 1369, 8, 4_499_740, Availability.AVAILABLE),
+            CatalogSet("10297", "Boutique Hotel", ItemType.SET, "Icons", 2022, 1, 3066, 5, 5_899_740, Availability.RETIRED, "Modular Buildings"),
+            CatalogSet("10307", "Eiffel Tower", ItemType.SET, "Icons", 2022, 11, 10001, 0, 16_999_740, Availability.AVAILABLE, "Landmarks"),
+            CatalogSet("10327", "Dune Atreides Royal Ornithopter", ItemType.SET, "Icons", 2023, 8, 1369, 8, 4_499_740, Availability.AVAILABLE, "Movie"),
             // City
-            CatalogSet("60380", "Downtown City Center", ItemType.SET, "City", 2023, 1, 2010, 14, 4_299_740, Availability.AVAILABLE),
-            CatalogSet("60367", "Passenger Airplane", ItemType.SET, "City", 2023, 3, 913, 9, 2_499_740, Availability.AVAILABLE),
+            CatalogSet("60380", "Downtown City Center", ItemType.SET, "City", 2023, 1, 2010, 14, 4_299_740, Availability.AVAILABLE, "General"),
+            CatalogSet("60367", "Passenger Airplane", ItemType.SET, "City", 2023, 3, 913, 9, 2_499_740, Availability.AVAILABLE, "Airport"),
             // Harry Potter
-            CatalogSet("71043", "Hogwarts Castle", ItemType.SET, "Harry Potter", 2018, 9, 6020, 4, 10_499_740, Availability.RETIRED),
-            CatalogSet("76419", "Hogwarts Castle and Grounds", ItemType.SET, "Harry Potter", 2023, 9, 2660, 4, 4_999_740, Availability.AVAILABLE),
-            CatalogSet("col-hp-01", "Harry Potter in Robes", ItemType.MINIFIG, "Harry Potter", 2018, 8, 6, 1, 280_000, Availability.AVAILABLE),
+            CatalogSet("71043", "Hogwarts Castle", ItemType.SET, "Harry Potter", 2018, 9, 6020, 4, 10_499_740, Availability.RETIRED, "Hogwarts"),
+            CatalogSet("76419", "Hogwarts Castle and Grounds", ItemType.SET, "Harry Potter", 2023, 9, 2660, 4, 4_999_740, Availability.AVAILABLE, "Hogwarts"),
+            CatalogSet("col-hp-01", "Harry Potter in Robes", ItemType.MINIFIG, "Harry Potter", 2018, 8, 6, 1, 280_000, Availability.AVAILABLE, "Minifigures"),
             // Ninjago
-            CatalogSet("71741", "NINJAGO City Gardens", ItemType.SET, "Ninjago", 2021, 2, 5685, 19, 8_999_740, Availability.RETIRED),
-            CatalogSet("col-nin-01", "Golden Ninja", ItemType.MINIFIG, "Ninjago", 2021, 3, 5, 1, 320_000, Availability.EXCLUSIVE),
+            CatalogSet("71741", "NINJAGO City Gardens", ItemType.SET, "Ninjago", 2021, 2, 5685, 19, 8_999_740, Availability.RETIRED, "NINJAGO City"),
+            CatalogSet("col-nin-01", "Golden Ninja", ItemType.MINIFIG, "Ninjago", 2021, 3, 5, 1, 320_000, Availability.EXCLUSIVE, "Minifigures"),
             // Botanical
-            CatalogSet("10281", "Bonsai Tree", ItemType.SET, "Botanical", 2021, 1, 878, 0, 1_499_740, Availability.AVAILABLE),
-            CatalogSet("10309", "Succulents", ItemType.SET, "Botanical", 2022, 1, 771, 0, 1_299_740, Availability.AVAILABLE),
+            CatalogSet("10281", "Bonsai Tree", ItemType.SET, "Botanical", 2021, 1, 878, 0, 1_499_740, Availability.AVAILABLE, "Plants"),
+            CatalogSet("10309", "Succulents", ItemType.SET, "Botanical", 2022, 1, 771, 0, 1_299_740, Availability.AVAILABLE, "Plants"),
             // Ideas
-            CatalogSet("21344", "The Orient Express Train", ItemType.SET, "Ideas", 2024, 3, 2540, 6, 8_999_740, Availability.AVAILABLE),
+            CatalogSet("21344", "The Orient Express Train", ItemType.SET, "Ideas", 2024, 3, 2540, 6, 8_999_740, Availability.AVAILABLE, "Originals"),
             // Marvel
-            CatalogSet("76218", "Sanctum Sanctorum", ItemType.SET, "Marvel", 2022, 8, 2708, 9, 6_499_740, Availability.AVAILABLE),
+            CatalogSet("76218", "Sanctum Sanctorum", ItemType.SET, "Marvel", 2022, 8, 2708, 9, 6_499_740, Availability.AVAILABLE, "Avengers"),
             // Art
-            CatalogSet("31203", "World Map", ItemType.SET, "Art", 2021, 6, 11695, 0, 6_999_740, Availability.RETIRED),
+            CatalogSet("31203", "World Map", ItemType.SET, "Art", 2021, 6, 11695, 0, 6_999_740, Availability.RETIRED, "Art"),
         )
 
         val MOCK_SOLD = listOf(
