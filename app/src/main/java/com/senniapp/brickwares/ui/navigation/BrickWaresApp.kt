@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
+import com.senniapp.brickwares.ui.search.SearchScreen
 import com.senniapp.brickwares.ui.wishlist.WishlistScreen
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -68,6 +69,7 @@ fun BrickWaresApp() {
                 BwTab.Home -> HomeScreen()
                 BwTab.Collection -> CollectionScreen()
                 BwTab.Wishlist -> WishlistScreen(onNavigateToSearch = { selectedTab = BwTab.Search })
+                BwTab.Search -> SearchScreen()
                 else -> PlaceholderScreen(title = selectedTab.label)
             }
         }

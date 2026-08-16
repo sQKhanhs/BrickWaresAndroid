@@ -25,8 +25,11 @@ interface CollectionRepository {
 
     fun getCollectionItems(): Flow<List<CollectionItem>>
 
-    /** Catalog search for the Add-to-Collection sheet (by set number or name). */
+    /** Catalog search (LIKE-style substring match on set number, name, or theme). */
     fun searchCatalog(query: String): List<CatalogSet>
+
+    /** The full reference catalog (used by the Search tab's theme browser). */
+    fun getCatalog(): List<CatalogSet>
 
     /**
      * Adds an item's copies to the collection. If a set with the same number already exists,

@@ -1,0 +1,55 @@
+package com.senniapp.brickwares.ui.search
+
+import com.senniapp.brickwares.data.model.CatalogSet
+
+/** A theme grouping shown in the Search tab's default browse view (logo + name + set count). */
+data class ThemeGroup(
+    val theme: String,
+    val setCount: Int,
+    /** `file:///android_asset/...` for the themes that have a logo, else null (placeholder). */
+    val logoAsset: String?,
+)
+
+/** Ordering for the theme browser. */
+enum class ThemeSort(val label: String) {
+    ALPHABETICAL("Alphabetical"),
+    COUNT("Amount of sets"),
+    FAVORITE("Favorites"),
+}
+
+/**
+ * Immutable UI state for the Search tab. Three display modes derive from [query]/[submittedQuery]:
+ * browse (empty query), live suggestions (typing), and results (after a search is submitted).
+ * A submitted search returning more than [MAX_RESULTS] shows the "too many results" tips page.
+ */
+data class SearchUiState(
+    val query: String = "",
+    /** The query that produced [results]; null while the user hasn't submitted a search yet. */
+    val submittedQuery: String? = null,
+    val results: List<CatalogSet> = emptyList(),
+    val suggestions: List<CatalogSet> = emptyList(),
+    val themes: List<ThemeGroup> = emptyList(),
+    val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
+    val favoriteThemes: Set<String> = emptySet(),
+    val wishlistedNumbers: Set<String> = emptySet(),
+    /** When non-null, the shared Add-to-Collection sheet is open for this set. */
+    val addTarget: CatalogSet? = null,
+    val toastMessage: String? = null,
+) {
+    val showBrowse: Boolean get() = submittedQuery == null && query.isBlank()
+    val showSuggestions: Boolean get() = submittedQuery == null && query.isNotBlank()
+    val showResults: Boolean get() = submittedQuery != null
+    val tooMany: Boolean get() = submittedQuery != null && results.size > MAX_RESULTS
+
+    /** Themes ordered by the active [themeSort] (favorites-first for the favorite sort). */
+    val sortedThemes: List<ThemeGroup>
+        get() = when (themeSort) {
+            ThemeSort.ALPHABETICAL -> themes.sortedBy { it.theme }
+            ThemeSort.COUNT -> themes.sortedWith(compareByDescending<ThemeGroup> { it.setCount }.thenBy { it.theme })
+            ThemeSort.FAVORITE -> themes.sortedWith(compareByDescending<ThemeGroup> { it.theme in favoriteThemes }.thenBy { it.theme })
+        }
+
+    companion object {
+        const val MAX_RESULTS = 20
+    }
+}
