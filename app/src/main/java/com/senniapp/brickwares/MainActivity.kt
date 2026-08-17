@@ -4,16 +4,29 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.senniapp.brickwares.ui.navigation.BrickWaresApp
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
+import com.senniapp.brickwares.ui.theme.ThemeMode
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BrickWaresTheme {
-                BrickWaresApp()
+            // Theme preference lives here so the Settings toggle can re-theme the whole app.
+            var themeMode by rememberSaveable { mutableStateOf(ThemeMode.SYSTEM) }
+            val darkTheme = when (themeMode) {
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            BrickWaresTheme(darkTheme = darkTheme) {
+                BrickWaresApp(themeMode = themeMode, onThemeModeChange = { themeMode = it })
             }
         }
     }

@@ -38,8 +38,10 @@ import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
+import com.senniapp.brickwares.ui.settings.SettingsScreen
 import com.senniapp.brickwares.ui.wishlist.WishlistScreen
 import com.senniapp.brickwares.ui.theme.BwTheme
+import com.senniapp.brickwares.ui.theme.ThemeMode
 import com.senniapp.brickwares.ui.theme.BwType
 
 /** The five persistent bottom-nav destinations (icons are the design's line-icon drawables). */
@@ -53,7 +55,10 @@ enum class BwTab(val label: String, @param:DrawableRes val icon: Int) {
 
 /** Root app shell: persistent bottom nav + the selected tab's content (or a Set Detail overlay). */
 @Composable
-fun BrickWaresApp() {
+fun BrickWaresApp(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+) {
     var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
     // When non-null, the Set Detail page is shown over the current tab (nav bar stays visible).
     var detailSetNumber by rememberSaveable { mutableStateOf<String?>(null) }
@@ -90,7 +95,7 @@ fun BrickWaresApp() {
                         onOpenSetDetail = { detailSetNumber = it },
                     )
                     BwTab.Search -> SearchScreen(onOpenSetDetail = { detailSetNumber = it })
-                    else -> PlaceholderScreen(title = selectedTab.label)
+                    BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
                 }
             }
         }
@@ -156,13 +161,5 @@ private fun NavItem(
                 .clip(CircleShape)
                 .background(if (selected) colors.brandYellow else Color.Transparent),
         )
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(title: String) {
-    val colors = BwTheme.colors
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("$title — coming soon", style = BwType.cardTitle, color = colors.textMuted)
     }
 }
