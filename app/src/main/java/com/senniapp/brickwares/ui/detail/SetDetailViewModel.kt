@@ -1,0 +1,96 @@
+package com.senniapp.brickwares.ui.detail
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.data.repository.CollectionRepository
+import com.senniapp.brickwares.data.repository.MockCollectionRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * ViewModel for the Set Detail page. [load] points it at a set number; it then resolves the set
+ * from the catalog and keeps ownership/wishlist state in sync by observing both flows. The same
+ * instance is reused as the user navigates between related sets ([load] re-points it).
+ */
+class SetDetailViewModel(
+    private val repository: CollectionRepository = MockCollectionRepository(),
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(SetDetailUiState())
+    val uiState: StateFlow<SetDetailUiState> = _uiState.asStateFlow()
+
+    private var setNumber: String? = null
+    private var collectionItems: List<CollectionItem> = emptyList()
+    private var wishlist: List<WishlistItem> = emptyList()
+
+    init {
+        viewModelScope.launch {
+            repository.getCollectionItems().collect { collectionItems = it; rebuild() }
+        }
+        viewModelScope.launch {
+            repository.getWishlistItems().collect { wishlist = it; rebuild() }
+        }
+    }
+
+    fun load(setNumber: String) {
+        this.setNumber = setNumber
+        _uiState.update { it.copy(addTarget = null, toastMessage = null) }
+        rebuild()
+    }
+
+    private fun rebuild() {
+        val sn = setNumber ?: return
+        val set = repository.getCatalog().find { it.setNumber == sn }
+        val owned = collectionItems.find { it.setNumber == sn }
+        val related = repository.getCatalog().filter { it.theme == set?.theme && it.setNumber != sn }.take(4)
+        _uiState.update {
+            it.copy(
+                loaded = true,
+                set = set,
+                isOwned = owned != null,
+                ownedCount = owned?.totalQty ?: 0,
+                totalPaid = owned?.totalPaid ?: 0L,
+                isWishlisted = wishlist.any { w -> w.setNumber == sn },
+                related = related,
+            )
+        }
+    }
+
+    fun onAddToWishlist() {
+        val set = _uiState.value.set ?: return
+        repository.addToWishlist(
+            WishlistItem(
+                setNumber = set.setNumber, name = set.name, itemType = set.itemType,
+                theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
+                pieces = set.pieces, minifigs = set.minifigs,
+                retailPrice = set.retailPrice, status = set.status,
+            ),
+        )
+        _uiState.update { it.copy(toastMessage = "${set.name} added to Wishlist") }
+    }
+
+    fun onAddToCollectionClick() {
+        _uiState.update { it.copy(addTarget = it.set) }
+    }
+
+    fun onDismissAdd() {
+        _uiState.update { it.copy(addTarget = null) }
+    }
+
+    fun onAddToCollectionSubmit(item: CollectionItem) {
+        repository.addItem(item)
+        _uiState.update { it.copy(addTarget = null, toastMessage = "${item.name} added to Collection") }
+    }
+
+    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+
+    fun onToastShown() {
+        _uiState.update { it.copy(toastMessage = null) }
+    }
+}

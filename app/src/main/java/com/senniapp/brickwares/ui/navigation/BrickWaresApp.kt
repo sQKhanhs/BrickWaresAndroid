@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.collection.CollectionScreen
+import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
 import com.senniapp.brickwares.ui.wishlist.WishlistScreen
@@ -50,27 +51,47 @@ enum class BwTab(val label: String, @param:DrawableRes val icon: Int) {
     Settings("Settings", R.drawable.ic_bw_settings),
 }
 
-/** Root app shell: persistent bottom nav + the selected tab's content. */
+/** Root app shell: persistent bottom nav + the selected tab's content (or a Set Detail overlay). */
 @Composable
 fun BrickWaresApp() {
     var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
+    // When non-null, the Set Detail page is shown over the current tab (nav bar stays visible).
+    var detailSetNumber by rememberSaveable { mutableStateOf<String?>(null) }
     val colors = BwTheme.colors
 
     Scaffold(
         containerColor = colors.bg,
-        bottomBar = { BwBottomBar(selected = selectedTab, onSelect = { selectedTab = it }) },
+        bottomBar = {
+            BwBottomBar(
+                selected = selectedTab,
+                onSelect = { selectedTab = it; detailSetNumber = null },
+            )
+        },
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when (selectedTab) {
-                BwTab.Home -> HomeScreen()
-                BwTab.Collection -> CollectionScreen()
-                BwTab.Wishlist -> WishlistScreen(onNavigateToSearch = { selectedTab = BwTab.Search })
-                BwTab.Search -> SearchScreen()
-                else -> PlaceholderScreen(title = selectedTab.label)
+            val detail = detailSetNumber
+            if (detail != null) {
+                SetDetailScreen(
+                    setNumber = detail,
+                    onBack = { detailSetNumber = null },
+                    onOpenSetDetail = { detailSetNumber = it },
+                    onNavigateToSearch = { detailSetNumber = null; selectedTab = BwTab.Search },
+                )
+            } else {
+                when (selectedTab) {
+                    BwTab.Home -> HomeScreen()
+                    BwTab.Collection -> CollectionScreen(onOpenSetDetail = { detailSetNumber = it })
+                    BwTab.Wishlist -> WishlistScreen(
+                        onNavigateToSearch = { selectedTab = BwTab.Search },
+                        onOpenSetDetail = { detailSetNumber = it },
+                    )
+                    BwTab.Search -> SearchScreen(onOpenSetDetail = { detailSetNumber = it })
+                    else -> PlaceholderScreen(title = selectedTab.label)
+                }
             }
         }
     }

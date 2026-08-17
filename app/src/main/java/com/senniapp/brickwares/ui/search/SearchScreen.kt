@@ -73,12 +73,14 @@ private val StarInactive = Color(0xFFC9C9C0)
 
 @Composable
 fun SearchScreen(
+    onOpenSetDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     SearchContent(
         state = state,
+        onOpenSetDetail = onOpenSetDetail,
         onQueryChange = viewModel::onQueryChange,
         onSubmit = viewModel::onSubmit,
         onClearSearch = viewModel::onClearSearch,
@@ -103,6 +105,7 @@ fun SearchScreen(
 @Composable
 private fun SearchContent(
     state: SearchUiState,
+    onOpenSetDetail: (String) -> Unit,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onClearSearch: () -> Unit,
@@ -135,6 +138,7 @@ private fun SearchContent(
                 onBack = onThemeDetailBack,
                 onSubChange = onThemeDetailSubChange,
                 onSortChange = onThemeDetailSortChange,
+                onOpenSetDetail = onOpenSetDetail,
                 onAddCollection = onAddToCollectionClick,
                 onAddWishlist = onAddToWishlist,
             )
@@ -211,6 +215,7 @@ private fun SearchContent(
                         ResultCard(
                             set = set,
                             wishlisted = set.setNumber in state.wishlistedNumbers,
+                            onOpenDetail = { onOpenSetDetail(set.setNumber) },
                             onAddCollection = { onAddToCollectionClick(set) },
                             onAddWishlist = { onAddToWishlist(set) },
                         )
@@ -366,6 +371,7 @@ private fun ThemeDetailView(
     onBack: () -> Unit,
     onSubChange: (String) -> Unit,
     onSortChange: (ThemeDetailSort) -> Unit,
+    onOpenSetDetail: (String) -> Unit,
     onAddCollection: (CatalogSet) -> Unit,
     onAddWishlist: (CatalogSet) -> Unit,
 ) {
@@ -423,6 +429,7 @@ private fun ThemeDetailView(
             ResultCard(
                 set = set,
                 wishlisted = set.setNumber in wishlistedNumbers,
+                onOpenDetail = { onOpenSetDetail(set.setNumber) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },
             )
@@ -540,6 +547,7 @@ private fun SuggestionList(suggestions: List<CatalogSet>, onClick: (CatalogSet) 
 private fun ResultCard(
     set: CatalogSet,
     wishlisted: Boolean,
+    onOpenDetail: () -> Unit,
     onAddCollection: () -> Unit,
     onAddWishlist: () -> Unit,
 ) {
@@ -553,7 +561,7 @@ private fun ResultCard(
             .padding(14.dp),
     ) {
         Box(
-            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA),
+            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA).clickable(onClick = onOpenDetail),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -565,7 +573,7 @@ private fun ResultCard(
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
+            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
             MetaLine("Theme", set.theme)
             MetaLine("Release", formatRelease(set.releaseMonth, set.releaseYear))
             MetaLine("Pieces / Minifigs", "${set.pieces} / ${set.minifigs}")

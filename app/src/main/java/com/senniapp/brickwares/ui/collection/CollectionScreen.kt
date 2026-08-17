@@ -75,12 +75,14 @@ import kotlin.math.roundToInt
 
 @Composable
 fun CollectionScreen(
+    onOpenSetDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: CollectionViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     CollectionContent(
         state = state,
+        onOpenSetDetail = onOpenSetDetail,
         onFilterSelected = viewModel::onFilterSelected,
         onToggleMode = viewModel::onToggleMode,
         onAddClick = viewModel::onAddClick,
@@ -103,6 +105,7 @@ fun CollectionScreen(
 @Composable
 private fun CollectionContent(
     state: CollectionUiState,
+    onOpenSetDetail: (String) -> Unit,
     onFilterSelected: (CollectionFilter) -> Unit,
     onToggleMode: () -> Unit,
     onAddClick: () -> Unit,
@@ -157,7 +160,11 @@ private fun CollectionContent(
                 }
                 items(state.visibleItems, key = { it.setNumber }) { item ->
                     SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
-                        ItemCard(item = item, onDetail = { onItemDetail(item) })
+                        ItemCard(
+                            item = item,
+                            onDetail = { onItemDetail(item) },
+                            onOpenDetail = { onOpenSetDetail(item.setNumber) },
+                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -311,7 +318,7 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 }
 
 @Composable
-private fun ItemCard(item: CollectionItem, onDetail: () -> Unit) {
+private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     Row(
         modifier = Modifier
@@ -326,7 +333,8 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit) {
             modifier = Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(colors.placeholderA),
+                .background(colors.placeholderA)
+                .clickable(onClick = onOpenDetail),
             contentAlignment = Alignment.Center,
         ) {
             if (item.imageUrl != null) {
@@ -357,6 +365,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit) {
                 text = "${item.setNumber} ${item.name}",
                 style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                 color = colors.linkAccent,
+                modifier = Modifier.clickable(onClick = onOpenDetail),
             )
             MetaLine("Theme", item.theme)
             MetaLine("Release", formatRelease(item.releaseMonth, item.releaseYear))

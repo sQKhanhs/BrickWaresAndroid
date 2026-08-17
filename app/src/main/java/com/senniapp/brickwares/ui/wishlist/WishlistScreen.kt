@@ -63,6 +63,7 @@ import com.senniapp.brickwares.util.formatRelease
 @Composable
 fun WishlistScreen(
     onNavigateToSearch: () -> Unit,
+    onOpenSetDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WishlistViewModel = viewModel(),
 ) {
@@ -71,6 +72,7 @@ fun WishlistScreen(
         state = state,
         onFilterSelected = viewModel::onFilterSelected,
         onNavigateToSearch = onNavigateToSearch,
+        onOpenSetDetail = onOpenSetDetail,
         onSearchCatalog = viewModel::searchCatalog,
         onMoveClick = viewModel::onMoveClick,
         onDismissMove = viewModel::onDismissMove,
@@ -86,6 +88,7 @@ private fun WishlistContent(
     state: WishlistUiState,
     onFilterSelected: (WishlistFilter) -> Unit,
     onNavigateToSearch: () -> Unit,
+    onOpenSetDetail: (String) -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
@@ -134,6 +137,7 @@ private fun WishlistContent(
                         item = item,
                         onMove = { onMoveClick(item) },
                         onRemove = { onRemove(item.setNumber) },
+                        onOpenDetail = { onOpenSetDetail(item.setNumber) },
                     )
                 }
                 Spacer(Modifier.height(12.dp))
@@ -186,7 +190,7 @@ private fun FilterChips(selected: WishlistFilter, onSelect: (WishlistFilter) -> 
 private val WishlistHeart = Color(0xFFC9506F)
 
 @Composable
-private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit) {
+private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     Row(
         modifier = Modifier
@@ -201,7 +205,8 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             modifier = Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(colors.placeholderA),
+                .background(colors.placeholderA)
+                .clickable(onClick = onOpenDetail),
             contentAlignment = Alignment.Center,
         ) {
             if (item.imageUrl != null) {
@@ -231,6 +236,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 text = "${item.setNumber} ${item.name}",
                 style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                 color = colors.linkAccent,
+                modifier = Modifier.clickable(onClick = onOpenDetail),
             )
             MetaLine("Theme", item.theme)
             MetaLine("Release", formatRelease(item.releaseMonth, item.releaseYear))
