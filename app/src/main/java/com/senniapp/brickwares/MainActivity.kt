@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,11 +18,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             // Theme preference lives here so the Settings toggle can re-theme the whole app.
-            var themeMode by rememberSaveable { mutableStateOf(ThemeMode.SYSTEM) }
+            var themeMode by rememberSaveable { mutableStateOf(ThemeMode.LIGHT) }
             val darkTheme = when (themeMode) {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             BrickWaresTheme(darkTheme = darkTheme) {
                 BrickWaresApp(themeMode = themeMode, onThemeModeChange = { themeMode = it })
