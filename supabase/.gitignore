@@ -1,0 +1,15 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# BrickWares: local secrets + generated catalog seed (regenerate via scripts/fetch-catalog.mjs)
+.env
+seed.sql
+
+# Studio scratch queries (local only)
+snippets/
