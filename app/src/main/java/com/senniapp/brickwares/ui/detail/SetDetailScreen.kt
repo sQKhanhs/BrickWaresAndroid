@@ -25,16 +25,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -49,6 +56,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatRetail
 import com.senniapp.brickwares.util.formatRelease
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
@@ -95,6 +103,8 @@ private fun SetDetailContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    // When non-null, show the set image full-screen (tapped from the hero).
+    var fullImageUrl by remember { mutableStateOf<String?>(null) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         val set = state.set
         Column(
@@ -136,12 +146,19 @@ private fun SetDetailContent(
 
             // Hero: image + title + actions.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                val heroImage = set.imageUrl ?: set.thumbnailUrl
                 SetThumb(
-                    imageUrl = set.imageUrl ?: set.thumbnailUrl,
+                    imageUrl = heroImage,
                     itemType = set.itemType,
                     size = 96.dp,
                     iconSize = 40.dp,
                     corner = 12.dp,
+                    // Tap the image to view it full-screen (only when there's an image to show).
+                    modifier = if (heroImage != null) {
+                        Modifier.clickable { fullImageUrl = heroImage }
+                    } else {
+                        Modifier
+                    },
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
@@ -180,7 +197,7 @@ private fun SetDetailContent(
 
             // Pricing card.
             SectionCard(title = "Pricing") {
-                DetailRow("Retail", formatMoney(set.retailPrice, AppCurrency.VND), strong = true)
+                DetailRow("Retail", formatRetail(set.retailPrice, AppCurrency.VND), strong = true)
                 if (state.isOwned) {
                     HorizontalDivider(color = colors.borderSoft)
                     Text("My Collection", style = BwType.micro, color = colors.textMuted)
@@ -212,6 +229,30 @@ private fun SetDetailContent(
                 onSearch = onSearchCatalog,
                 onAdd = onAddCollectionSubmit,
             )
+        }
+
+        // Full-screen image viewer (tap anywhere / back to dismiss).
+        val fullImg = fullImageUrl
+        if (fullImg != null) {
+            Dialog(
+                onDismissRequest = { fullImageUrl = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xF2000000))
+                        .clickable { fullImageUrl = null },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AsyncImage(
+                        model = fullImg,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    )
+                }
+            }
         }
 
         BwToast(message = state.toastMessage, onDismiss = onToastShown)
@@ -320,7 +361,7 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, maxLines = 1)
             MetaLine("Release", formatRelease(set.releaseMonth, set.releaseYear))
-            PriceLine("Retail", formatMoney(set.retailPrice, AppCurrency.VND))
+            PriceLine("Retail", formatRetail(set.retailPrice, AppCurrency.VND))
         }
     }
 }

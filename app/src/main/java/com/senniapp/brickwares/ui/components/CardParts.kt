@@ -75,7 +75,10 @@ fun SetThumb(
         modifier = Modifier
             .size(size)
             .clip(RoundedCornerShape(corner))
-            .background(colors.placeholderA)
+            // White fill so product photos (which have white backgrounds) blend seamlessly;
+            // a soft gray outline provides the border.
+            .background(Color.White)
+            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(corner))
             .then(modifier),
         contentAlignment = Alignment.Center,
     ) {

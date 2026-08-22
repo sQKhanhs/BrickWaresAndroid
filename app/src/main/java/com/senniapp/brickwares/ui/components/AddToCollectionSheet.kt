@@ -111,7 +111,7 @@ fun AddToCollectionSheet(
                             .clickable {
                                 selected = set
                                 query = ""
-                                if (paid.isBlank()) paid = set.retailPrice.toString()
+                                if (paid.isBlank()) paid = set.retailPrice?.toString() ?: ""
                             }
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                     ) {
@@ -229,7 +229,7 @@ fun AddToCollectionSheet(
                             setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                             theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                             pieces = set.pieces, minifigs = set.minifigs,
-                            retailPrice = set.retailPrice,
+                            retailPrice = set.retailPrice ?: 0L,
                             currentValue = null, growthPercent = null, status = set.status,
                             copies = listOf(
                                 Copy(

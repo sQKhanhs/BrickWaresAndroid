@@ -17,7 +17,8 @@ data class CatalogSet(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
-    val retailPrice: Long,
+    /** Retail in the display currency (VND), or null when no source price is available. */
+    val retailPrice: Long?,
     val status: Availability,
     /** Sub-grouping within a theme (e.g. "Landmarks"). Defaults for catalog rows built from owned items. */
     val subtheme: String = "General",

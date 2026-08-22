@@ -64,6 +64,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatRetail
 import com.senniapp.brickwares.util.formatRelease
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
@@ -580,7 +581,7 @@ private fun ResultCard(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine("Retail", formatMoney(set.retailPrice, AppCurrency.VND))
+            PriceLine("Retail", formatRetail(set.retailPrice, AppCurrency.VND))
             // Add to collection.
             Row(
                 modifier = Modifier

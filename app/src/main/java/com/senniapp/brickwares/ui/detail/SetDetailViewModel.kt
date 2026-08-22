@@ -77,7 +77,7 @@ class SetDetailViewModel(
                 setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                 pieces = set.pieces, minifigs = set.minifigs,
-                retailPrice = set.retailPrice, status = set.status,
+                retailPrice = set.retailPrice ?: 0L, status = set.status,
                 imageUrl = set.imageUrl ?: set.thumbnailUrl,
             ),
         )

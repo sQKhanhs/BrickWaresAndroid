@@ -26,6 +26,17 @@ fun formatMoney(amount: Long, currency: AppCurrency): String = when (currency) {
     AppCurrency.USD -> currency.symbol + NumberFormat.getNumberInstance(Locale.US).format(amount)
 }
 
+/**
+ * Retail-price label. A null amount means no retail is available for the selected currency:
+ * VND (which converts from any region) shows a generic message; other currencies name themselves
+ * (e.g. "No retail price for USD") since they show only that region's native price.
+ */
+fun formatRetail(amount: Long?, currency: AppCurrency): String = when {
+    amount != null -> formatMoney(amount, currency)
+    currency == AppCurrency.VND -> "No retail price"
+    else -> "No retail price for ${currency.name}"
+}
+
 /** Formats a plain integer count with grouping separators, e.g. 28553 -> "28,553". */
 fun formatCount(value: Int): String =
     NumberFormat.getNumberInstance(Locale.US).format(value)

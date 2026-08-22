@@ -108,8 +108,8 @@ class SearchViewModel(
         return when (sort) {
             ThemeDetailSort.NEWEST -> filtered.sortedByDescending { it.releaseYear * 100 + it.releaseMonth }
             ThemeDetailSort.OLDEST -> filtered.sortedBy { it.releaseYear * 100 + it.releaseMonth }
-            ThemeDetailSort.PRICE_HIGH -> filtered.sortedByDescending { it.retailPrice }
-            ThemeDetailSort.PRICE_LOW -> filtered.sortedBy { it.retailPrice }
+            ThemeDetailSort.PRICE_HIGH -> filtered.sortedByDescending { it.retailPrice ?: 0L }
+            ThemeDetailSort.PRICE_LOW -> filtered.sortedBy { it.retailPrice ?: 0L }
             ThemeDetailSort.NAME -> filtered.sortedBy { it.name }
         }
     }
@@ -165,7 +165,7 @@ class SearchViewModel(
                 setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                 pieces = set.pieces, minifigs = set.minifigs,
-                retailPrice = set.retailPrice, status = set.status,
+                retailPrice = set.retailPrice ?: 0L, status = set.status,
                 imageUrl = set.thumbnailUrl ?: set.imageUrl,
             ),
         )

@@ -31,7 +31,7 @@ class SupabaseCatalogRepository(
         loadMutex.withLock {
             if (cache.isNotEmpty()) return
             try {
-                val usdToVndRate = CurrencyConverter.usdToVndRate()
+                CurrencyConverter.ensureRatesLoaded()
                 val rows = client.from("sets")
                     .select(
                         Columns.raw(
@@ -40,7 +40,7 @@ class SupabaseCatalogRepository(
                         ),
                     )
                     .decodeList<SetRow>()
-                cache = rows.map { it.toCatalogSet(usdToVndRate) }
+                cache = rows.map { it.toCatalogSet() }
             } catch (e: Exception) {
                 // Don't crash the app on a network/permission failure — leave the cache empty so
                 // callers show an empty state and a later call can retry. (TODO: surface an error state.)
@@ -75,13 +75,19 @@ class SupabaseCatalogRepository(
         val minifigs: Int? = null,
         @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
-        /** Retail in ₫: convert the US price (Brickset has no VN retail) at [rate], else 0 if none. */
-        private fun retailVnd(rate: Double): Long {
-            val usd = prices.firstOrNull { it.region == "US" }?.retailPrice ?: return 0L
-            return CurrencyConverter.usdToVnd(usd, rate)
+        /**
+         * Retail in ₫. Prefer the US price (Decision 12: global USD MSRP → ₫); if a set has no US
+         * price, fall back to any other region's price and cross-convert. Null if no price exists.
+         */
+        private fun retailVnd(): Long? {
+            val chosen = prices.firstOrNull { it.region == "US" && it.retailPrice != null }
+                ?: prices.firstOrNull { it.retailPrice != null }
+                ?: return null
+            val currency = CurrencyConverter.currencyForRegion(chosen.region) ?: return null
+            return CurrencyConverter.toVnd(chosen.retailPrice!!, currency)
         }
 
-        fun toCatalogSet(usdToVndRate: Double): CatalogSet = CatalogSet(
+        fun toCatalogSet(): CatalogSet = CatalogSet(
             setNumber = setNumber,
             name = name ?: "",
             itemType = if (itemType == "minifig") ItemType.MINIFIG else ItemType.SET,
@@ -91,8 +97,8 @@ class SupabaseCatalogRepository(
             releaseMonth = 0,
             pieces = pieces ?: 0,
             minifigs = minifigs ?: 0,
-            // Brickset has no VN retail — convert the US price to ₫ (see CurrencyConverter).
-            retailPrice = retailVnd(usdToVndRate),
+            // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
+            retailPrice = retailVnd(),
             // TODO: derive RETIRED from set_prices.date_last_available once that's read.
             status = Availability.AVAILABLE,
             subtheme = subtheme ?: "General",
