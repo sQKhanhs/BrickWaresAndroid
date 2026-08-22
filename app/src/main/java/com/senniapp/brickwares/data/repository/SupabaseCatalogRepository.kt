@@ -107,6 +107,7 @@ class SupabaseCatalogRepository(
             // in the UI when a set isn't on Rebrickable.
             imageUrl = "https://cdn.rebrickable.com/media/sets/$setNumber-${numberVariant ?: 1}.jpg",
             thumbnailUrl = null,
+            numberVariant = numberVariant ?: 1,
         )
     }
 

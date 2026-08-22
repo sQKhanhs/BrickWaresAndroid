@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +54,7 @@ import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
+import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.SwipeToDelete
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -71,6 +74,7 @@ fun WishlistScreen(
     WishlistContent(
         state = state,
         onFilterSelected = viewModel::onFilterSelected,
+        onPageChange = viewModel::onPageChange,
         onNavigateToSearch = onNavigateToSearch,
         onOpenSetDetail = onOpenSetDetail,
         onSearchCatalog = viewModel::searchCatalog,
@@ -87,6 +91,7 @@ fun WishlistScreen(
 private fun WishlistContent(
     state: WishlistUiState,
     onFilterSelected: (WishlistFilter) -> Unit,
+    onPageChange: (Int) -> Unit,
     onNavigateToSearch: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
@@ -98,12 +103,16 @@ private fun WishlistContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    val listState = rememberLazyListState()
+    // Jump to the top when the page changes (the pager sits at the bottom of the list).
+    LaunchedEffect(state.currentPage) { listState.scrollToItem(0) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (state.isLoading) {
             LoadingScreen()
             return@Box
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
@@ -117,10 +126,11 @@ private fun WishlistContent(
             item {
                 StatCardRow(
                     entries = listOf(
-                        StatEntry(R.drawable.ic_bw_set, state.setCount.toString(), "Sets"),
-                        StatEntry(R.drawable.ic_bw_minifig, state.minifigCount.toString(), "Minifigs"),
-                        StatEntry(R.drawable.ic_bw_pieces, formatCount(state.pieceCount), "Pieces"),
+                        StatEntry(R.drawable.ic_bw_set, state.setCount.toLong(), "Sets"),
+                        StatEntry(R.drawable.ic_bw_minifig, state.minifigCount.toLong(), "Minifigs"),
+                        StatEntry(R.drawable.ic_bw_pieces, state.pieceCount.toLong(), "Pieces"),
                     ),
+                    keyPrefix = "wishlist",
                 )
                 Spacer(Modifier.height(16.dp))
             }
@@ -131,7 +141,7 @@ private fun WishlistContent(
             if (!state.isLoading && state.visibleItems.isEmpty()) {
                 item { EmptyState() }
             }
-            items(state.visibleItems, key = { it.setNumber }) { item ->
+            items(state.pageItems, key = { it.setNumber }) { item ->
                 SwipeToDelete(onSwiped = { onRemove(item.setNumber) }, autoDismiss = true) {
                     WishlistCard(
                         item = item,
@@ -141,6 +151,13 @@ private fun WishlistContent(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
+            }
+            item {
+                PaginationBar(
+                    currentPage = state.currentPage,
+                    totalPages = state.pageCount,
+                    onPageSelected = onPageChange,
+                )
             }
         }
 

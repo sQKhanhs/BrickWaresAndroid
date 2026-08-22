@@ -61,6 +61,7 @@ import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
+import com.senniapp.brickwares.ui.components.animatedNumber
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
@@ -131,10 +132,11 @@ private fun HomeContent(
                 Spacer(Modifier.height(14.dp))
                 StatCardRow(
                     entries = listOf(
-                        StatEntry(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets"),
-                        StatEntry(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs"),
-                        StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
+                        StatEntry(R.drawable.ic_bw_set, summary.setCount.toLong(), "Sets"),
+                        StatEntry(R.drawable.ic_bw_minifig, summary.minifigCount.toLong(), "Minifigs"),
+                        StatEntry(R.drawable.ic_bw_pieces, summary.pieceCount.toLong(), "Pieces"),
                     ),
+                    keyPrefix = "home",
                 )
             }
             if (state.themes.isNotEmpty()) {
@@ -284,7 +286,7 @@ private fun HeroCard(
                 color = BwTheme.colors.brandYellow,
             )
             Text(
-                text = formatMoney(summary.collectionValue, currency),
+                text = formatMoney(animatedNumber(summary.collectionValue, "home_value"), currency),
                 style = BwType.heroValue.copy(
                     shadow = Shadow(Color(0x99000000), Offset(0f, 2f), 10f),
                 ),

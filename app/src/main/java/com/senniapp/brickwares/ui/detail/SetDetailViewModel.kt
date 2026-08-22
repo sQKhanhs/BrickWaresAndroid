@@ -28,7 +28,9 @@ class SetDetailViewModel(
     private val _uiState = MutableStateFlow(SetDetailUiState())
     val uiState: StateFlow<SetDetailUiState> = _uiState.asStateFlow()
 
-    private var setNumber: String? = null
+    // Canonical catalog id ("number-variant"); may also be a bare set number when opened from the
+    // mock collection/wishlist (resolved with a fallback in [rebuild]).
+    private var catalogKey: String? = null
     private var collectionItems: List<CollectionItem> = emptyList()
     private var wishlist: List<WishlistItem> = emptyList()
 
@@ -46,17 +48,20 @@ class SetDetailViewModel(
         }
     }
 
-    fun load(setNumber: String) {
-        this.setNumber = setNumber
+    fun load(catalogId: String) {
+        this.catalogKey = catalogId
         _uiState.update { it.copy(addTarget = null, toastMessage = null) }
         rebuild()
     }
 
     private fun rebuild() {
-        val sn = setNumber ?: return
-        val set = catalogRepo.all().find { it.setNumber == sn }
+        val key = catalogKey ?: return
+        val all = catalogRepo.all()
+        // Resolve by canonical id ("number-variant"); fall back to a bare set number.
+        val set = all.find { it.id == key } ?: all.find { it.setNumber == key }
+        val sn = set?.setNumber ?: key
         val owned = collectionItems.find { it.setNumber == sn }
-        val related = catalogRepo.all().filter { it.theme == set?.theme && it.setNumber != sn }.take(4)
+        val related = all.filter { it.theme == set?.theme && it.id != set?.id }.take(4)
         _uiState.update {
             it.copy(
                 loaded = true,

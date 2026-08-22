@@ -77,6 +77,7 @@ class SearchViewModel(
                 themeDetailSort = ThemeDetailSort.NEWEST,
                 themeDetailSubOptions = subthemesFor(theme),
                 themeDetailResults = themeDetailResults(theme, sub, ThemeDetailSort.NEWEST),
+                themeDetailPage = 1,
             )
         }
     }
@@ -84,15 +85,27 @@ class SearchViewModel(
     fun onThemeDetailSubChange(sub: String) {
         _uiState.update {
             val theme = it.themeDetail ?: return@update it
-            it.copy(themeDetailSub = sub, themeDetailResults = themeDetailResults(theme, sub, it.themeDetailSort))
+            it.copy(
+                themeDetailSub = sub,
+                themeDetailResults = themeDetailResults(theme, sub, it.themeDetailSort),
+                themeDetailPage = 1,
+            )
         }
     }
 
     fun onThemeDetailSortChange(sort: ThemeDetailSort) {
         _uiState.update {
             val theme = it.themeDetail ?: return@update it
-            it.copy(themeDetailSort = sort, themeDetailResults = themeDetailResults(theme, it.themeDetailSub, sort))
+            it.copy(
+                themeDetailSort = sort,
+                themeDetailResults = themeDetailResults(theme, it.themeDetailSub, sort),
+                themeDetailPage = 1,
+            )
         }
+    }
+
+    fun onThemeDetailPageChange(page: Int) {
+        _uiState.update { it.copy(themeDetailPage = page) }
     }
 
     fun onThemeDetailBack() {

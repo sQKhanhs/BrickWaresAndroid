@@ -216,7 +216,7 @@ private fun SetDetailContent(
             if (state.related.isNotEmpty()) {
                 Text("More in ${set.theme}", style = BwType.cardTitle.copy(fontSize = 15.sp), color = colors.text)
                 state.related.forEach { rel ->
-                    RelatedCard(set = rel, onClick = { onOpenSetDetail(rel.setNumber) })
+                    RelatedCard(set = rel, onClick = { onOpenSetDetail(rel.id) })
                 }
             }
         }

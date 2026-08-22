@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +59,7 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -93,6 +96,7 @@ fun SearchScreen(
         onThemeDetailBack = viewModel::onThemeDetailBack,
         onThemeDetailSubChange = viewModel::onThemeDetailSubChange,
         onThemeDetailSortChange = viewModel::onThemeDetailSortChange,
+        onThemeDetailPageChange = viewModel::onThemeDetailPageChange,
         onAddToWishlist = viewModel::onAddToWishlist,
         onAddToCollectionClick = viewModel::onAddToCollectionClick,
         onDismissAdd = viewModel::onDismissAdd,
@@ -117,6 +121,7 @@ private fun SearchContent(
     onThemeDetailBack: () -> Unit,
     onThemeDetailSubChange: (String) -> Unit,
     onThemeDetailSortChange: (ThemeDetailSort) -> Unit,
+    onThemeDetailPageChange: (Int) -> Unit,
     onAddToWishlist: (CatalogSet) -> Unit,
     onAddToCollectionClick: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
@@ -130,11 +135,15 @@ private fun SearchContent(
         if (state.showThemeDetail) {
             ThemeDetailView(
                 theme = state.themeDetail.orEmpty(),
-                results = state.themeDetailResults,
+                results = state.themeDetailPageItems,
                 sub = state.themeDetailSub,
                 subOptions = state.themeDetailSubOptions,
                 sort = state.themeDetailSort,
                 wishlistedNumbers = state.wishlistedNumbers,
+                totalCount = state.themeDetailResults.size,
+                currentPage = state.themeDetailCurrentPage,
+                pageCount = state.themeDetailPageCount,
+                onPageChange = onThemeDetailPageChange,
                 onBack = onThemeDetailBack,
                 onSubChange = onThemeDetailSubChange,
                 onSortChange = onThemeDetailSortChange,
@@ -194,7 +203,7 @@ private fun SearchContent(
                     if (state.suggestions.isEmpty()) {
                         item { SectionLabel("No matches for \"${state.query}\"") }
                     } else {
-                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.setNumber) } }
+                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.id) } }
                     }
                 }
 
@@ -211,11 +220,11 @@ private fun SearchContent(
                         SectionLabel("Results for \"${state.submittedQuery.orEmpty()}\" (${state.results.size})")
                         Spacer(Modifier.height(10.dp))
                     }
-                    items(state.results, key = { it.setNumber }) { set ->
+                    items(state.results, key = { it.id }) { set ->
                         ResultCard(
                             set = set,
                             wishlisted = set.setNumber in state.wishlistedNumbers,
-                            onOpenDetail = { onOpenSetDetail(set.setNumber) },
+                            onOpenDetail = { onOpenSetDetail(set.id) },
                             onAddCollection = { onAddToCollectionClick(set) },
                             onAddWishlist = { onAddToWishlist(set) },
                         )
@@ -368,6 +377,10 @@ private fun ThemeDetailView(
     subOptions: List<SubthemeCount>,
     sort: ThemeDetailSort,
     wishlistedNumbers: Set<String>,
+    totalCount: Int,
+    currentPage: Int,
+    pageCount: Int,
+    onPageChange: (Int) -> Unit,
     onBack: () -> Unit,
     onSubChange: (String) -> Unit,
     onSortChange: (ThemeDetailSort) -> Unit,
@@ -376,7 +389,11 @@ private fun ThemeDetailView(
     onAddWishlist: (CatalogSet) -> Unit,
 ) {
     val colors = BwTheme.colors
+    val listState = rememberLazyListState()
+    // Jump to the top when the page changes (the pager sits at the bottom of the list).
+    LaunchedEffect(currentPage) { listState.scrollToItem(0) }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
     ) {
@@ -404,7 +421,7 @@ private fun ThemeDetailView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "${results.size} ${if (results.size == 1) "set" else "sets"}",
+                    "$totalCount ${if (totalCount == 1) "set" else "sets"}",
                     style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                     color = colors.textMuted,
                 )
@@ -425,15 +442,22 @@ private fun ThemeDetailView(
             }
             Spacer(Modifier.height(12.dp))
         }
-        items(results, key = { it.setNumber }) { set ->
+        items(results, key = { it.id }) { set ->
             ResultCard(
                 set = set,
                 wishlisted = set.setNumber in wishlistedNumbers,
-                onOpenDetail = { onOpenSetDetail(set.setNumber) },
+                onOpenDetail = { onOpenSetDetail(set.id) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },
             )
             Spacer(Modifier.height(12.dp))
+        }
+        item {
+            PaginationBar(
+                currentPage = currentPage,
+                totalPages = pageCount,
+                onPageSelected = onPageChange,
+            )
         }
     }
 }

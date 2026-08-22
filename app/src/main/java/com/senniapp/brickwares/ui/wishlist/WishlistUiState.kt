@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.wishlist
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.ui.components.PAGE_SIZE
 
 /** Item-type filter chips shown above the wishlist (mirrors the Collection tab). */
 enum class WishlistFilter { ALL, SET, MINIFIG }
@@ -18,6 +19,8 @@ data class WishlistUiState(
     val filter: WishlistFilter = WishlistFilter.ALL,
     val items: List<WishlistItem> = emptyList(),
     val moveTarget: CatalogSet? = null,
+    /** 1-based current page for the numbered pagination. */
+    val page: Int = 1,
     /** Transient toast message (e.g. after a remove); cleared once shown. */
     val toastMessage: String? = null,
 ) {
@@ -29,6 +32,14 @@ data class WishlistUiState(
             WishlistFilter.SET -> items.filter { it.itemType == ItemType.SET }
             WishlistFilter.MINIFIG -> items.filter { it.itemType == ItemType.MINIFIG }
         }
+
+    /** Total pages (>=1) and the clamped current page for [pageItems]. */
+    val pageCount: Int get() = ((visibleItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+    val currentPage: Int get() = page.coerceIn(1, pageCount)
+
+    /** The current page's slice of [visibleItems] (what the list renders). */
+    val pageItems: List<WishlistItem>
+        get() = visibleItems.drop((currentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     val setCount: Int get() = items.count { it.itemType == ItemType.SET }
     val minifigCount: Int get() = items.count { it.itemType == ItemType.MINIFIG }

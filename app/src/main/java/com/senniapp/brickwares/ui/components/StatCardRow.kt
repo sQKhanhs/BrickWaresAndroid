@@ -20,11 +20,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import com.senniapp.brickwares.util.formatCount
 
-/** One stat shown in a [StatCardRow] (icon + big number + label). */
+/** One stat shown in a [StatCardRow] (icon + big number + label). [value] is a raw count; the
+ *  number counts up on display. */
 data class StatEntry(
     @param:DrawableRes val icon: Int,
-    val value: String,
+    val value: Long,
     val label: String,
 )
 
@@ -33,7 +35,7 @@ data class StatEntry(
  * Home and Collection tabs. Renders each [StatEntry] as an equal-width column.
  */
 @Composable
-fun StatCardRow(entries: List<StatEntry>, modifier: Modifier = Modifier) {
+fun StatCardRow(entries: List<StatEntry>, keyPrefix: String, modifier: Modifier = Modifier) {
     val colors = BwTheme.colors
     // Yellow "frame": 2dp yellow padding (radius 16) around the card (radius 14).
     androidx.compose.foundation.layout.Box(
@@ -51,14 +53,14 @@ fun StatCardRow(entries: List<StatEntry>, modifier: Modifier = Modifier) {
                 .padding(vertical = 18.dp, horizontal = 8.dp),
         ) {
             for (entry in entries) {
-                StatItem(entry = entry, modifier = Modifier.weight(1f))
+                StatItem(entry = entry, animationKey = "$keyPrefix-${entry.label}", modifier = Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun StatItem(entry: StatEntry, modifier: Modifier = Modifier) {
+private fun StatItem(entry: StatEntry, animationKey: String, modifier: Modifier = Modifier) {
     val colors = BwTheme.colors
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
@@ -68,7 +70,7 @@ private fun StatItem(entry: StatEntry, modifier: Modifier = Modifier) {
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.height(8.dp))
-        Text(entry.value, style = BwType.statNumber, color = colors.text)
+        Text(formatCount(animatedNumber(entry.value, animationKey).toInt()), style = BwType.statNumber, color = colors.text)
         Spacer(Modifier.height(2.dp))
         Text(entry.label, style = BwType.statLabel, color = colors.textMuted)
     }

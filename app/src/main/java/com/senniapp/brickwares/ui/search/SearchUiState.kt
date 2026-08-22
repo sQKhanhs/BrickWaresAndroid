@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.search
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.ui.components.PAGE_SIZE
 
 /** A subtheme within a theme, with how many catalog sets it has. */
 data class SubthemeCount(val name: String, val count: Int)
@@ -56,6 +57,8 @@ data class SearchUiState(
     val themeDetailSort: ThemeDetailSort = ThemeDetailSort.NEWEST,
     val themeDetailResults: List<CatalogSet> = emptyList(),
     val themeDetailSubOptions: List<SubthemeCount> = emptyList(),
+    /** 1-based current page for the theme-detail results (numbered pagination). */
+    val themeDetailPage: Int = 1,
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
     val toastMessage: String? = null,
@@ -65,6 +68,12 @@ data class SearchUiState(
     val showSuggestions: Boolean get() = submittedQuery == null && query.isNotBlank()
     val showResults: Boolean get() = submittedQuery != null
     val tooMany: Boolean get() = submittedQuery != null && results.size > MAX_RESULTS
+
+    /** Numbered pagination for the theme-detail results (a theme can have many sets). */
+    val themeDetailPageCount: Int get() = ((themeDetailResults.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+    val themeDetailCurrentPage: Int get() = themeDetailPage.coerceIn(1, themeDetailPageCount)
+    val themeDetailPageItems: List<CatalogSet>
+        get() = themeDetailResults.drop((themeDetailCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     /** Themes ordered by the active [themeSort] (favorites-first for the favorite sort). */
     val sortedThemes: List<ThemeGroup>

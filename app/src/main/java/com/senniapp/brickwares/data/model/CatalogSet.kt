@@ -26,4 +26,13 @@ data class CatalogSet(
     val imageUrl: String? = null,
     /** Smaller image for list cards; falls back to [imageUrl] when absent. */
     val thumbnailUrl: String? = null,
-)
+    /** Brickset number variant (e.g. 1 for "10282-1"); disambiguates same-number sets in lists. */
+    val numberVariant: Int = 1,
+) {
+    /**
+     * Canonical unique identity ("10282-1"). Set NUMBER alone is not unique — CMF (Collectible
+     * Minifigure) series share one number across many variants (71050-1 … 71050-12) — so use this
+     * for list keys and detail navigation, never [setNumber] on its own.
+     */
+    val id: String get() = "$setNumber-$numberVariant"
+}

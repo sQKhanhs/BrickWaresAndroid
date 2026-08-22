@@ -39,7 +39,11 @@ class WishlistViewModel(
     }
 
     fun onFilterSelected(filter: WishlistFilter) {
-        _uiState.update { it.copy(filter = filter) }
+        _uiState.update { it.copy(filter = filter, page = 1) }
+    }
+
+    fun onPageChange(page: Int) {
+        _uiState.update { it.copy(page = page) }
     }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)

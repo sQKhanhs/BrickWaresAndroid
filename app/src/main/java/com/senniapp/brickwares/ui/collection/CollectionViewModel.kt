@@ -49,7 +49,15 @@ class CollectionViewModel(
     }
 
     fun onFilterSelected(filter: CollectionFilter) {
-        _uiState.update { it.copy(filter = filter) }
+        _uiState.update { it.copy(filter = filter, page = 1) }
+    }
+
+    fun onPageChange(page: Int) {
+        _uiState.update { it.copy(page = page) }
+    }
+
+    fun onSalesPageChange(page: Int) {
+        _uiState.update { it.copy(salesPage = page) }
     }
 
     fun onToggleMode() {

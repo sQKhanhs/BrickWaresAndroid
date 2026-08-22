@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,7 +62,9 @@ import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.animatedNumber
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -84,6 +88,8 @@ fun CollectionScreen(
         state = state,
         onOpenSetDetail = onOpenSetDetail,
         onFilterSelected = viewModel::onFilterSelected,
+        onPageChange = viewModel::onPageChange,
+        onSalesPageChange = viewModel::onSalesPageChange,
         onToggleMode = viewModel::onToggleMode,
         onAddClick = viewModel::onAddClick,
         onItemDetail = viewModel::onItemDetail,
@@ -107,6 +113,8 @@ private fun CollectionContent(
     state: CollectionUiState,
     onOpenSetDetail: (String) -> Unit,
     onFilterSelected: (CollectionFilter) -> Unit,
+    onPageChange: (Int) -> Unit,
+    onSalesPageChange: (Int) -> Unit,
     onToggleMode: () -> Unit,
     onAddClick: () -> Unit,
     onItemDetail: (CollectionItem) -> Unit,
@@ -124,12 +132,16 @@ private fun CollectionContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    val listState = rememberLazyListState()
+    // Jump to the top when the active page changes (the pager sits at the bottom of the list).
+    LaunchedEffect(state.currentPage, state.salesCurrentPage, state.mode) { listState.scrollToItem(0) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (state.isLoading) {
             LoadingScreen()
             return@Box
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
@@ -146,10 +158,11 @@ private fun CollectionContent(
                     item {
                         StatCardRow(
                             entries = listOf(
-                                StatEntry(R.drawable.ic_bw_set, summary.setCount.toString(), "Sets"),
-                                StatEntry(R.drawable.ic_bw_minifig, formatCount(summary.minifigCount), "Minifigs"),
-                                StatEntry(R.drawable.ic_bw_pieces, formatCount(summary.pieceCount), "Pieces"),
+                                StatEntry(R.drawable.ic_bw_set, summary.setCount.toLong(), "Sets"),
+                                StatEntry(R.drawable.ic_bw_minifig, summary.minifigCount.toLong(), "Minifigs"),
+                                StatEntry(R.drawable.ic_bw_pieces, summary.pieceCount.toLong(), "Pieces"),
                             ),
+                            keyPrefix = "collection",
                         )
                         Spacer(Modifier.height(16.dp))
                     }
@@ -158,7 +171,7 @@ private fun CollectionContent(
                     FilterChips(selected = state.filter, onSelect = onFilterSelected)
                     Spacer(Modifier.height(14.dp))
                 }
-                items(state.visibleItems, key = { it.setNumber }) { item ->
+                items(state.pageItems, key = { it.setNumber }) { item ->
                     SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
                         ItemCard(
                             item = item,
@@ -167,6 +180,13 @@ private fun CollectionContent(
                         )
                     }
                     Spacer(Modifier.height(12.dp))
+                }
+                item {
+                    PaginationBar(
+                        currentPage = state.currentPage,
+                        totalPages = state.pageCount,
+                        onPageSelected = onPageChange,
+                    )
                 }
             } else {
                 state.salesSummary?.let { s ->
@@ -177,9 +197,16 @@ private fun CollectionContent(
                         Spacer(Modifier.height(14.dp))
                     }
                 }
-                items(state.soldItems, key = { it.setNumber }) { sold ->
+                items(state.salesPageItems, key = { it.setNumber }) { sold ->
                     SoldCard(sold)
                     Spacer(Modifier.height(12.dp))
+                }
+                item {
+                    PaginationBar(
+                        currentPage = state.salesCurrentPage,
+                        totalPages = state.salesPageCount,
+                        onPageSelected = onSalesPageChange,
+                    )
                 }
             }
         }
@@ -431,7 +458,7 @@ private fun SalesStatsRow(summary: SalesSummary) {
             Spacer(Modifier.height(6.dp))
             Text("TOTAL SOLD", style = BwType.micro, color = gold)
             Spacer(Modifier.height(2.dp))
-            Text(summary.totalSold.toString(), style = BwType.statNumber, color = colors.text)
+            Text(animatedNumber(summary.totalSold.toLong(), "sales_total_sold").toString(), style = BwType.statNumber, color = colors.text)
         }
         // Sale Value — card, shorter than the circle and vertically centered against it
         Column(
@@ -449,7 +476,7 @@ private fun SalesStatsRow(summary: SalesSummary) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                formatMoney(summary.totalSaleValue, AppCurrency.VND),
+                formatMoney(animatedNumber(summary.totalSaleValue, "sales_value"), AppCurrency.VND),
                 style = BwType.statNumber.copy(fontSize = 22.sp),
                 color = colors.text,
             )
@@ -471,11 +498,21 @@ private fun ProfitBar(summary: SalesSummary) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "${if (positive) "▲" else "▼"} Profit ${signedMoney(summary.totalProfit)}",
-            style = BwType.body.copy(fontWeight = FontWeight.Bold),
-            color = color,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(
+                painter = painterResource(
+                    if (positive) R.drawable.ic_bw_trending_up else R.drawable.ic_bw_trending_down,
+                ),
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                "Profit ${signedMoney(animatedNumber(summary.totalProfit, "sales_profit"))}",
+                style = BwType.body.copy(fontWeight = FontWeight.Bold),
+                color = color,
+            )
+        }
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
