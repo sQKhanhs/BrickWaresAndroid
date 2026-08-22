@@ -5,6 +5,7 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
+import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
@@ -30,10 +31,16 @@ class SupabaseCatalogRepository(
         loadMutex.withLock {
             if (cache.isNotEmpty()) return
             try {
+                val usdToVndRate = CurrencyConverter.usdToVndRate()
                 val rows = client.from("sets")
-                    .select(Columns.list("set_number,name,item_type,theme,subtheme,year,pieces,minifigs"))
+                    .select(
+                        Columns.raw(
+                            "set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
+                                "minifigs,set_prices(region,retail_price)",
+                        ),
+                    )
                     .decodeList<SetRow>()
-                cache = rows.map { it.toCatalogSet() }
+                cache = rows.map { it.toCatalogSet(usdToVndRate) }
             } catch (e: Exception) {
                 // Don't crash the app on a network/permission failure — leave the cache empty so
                 // callers show an empty state and a later call can retry. (TODO: surface an error state.)
@@ -58,6 +65,7 @@ class SupabaseCatalogRepository(
     @Serializable
     private data class SetRow(
         @SerialName("set_number") val setNumber: String,
+        @SerialName("number_variant") val numberVariant: Int? = null,
         val name: String? = null,
         @SerialName("item_type") val itemType: String? = null,
         val theme: String? = null,
@@ -65,8 +73,15 @@ class SupabaseCatalogRepository(
         val year: Int? = null,
         val pieces: Int? = null,
         val minifigs: Int? = null,
+        @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
-        fun toCatalogSet(): CatalogSet = CatalogSet(
+        /** Retail in ₫: convert the US price (Brickset has no VN retail) at [rate], else 0 if none. */
+        private fun retailVnd(rate: Double): Long {
+            val usd = prices.firstOrNull { it.region == "US" }?.retailPrice ?: return 0L
+            return CurrencyConverter.usdToVnd(usd, rate)
+        }
+
+        fun toCatalogSet(usdToVndRate: Double): CatalogSet = CatalogSet(
             setNumber = setNumber,
             name = name ?: "",
             itemType = if (itemType == "minifig") ItemType.MINIFIG else ItemType.SET,
@@ -76,14 +91,25 @@ class SupabaseCatalogRepository(
             releaseMonth = 0,
             pieces = pieces ?: 0,
             minifigs = minifigs ?: 0,
-            // TODO(pricing slice): set_prices is per-region (USD/GBP/…), app money is VND — 0 until
-            // the currency/region decision is wired. Names/themes/pieces/etc. are real.
-            retailPrice = 0L,
-            // TODO: derive RETIRED from set_prices.date_last_available once prices are read.
+            // Brickset has no VN retail — convert the US price to ₫ (see CurrencyConverter).
+            retailPrice = retailVnd(usdToVndRate),
+            // TODO: derive RETIRED from set_prices.date_last_available once that's read.
             status = Availability.AVAILABLE,
             subtheme = subtheme ?: "General",
+            // Brickset's image host is behind Cloudflare (blocks non-browser clients), so use
+            // Rebrickable's open CDN, addressed by set number + variant. Falls back to a type icon
+            // in the UI when a set isn't on Rebrickable.
+            imageUrl = "https://cdn.rebrickable.com/media/sets/$setNumber-${numberVariant ?: 1}.jpg",
+            thumbnailUrl = null,
         )
     }
+
+    /** Embedded row from `set_prices` (one per region) for the parent set. */
+    @Serializable
+    private data class PriceRow(
+        val region: String? = null,
+        @SerialName("retail_price") val retailPrice: Double? = null,
+    )
 }
 
 /** App-wide singleton so every ViewModel shares one cached catalog (one network load). */

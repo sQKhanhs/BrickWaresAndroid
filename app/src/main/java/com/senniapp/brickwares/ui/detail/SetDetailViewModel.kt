@@ -78,6 +78,7 @@ class SetDetailViewModel(
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                 pieces = set.pieces, minifigs = set.minifigs,
                 retailPrice = set.retailPrice, status = set.status,
+                imageUrl = set.imageUrl ?: set.thumbnailUrl,
             ),
         )
         _uiState.update { it.copy(toastMessage = "${set.name} added to Wishlist") }

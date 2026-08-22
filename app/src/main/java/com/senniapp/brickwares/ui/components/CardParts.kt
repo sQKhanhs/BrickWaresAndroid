@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,10 +29,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.Availability
+import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import kotlin.math.roundToInt
@@ -41,6 +46,54 @@ import kotlin.math.roundToInt
  * Extracted so both tabs render identical set/minifig cards (title, meta lines, status, prices)
  * and the same header banner and filter chips.
  */
+
+/**
+ * A set/minifig thumbnail: the catalog image when available, else the item-type icon on a
+ * placeholder. [modifier] (e.g. `clickable`) is applied after the clip so ripples stay rounded.
+ */
+@Composable
+fun SetThumb(
+    imageUrl: String?,
+    itemType: ItemType,
+    size: Dp,
+    iconSize: Dp,
+    corner: Dp = 10.dp,
+    modifier: Modifier = Modifier,
+) {
+    val colors = BwTheme.colors
+    val typeIcon: @Composable () -> Unit = {
+        Icon(
+            painter = painterResource(
+                if (itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set,
+            ),
+            contentDescription = null,
+            tint = colors.textFaint,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(corner))
+            .background(colors.placeholderA)
+            .then(modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (imageUrl == null) {
+            typeIcon()
+        } else {
+            // SubcomposeAsyncImage so a failed/missing image (e.g. set not on the CDN) falls back
+            // to the type icon instead of a blank box.
+            SubcomposeAsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(6.dp),
+                error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { typeIcon() } },
+            )
+        }
+    }
+}
 
 /** A tab header: a background image (asset path) with a scrim and the tab title. */
 @Composable

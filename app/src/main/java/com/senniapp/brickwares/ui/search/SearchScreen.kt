@@ -58,6 +58,7 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -84,7 +85,6 @@ fun SearchScreen(
         onQueryChange = viewModel::onQueryChange,
         onSubmit = viewModel::onSubmit,
         onClearSearch = viewModel::onClearSearch,
-        onSuggestionClick = viewModel::onSuggestionClick,
         onThemeClick = viewModel::onThemeClick,
         onSubthemeClick = viewModel::onSubthemeClick,
         onThemeSortChange = viewModel::onThemeSortChange,
@@ -109,7 +109,6 @@ private fun SearchContent(
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onClearSearch: () -> Unit,
-    onSuggestionClick: (CatalogSet) -> Unit,
     onThemeClick: (String) -> Unit,
     onSubthemeClick: (String, String) -> Unit,
     onThemeSortChange: (ThemeSort) -> Unit,
@@ -194,7 +193,7 @@ private fun SearchContent(
                     if (state.suggestions.isEmpty()) {
                         item { SectionLabel("No matches for \"${state.query}\"") }
                     } else {
-                        item { SuggestionList(state.suggestions, onSuggestionClick) }
+                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.setNumber) } }
                     }
                 }
 
@@ -560,17 +559,13 @@ private fun ResultCard(
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        Box(
-            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA).clickable(onClick = onOpenDetail),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(if (set.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                contentDescription = null,
-                tint = colors.textFaint,
-                modifier = Modifier.size(30.dp),
-            )
-        }
+        SetThumb(
+            imageUrl = set.thumbnailUrl ?: set.imageUrl,
+            itemType = set.itemType,
+            size = 72.dp,
+            iconSize = 30.dp,
+            modifier = Modifier.clickable(onClick = onOpenDetail),
+        )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))

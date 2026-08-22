@@ -43,6 +43,7 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -135,17 +136,13 @@ private fun SetDetailContent(
 
             // Hero: image + title + actions.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Box(
-                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(12.dp)).background(colors.placeholderA),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painter = painterResource(if (set.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                        contentDescription = null,
-                        tint = colors.textFaint,
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
+                SetThumb(
+                    imageUrl = set.imageUrl ?: set.thumbnailUrl,
+                    itemType = set.itemType,
+                    size = 96.dp,
+                    iconSize = 40.dp,
+                    corner = 12.dp,
+                )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
                     // Add to Collection.
@@ -313,17 +310,12 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(14.dp),
     ) {
-        Box(
-            modifier = Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(if (set.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                contentDescription = null,
-                tint = colors.textFaint,
-                modifier = Modifier.size(26.dp),
-            )
-        }
+        SetThumb(
+            imageUrl = set.thumbnailUrl ?: set.imageUrl,
+            itemType = set.itemType,
+            size = 60.dp,
+            iconSize = 26.dp,
+        )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, maxLines = 1)

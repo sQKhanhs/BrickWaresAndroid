@@ -33,11 +33,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
+import com.senniapp.brickwares.ui.search.SearchViewModel
 import com.senniapp.brickwares.ui.settings.SettingsScreen
 import com.senniapp.brickwares.ui.wishlist.WishlistScreen
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -63,13 +65,22 @@ fun BrickWaresApp(
     // When non-null, the Set Detail page is shown over the current tab (nav bar stays visible).
     var detailSetNumber by rememberSaveable { mutableStateOf<String?>(null) }
     val colors = BwTheme.colors
+    // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
+    // its default browse view — a lingering search shouldn't persist across tab switches.
+    val searchViewModel: SearchViewModel = viewModel()
 
     Scaffold(
         containerColor = colors.bg,
         bottomBar = {
             BwBottomBar(
                 selected = selectedTab,
-                onSelect = { selectedTab = it; detailSetNumber = null },
+                onSelect = { tab ->
+                    // Reset Search only when arriving from a different tab (not when returning from
+                    // a Set Detail overlay, which keeps the current results in place).
+                    if (tab == BwTab.Search && selectedTab != BwTab.Search) searchViewModel.resetToDefault()
+                    selectedTab = tab
+                    detailSetNumber = null
+                },
             )
         },
     ) { innerPadding ->
@@ -94,7 +105,10 @@ fun BrickWaresApp(
                         onNavigateToSearch = { selectedTab = BwTab.Search },
                         onOpenSetDetail = { detailSetNumber = it },
                     )
-                    BwTab.Search -> SearchScreen(onOpenSetDetail = { detailSetNumber = it })
+                    BwTab.Search -> SearchScreen(
+                        onOpenSetDetail = { detailSetNumber = it },
+                        viewModel = searchViewModel,
+                    )
                     BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
                 }
             }

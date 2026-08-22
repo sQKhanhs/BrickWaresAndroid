@@ -63,18 +63,6 @@ class SearchViewModel(
         }
     }
 
-    /** Tapping a suggestion shows that single set as the result. */
-    fun onSuggestionClick(set: CatalogSet) {
-        _uiState.update {
-            it.copy(
-                query = "${set.setNumber} ${set.name}",
-                submittedQuery = set.name,
-                results = listOf(set),
-                suggestions = emptyList(),
-            )
-        }
-    }
-
     /** Tapping a theme card opens the theme-detail list (all subthemes). */
     fun onThemeClick(theme: String) = openThemeDetail(theme, ALL_SUBTHEMES)
 
@@ -136,6 +124,26 @@ class SearchViewModel(
         _uiState.update { it.copy(query = "", submittedQuery = null, results = emptyList(), suggestions = emptyList()) }
     }
 
+    /**
+     * Return the tab to its default browse view (search bar + theme list). Called when the user
+     * re-enters the Search tab from another tab, so a previous search/theme-detail doesn't linger.
+     * Keeps loaded catalog data (themes, favorites, wishlist state).
+     */
+    fun resetToDefault() {
+        _uiState.update {
+            it.copy(
+                query = "",
+                submittedQuery = null,
+                results = emptyList(),
+                suggestions = emptyList(),
+                themeDetail = null,
+                themeDetailSub = ALL_SUBTHEMES,
+                themeDetailResults = emptyList(),
+                themeDetailSubOptions = emptyList(),
+            )
+        }
+    }
+
     fun onThemeSortChange(sort: ThemeSort) {
         _uiState.update { it.copy(themeSort = sort) }
     }
@@ -158,6 +166,7 @@ class SearchViewModel(
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                 pieces = set.pieces, minifigs = set.minifigs,
                 retailPrice = set.retailPrice, status = set.status,
+                imageUrl = set.thumbnailUrl ?: set.imageUrl,
             ),
         )
         _uiState.update { it.copy(toastMessage = "${set.name} added to Wishlist") }

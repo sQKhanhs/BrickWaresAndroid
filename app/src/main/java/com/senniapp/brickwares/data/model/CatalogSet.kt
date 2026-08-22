@@ -21,4 +21,8 @@ data class CatalogSet(
     val status: Availability,
     /** Sub-grouping within a theme (e.g. "Landmarks"). Defaults for catalog rows built from owned items. */
     val subtheme: String = "General",
+    /** Full catalog image (Brickset). Null for rows built from owned items without one. */
+    val imageUrl: String? = null,
+    /** Smaller image for list cards; falls back to [imageUrl] when absent. */
+    val thumbnailUrl: String? = null,
 )
