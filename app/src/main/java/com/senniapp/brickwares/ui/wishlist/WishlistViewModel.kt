@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.data.repository.CatalogRepository
+import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.MockCollectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,12 +22,15 @@ import kotlinx.coroutines.launch
  */
 class WishlistViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
+    private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WishlistUiState())
     val uiState: StateFlow<WishlistUiState> = _uiState.asStateFlow()
 
     init {
+        // Warm the catalog cache (used if the wishlist ever needs catalog lookups).
+        viewModelScope.launch { catalogRepo.refresh() }
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
                 _uiState.update { it.copy(itemsLoaded = true, items = items) }
@@ -37,7 +42,7 @@ class WishlistViewModel(
         _uiState.update { it.copy(filter = filter) }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 
     fun onRemove(setNumber: String) {
         val item = _uiState.value.items.find { it.setNumber == setNumber }

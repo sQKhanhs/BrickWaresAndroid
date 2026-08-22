@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.data.repository.CatalogRepository
+import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.MockCollectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,7 @@ import kotlinx.coroutines.launch
  */
 class SetDetailViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
+    private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SetDetailUiState())
@@ -30,6 +33,11 @@ class SetDetailViewModel(
     private var wishlist: List<WishlistItem> = emptyList()
 
     init {
+        // Warm the catalog cache, then rebuild so the set resolves from real data.
+        viewModelScope.launch {
+            catalogRepo.refresh()
+            rebuild()
+        }
         viewModelScope.launch {
             repository.getCollectionItems().collect { collectionItems = it; rebuild() }
         }
@@ -46,9 +54,9 @@ class SetDetailViewModel(
 
     private fun rebuild() {
         val sn = setNumber ?: return
-        val set = repository.getCatalog().find { it.setNumber == sn }
+        val set = catalogRepo.all().find { it.setNumber == sn }
         val owned = collectionItems.find { it.setNumber == sn }
-        val related = repository.getCatalog().filter { it.theme == set?.theme && it.setNumber != sn }.take(4)
+        val related = catalogRepo.all().filter { it.theme == set?.theme && it.setNumber != sn }.take(4)
         _uiState.update {
             it.copy(
                 loaded = true,
@@ -88,7 +96,7 @@ class SetDetailViewModel(
         _uiState.update { it.copy(addTarget = null, toastMessage = "${item.name} added to Collection") }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 
     fun onToastShown() {
         _uiState.update { it.copy(toastMessage = null) }

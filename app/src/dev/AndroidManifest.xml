@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dev-flavor overlay: the dev build talks to local Supabase over http://10.0.2.2:54321,
+  so cleartext traffic must be allowed. This overlay applies to dev builds ONLY — prod
+  uses https and is unaffected.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:usesCleartextTraffic="true"
+        tools:targetApi="28" />
+
+</manifest>

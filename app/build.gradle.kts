@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
+
+// Read secrets from local.properties (gitignored) so keys aren't hardcoded in source.
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+// Prod publishable (anon) key — put BRICKWARES_PROD_ANON_KEY=... in local.properties.
+val prodSupabaseAnonKey: String = localProperties.getProperty("BRICKWARES_PROD_ANON_KEY", "")
 
 android {
     namespace = "com.senniapp.brickwares"
@@ -40,14 +51,20 @@ android {
             // Local Supabase (CLI + Docker). 10.0.2.2 is the Android emulator's alias for the
             // host machine's localhost; a physical device would use the host's LAN IP instead.
             buildConfigField("String", "SUPABASE_URL", "\"http://10.0.2.2:54321\"")
-            buildConfigField("String", "SUPABASE_ANON_KEY", "\"\"")
+            // Local dev publishable key is a SHARED default (identical on every machine, printed by
+            // `supabase start`) — not a secret, safe to hardcode for zero-config dev.
+            buildConfigField(
+                "String",
+                "SUPABASE_ANON_KEY",
+                "\"sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH\"",
+            )
         }
         create("prod") {
             dimension = "environment"
             resValue("string", "app_name", "BrickWares")
-            // Filled in when the hosted Supabase project exists (inject from local.properties, not source).
-            buildConfigField("String", "SUPABASE_URL", "\"\"")
-            buildConfigField("String", "SUPABASE_ANON_KEY", "\"\"")
+            buildConfigField("String", "SUPABASE_URL", "\"https://thntvdpsixepidwvrxxj.supabase.co\"")
+            // Real prod publishable key is injected from local.properties (not committed).
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"$prodSupabaseAnonKey\"")
         }
     }
 
@@ -76,6 +93,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    // Supabase (Postgrest for catalog reads) + Ktor engine for Android.
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.ktor.client.android)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

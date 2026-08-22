@@ -39,6 +39,8 @@ const val ALL_SUBTHEMES = "__all"
  * A submitted search returning more than [MAX_RESULTS] shows the "too many results" tips page.
  */
 data class SearchUiState(
+    /** True until the catalog has loaded from Supabase for the first time. */
+    val isLoading: Boolean = false,
     val query: String = "",
     /** The query that produced [results]; null while the user hasn't submitted a search yet. */
     val submittedQuery: String? = null,

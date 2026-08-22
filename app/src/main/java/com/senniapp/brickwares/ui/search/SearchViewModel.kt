@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.data.repository.CatalogRepository
+import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.MockCollectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,13 +23,20 @@ import kotlinx.coroutines.launch
  */
 class SearchViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
+    private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
-    private val catalog = repository.getCatalog()
-    private val _uiState = MutableStateFlow(SearchUiState(themes = buildThemes()))
+    private var catalog: List<CatalogSet> = emptyList()
+    private val _uiState = MutableStateFlow(SearchUiState(isLoading = true))
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
+        // Load the real catalog from Supabase, then build the theme browser.
+        viewModelScope.launch {
+            catalogRepo.refresh()
+            catalog = catalogRepo.all()
+            _uiState.update { it.copy(themes = buildThemes(), isLoading = false) }
+        }
         // Observe the wishlist so result cards can show a "Wishlisted" state.
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
@@ -41,7 +50,7 @@ class SearchViewModel(
             it.copy(
                 query = query,
                 submittedQuery = null,
-                suggestions = if (query.isBlank()) emptyList() else repository.searchCatalog(query).take(6),
+                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query).take(6),
             )
         }
     }
@@ -50,7 +59,7 @@ class SearchViewModel(
         val q = _uiState.value.query.trim()
         if (q.isBlank()) return
         _uiState.update {
-            it.copy(submittedQuery = q, results = repository.searchCatalog(q), suggestions = emptyList())
+            it.copy(submittedQuery = q, results = catalogRepo.search(q), suggestions = emptyList())
         }
     }
 
@@ -138,7 +147,7 @@ class SearchViewModel(
         }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 
     // ---- Add to wishlist ----
 

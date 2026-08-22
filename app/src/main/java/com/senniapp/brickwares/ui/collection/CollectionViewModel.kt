@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.repository.CatalogRepository
+import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.MockCollectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,12 +21,15 @@ import kotlinx.coroutines.launch
  */
 class CollectionViewModel(
     private val repository: CollectionRepository = MockCollectionRepository(),
+    private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CollectionUiState())
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
 
     init {
+        // Warm the catalog cache so the Add-sheet's set-number search has data.
+        viewModelScope.launch { catalogRepo.refresh() }
         viewModelScope.launch {
             val summary = repository.getCollectionSummary()
             _uiState.update { it.copy(summary = summary) }
@@ -66,7 +71,7 @@ class CollectionViewModel(
         }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = repository.searchCatalog(query)
+    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 
     /**
      * Submits the Add sheet. In edit mode (editingCopy set) it replaces that copy and reopens
