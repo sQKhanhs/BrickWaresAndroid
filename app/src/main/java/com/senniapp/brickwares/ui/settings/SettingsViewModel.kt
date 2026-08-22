@@ -55,10 +55,6 @@ class SettingsViewModel : ViewModel() {
         _uiState.update { it.copy(retirementAlerts = !it.retirementAlerts) }
     }
 
-    fun onToggleSharePrices() {
-        _uiState.update { it.copy(sharePrices = !it.sharePrices) }
-    }
-
     fun onToggleAnalytics() {
         _uiState.update { it.copy(analyticsConsent = !it.analyticsConsent) }
     }

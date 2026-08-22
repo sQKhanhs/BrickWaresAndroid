@@ -68,7 +68,6 @@ fun SettingsScreen(
         onLanguageChange = viewModel::onLanguageChange,
         onCurrencyChange = viewModel::onCurrencyChange,
         onToggleRetirement = viewModel::onToggleRetirementAlerts,
-        onToggleSharePrices = viewModel::onToggleSharePrices,
         onToggleAnalytics = viewModel::onToggleAnalytics,
         onToggleChangelog = viewModel::onToggleChangelog,
         onComingSoon = viewModel::onComingSoon,
@@ -90,7 +89,6 @@ private fun SettingsContent(
     onLanguageChange: (AppLanguage) -> Unit,
     onCurrencyChange: (AppCurrency) -> Unit,
     onToggleRetirement: () -> Unit,
-    onToggleSharePrices: () -> Unit,
     onToggleAnalytics: () -> Unit,
     onToggleChangelog: () -> Unit,
     onComingSoon: (String) -> Unit,
@@ -207,13 +205,6 @@ private fun SettingsContent(
                 NavRow("Privacy Policy", onClick = { onComingSoon("Privacy Policy") })
                 RowDivider()
                 NavRow("Terms of Service", onClick = { onComingSoon("Terms of Service") })
-                RowDivider()
-                ToggleRow(
-                    "Share my prices with the community",
-                    checked = state.sharePrices,
-                    onToggle = onToggleSharePrices,
-                    description = "Helps everyone see current values. Your prices are shared anonymously.",
-                )
                 RowDivider()
                 ToggleRow(
                     "Usage analytics",

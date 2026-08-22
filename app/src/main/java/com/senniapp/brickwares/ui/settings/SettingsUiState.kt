@@ -20,7 +20,6 @@ data class SettingsUiState(
     val language: AppLanguage = AppLanguage.ENGLISH,
     val currency: AppCurrency = AppCurrency.VND,
     val retirementAlerts: Boolean = true,
-    val sharePrices: Boolean = true,
     val analyticsConsent: Boolean = false,
     val showDeleteConfirm: Boolean = false,
     val showChangelog: Boolean = false,
