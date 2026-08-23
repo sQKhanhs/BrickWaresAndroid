@@ -8,7 +8,7 @@ import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
-import com.senniapp.brickwares.data.repository.MockCollectionRepository
+import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * it adds the item to the collection and removes it from the wishlist.
  */
 class WishlistViewModel(
-    private val repository: CollectionRepository = MockCollectionRepository(),
+    private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
     private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 

@@ -1,23 +1,30 @@
 package com.senniapp.brickwares.ui.home
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.data.repository.AuthRepository
+import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.CollectionRepository
-import com.senniapp.brickwares.data.repository.MockCollectionRepository
+import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.data.repository.collectionSummaryOf
+import com.senniapp.brickwares.data.repository.themeSummariesOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel for the Home screen. Exposes an immutable [HomeUiState] as a [StateFlow]
- * and owns all state transitions. The repository is injected with a mock default so
- * `viewModel()` can construct it with no factory; a real DI-provided repository will
- * replace the default once Supabase is wired up.
+ * ViewModel for the Home screen. Observes the real auth session (for the logged-out "!" prompt) and
+ * derives the collection summary/themes from the live item Flow, so the hero + stats reflect the
+ * actual (initially empty) collection. The repository is a mock default until Supabase/Room lands.
  */
 class HomeViewModel(
-    private val repository: CollectionRepository = MockCollectionRepository(),
+    private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
+    private val authRepository: AuthRepository = AuthRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -36,16 +43,23 @@ class HomeViewModel(
     }
 
     init {
-        loadSummary()
-    }
+        authRepository.authState
+            .onEach { authState ->
+                _uiState.update { it.copy(isLoggedIn = authState is AuthState.SignedIn) }
+            }
+            .launchIn(viewModelScope)
 
-    private fun loadSummary() {
-        _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
-            val summary = repository.getCollectionSummary()
-            val themes = repository.getThemeSummaries()
-            _uiState.update { it.copy(isLoading = false, summary = summary, themes = themes) }
-        }
+        repository.getCollectionItems()
+            .onEach { items ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        summary = collectionSummaryOf(items),
+                        themes = themeSummariesOf(items),
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     fun onShareClick() {
@@ -61,8 +75,14 @@ class HomeViewModel(
         _uiState.update { it.copy(showSignInDialog = false) }
     }
 
-    /** Mock sign-in: flips auth on and closes the dialog. Real Google OAuth comes later. */
-    fun onSignIn() {
-        _uiState.update { it.copy(isLoggedIn = true, showSignInDialog = false) }
+    /**
+     * Real Google sign-in from the Home prompt. Requires an Activity context (Credential Manager).
+     * The dialog closes either way; [isLoggedIn] updates from the observed auth session on success.
+     */
+    fun onSignIn(context: Context) {
+        viewModelScope.launch {
+            authRepository.signInWithGoogle(context)
+            _uiState.update { it.copy(showSignInDialog = false) }
+        }
     }
 }

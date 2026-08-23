@@ -28,6 +28,11 @@ data class CatalogSet(
     val thumbnailUrl: String? = null,
     /** Brickset number variant (e.g. 1 for "10282-1"); disambiguates same-number sets in lists. */
     val numberVariant: Int = 1,
+    /**
+     * Catalog primary key (`sets.set_id`, the Brickset setID). Present for rows read from Supabase;
+     * null for mock/owned-item-built rows. Used to write user-data rows (which FK to `sets`).
+     */
+    val setId: Long? = null,
 ) {
     /**
      * Canonical unique identity ("10282-1"). Set NUMBER alone is not unique — CMF (Collectible

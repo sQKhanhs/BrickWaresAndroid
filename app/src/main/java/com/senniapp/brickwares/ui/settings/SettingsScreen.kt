@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -33,8 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import coil3.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,6 +68,9 @@ fun SettingsScreen(
         onThemeModeChange = onThemeModeChange,
         onSignIn = { viewModel.onSignIn(context) },
         onSignOut = viewModel::onSignOut,
+        onOpenAvatarPicker = viewModel::onOpenAvatarPicker,
+        onCloseAvatarPicker = viewModel::onCloseAvatarPicker,
+        onSelectAvatar = viewModel::onSelectAvatar,
         onRequestDelete = viewModel::onRequestDeleteAccount,
         onCancelDelete = viewModel::onCancelDeleteAccount,
         onConfirmDelete = viewModel::onConfirmDeleteAccount,
@@ -85,6 +92,9 @@ private fun SettingsContent(
     onThemeModeChange: (ThemeMode) -> Unit,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onOpenAvatarPicker: () -> Unit,
+    onCloseAvatarPicker: () -> Unit,
+    onSelectAvatar: (AvatarGender) -> Unit,
     onRequestDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
@@ -116,12 +126,16 @@ private fun SettingsContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(
-                            modifier = Modifier.size(44.dp).clip(CircleShape).background(colors.brandYellow),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(state.userName.take(1), style = BwType.cardTitle, color = colors.onYellow)
-                        }
+                        AsyncImage(
+                            model = state.avatar.asset,
+                            contentDescription = "Change avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface)
+                                .clickable(onClick = onOpenAvatarPicker),
+                        )
                         Column(Modifier.weight(1f)) {
                             Text(state.userName, style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.text, maxLines = 1)
                             Text(state.userEmail, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted2, maxLines = 1)
@@ -243,7 +257,51 @@ private fun SettingsContent(
             }
         }
 
+        if (state.showAvatarPicker) {
+            AvatarPickerDialog(
+                selected = state.avatar,
+                onSelect = onSelectAvatar,
+                onDismiss = onCloseAvatarPicker,
+            )
+        }
+
         BwToast(message = state.toastMessage, onDismiss = onToastShown)
+    }
+}
+
+@Composable
+private fun AvatarPickerDialog(
+    selected: AvatarGender,
+    onSelect: (AvatarGender) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Choose Avatar", style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    AvatarGender.entries.forEach { avatar ->
+                        val isSelected = avatar == selected
+                        AsyncImage(
+                            model = avatar.asset,
+                            contentDescription = avatar.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface)
+                                .border(
+                                    BorderStroke(if (isSelected) 3.dp else 1.dp, if (isSelected) colors.brandYellow else colors.borderSoft),
+                                    CircleShape,
+                                )
+                                .clickable { onSelect(avatar) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

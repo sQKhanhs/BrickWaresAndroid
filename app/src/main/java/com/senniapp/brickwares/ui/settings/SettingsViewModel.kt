@@ -75,6 +75,20 @@ class SettingsViewModel(
         viewModelScope.launch { authRepository.signOut() }
     }
 
+    // ---- Avatar ----
+
+    fun onOpenAvatarPicker() {
+        _uiState.update { it.copy(showAvatarPicker = true) }
+    }
+
+    fun onCloseAvatarPicker() {
+        _uiState.update { it.copy(showAvatarPicker = false) }
+    }
+
+    fun onSelectAvatar(avatar: AvatarGender) {
+        _uiState.update { it.copy(avatar = avatar, showAvatarPicker = false) }
+    }
+
     fun onRequestDeleteAccount() {
         _uiState.update { it.copy(showDeleteConfirm = true) }
     }

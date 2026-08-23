@@ -10,7 +10,7 @@ import com.senniapp.brickwares.util.AppCurrency
  */
 data class HomeUiState(
     val isLoading: Boolean = true,
-    val isLoggedIn: Boolean = true,
+    val isLoggedIn: Boolean = false,
     val currency: AppCurrency = AppCurrency.VND,
     val summary: CollectionSummary? = null,
     val themes: List<ThemeSummary> = emptyList(),

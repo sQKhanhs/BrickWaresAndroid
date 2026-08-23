@@ -236,7 +236,8 @@ fun AddToCollectionSheet(
                                     id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
                                     condition = condition,
                                     qty = qty.toIntOrNull() ?: 1,
-                                    pricePaid = paid.toLongOrNull() ?: 0L,
+                                    // Blank/invalid paid → fall back to the set's retail price.
+                                    pricePaid = paid.toLongOrNull() ?: (set.retailPrice ?: 0L),
                                     dateAdded = dateAdded,
                                     note = note.ifBlank { null },
                                 ),

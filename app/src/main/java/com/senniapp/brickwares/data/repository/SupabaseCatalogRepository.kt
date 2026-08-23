@@ -35,7 +35,7 @@ class SupabaseCatalogRepository(
                 val rows = client.from("sets")
                     .select(
                         Columns.raw(
-                            "set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
+                            "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
                                 "minifigs,set_prices(region,retail_price)",
                         ),
                     )
@@ -64,6 +64,7 @@ class SupabaseCatalogRepository(
     /** Row shape for the `sets` table columns we read (unknown columns are ignored by the decoder). */
     @Serializable
     private data class SetRow(
+        @SerialName("set_id") val setId: Long? = null,
         @SerialName("set_number") val setNumber: String,
         @SerialName("number_variant") val numberVariant: Int? = null,
         val name: String? = null,
@@ -108,6 +109,7 @@ class SupabaseCatalogRepository(
             imageUrl = "https://cdn.rebrickable.com/media/sets/$setNumber-${numberVariant ?: 1}.jpg",
             thumbnailUrl = null,
             numberVariant = numberVariant ?: 1,
+            setId = setId,
         )
     }
 

@@ -47,6 +47,8 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
+import com.senniapp.brickwares.ui.components.EmptyStateArt
+import com.senniapp.brickwares.ui.components.blinkAttention
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
@@ -139,7 +141,7 @@ private fun WishlistContent(
                 Spacer(Modifier.height(14.dp))
             }
             if (!state.isLoading && state.visibleItems.isEmpty()) {
-                item { EmptyState() }
+                item { EmptyStateArt("Nothing here yet, look something up") }
             }
             items(state.pageItems, key = { it.setNumber }) { item ->
                 SwipeToDelete(onSwiped = { onRemove(item.setNumber) }, autoDismiss = true) {
@@ -161,11 +163,13 @@ private fun WishlistContent(
             }
         }
 
-        // Search FAB (bottom-end) — sends the user to the Search tab to find sets to wishlist.
+        // Search FAB (bottom-end) — sends the user to the Search tab to find sets to wishlist;
+        // blinks while the wishlist is empty to prompt that first search.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 24.dp)
+                .blinkAttention(enabled = !state.isLoading && state.visibleItems.isEmpty())
                 .size(56.dp)
                 .clip(CircleShape)
                 .background(colors.brandYellow)
@@ -309,28 +313,3 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
     }
 }
 
-@Composable
-private fun EmptyState() {
-    val colors = BwTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_bw_heart),
-            contentDescription = null,
-            tint = colors.textFaint,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("Your wishlist is empty", style = BwType.cardTitle, color = colors.textMuted)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Tap the search button to find sets you're eyeing.",
-            style = BwType.body.copy(fontSize = 13.sp),
-            color = colors.textFaint,
-        )
-    }
-}

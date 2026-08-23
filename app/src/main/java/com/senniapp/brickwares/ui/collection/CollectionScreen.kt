@@ -59,6 +59,8 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
+import com.senniapp.brickwares.ui.components.EmptyStateArt
+import com.senniapp.brickwares.ui.components.blinkAttention
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
@@ -140,12 +142,16 @@ private fun CollectionContent(
             LoadingScreen()
             return@Box
         }
+        val sales = state.mode == CollectionMode.SALES
+        // Blink the Add FAB only when the *collection* is empty — in Sales mode the Add FAB still
+        // adds to the collection (there's no add-sale flow yet), so blinking it there would prompt a
+        // dead-end action. Sales still shows the empty-state art, just no blink.
+        val blinkAdd = !sales && state.visibleItems.isEmpty()
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
-            val sales = state.mode == CollectionMode.SALES
             item {
                 Banner(
                     imageAsset = if (sales) "file:///android_asset/sales_banner.png" else "file:///android_asset/collection_banner.png",
@@ -171,24 +177,30 @@ private fun CollectionContent(
                     FilterChips(selected = state.filter, onSelect = onFilterSelected)
                     Spacer(Modifier.height(14.dp))
                 }
-                items(state.pageItems, key = { it.setNumber }) { item ->
-                    SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
-                        ItemCard(
-                            item = item,
-                            onDetail = { onItemDetail(item) },
-                            onOpenDetail = { onOpenSetDetail(item.setNumber) },
+                if (state.visibleItems.isEmpty()) {
+                    item { EmptyStateArt("Nothing here yet, add something") }
+                } else {
+                    items(state.pageItems, key = { it.setNumber }) { item ->
+                        SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
+                            ItemCard(
+                                item = item,
+                                onDetail = { onItemDetail(item) },
+                                onOpenDetail = { onOpenSetDetail(item.setNumber) },
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    item {
+                        PaginationBar(
+                            currentPage = state.currentPage,
+                            totalPages = state.pageCount,
+                            onPageSelected = onPageChange,
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
-                }
-                item {
-                    PaginationBar(
-                        currentPage = state.currentPage,
-                        totalPages = state.pageCount,
-                        onPageSelected = onPageChange,
-                    )
                 }
             } else {
+                // Always show the sales stats + profit block (zeros when empty), then either the
+                // sold-item list or the empty-state art below it.
                 state.salesSummary?.let { s ->
                     item {
                         SalesStatsRow(s)
@@ -197,16 +209,20 @@ private fun CollectionContent(
                         Spacer(Modifier.height(14.dp))
                     }
                 }
-                items(state.salesPageItems, key = { it.setNumber }) { sold ->
-                    SoldCard(sold)
-                    Spacer(Modifier.height(12.dp))
-                }
-                item {
-                    PaginationBar(
-                        currentPage = state.salesCurrentPage,
-                        totalPages = state.salesPageCount,
-                        onPageSelected = onSalesPageChange,
-                    )
+                if (state.soldItems.isEmpty()) {
+                    item { EmptyStateArt("No sales yet") }
+                } else {
+                    items(state.salesPageItems, key = { it.setNumber }) { sold ->
+                        SoldCard(sold)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    item {
+                        PaginationBar(
+                            currentPage = state.salesCurrentPage,
+                            totalPages = state.salesPageCount,
+                            onPageSelected = onSalesPageChange,
+                        )
+                    }
                 }
             }
         }
@@ -234,11 +250,12 @@ private fun CollectionContent(
             Text("$", color = swapTint, fontWeight = FontWeight.Black, fontSize = 9.sp)
         }
 
-        // Add FAB (bottom-end).
+        // Add FAB (bottom-end) — blinks while the active tab is empty, to prompt the first add.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 24.dp)
+                .blinkAttention(enabled = blinkAdd)
                 .size(56.dp)
                 .clip(CircleShape)
                 .background(colors.brandYellow)

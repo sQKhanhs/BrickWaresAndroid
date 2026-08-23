@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -79,6 +80,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     // Animate the intro GIF until it has fully played once this session. "Played" is marked
     // only when the animation completes (onGifFinished), so leaving mid-play replays it next
     // visit; once finished, the static poster is shown instead.
@@ -90,7 +92,7 @@ fun HomeScreen(
         onShareClick = viewModel::onShareClick,
         onSignInPrompt = viewModel::onSignInPrompt,
         onDismissSignInDialog = viewModel::onDismissSignInDialog,
-        onSignIn = viewModel::onSignIn,
+        onSignIn = { viewModel.onSignIn(context) },
         modifier = modifier,
     )
 }
@@ -127,6 +129,7 @@ private fun HomeContent(
                     summary = summary,
                     currency = state.currency,
                     showGif = showHeroGif,
+                    showNoValue = summary.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
                     onGifFinished = onGifFinished,
                 )
                 Spacer(Modifier.height(14.dp))
@@ -202,6 +205,16 @@ private object HeroAssets {
     /** Collections above this many sets show the larger celebratory drop. */
     const val SET_THRESHOLD = 100
 
+    /**
+     * At or below this many sets the hero shows the static "no value" brick ([NO_VALUE]) instead of
+     * the celebratory drop — the collection is too small to have meaningful value yet. Once the user
+     * owns more than this, the drop plays.
+     */
+    const val NO_VALUE_MAX_SETS = 3
+
+    /** Static single-brick art shown while the collection is tiny (see [NO_VALUE_MAX_SETS]). */
+    const val NO_VALUE = "file:///android_asset/no_value.png"
+
     /** Bundled default intro (compressed, ~5.5 MB) — works offline on first launch. */
     const val SMALL_GIF = "file:///android_asset/lego_drop_small.gif"
 
@@ -224,6 +237,7 @@ private fun HeroCard(
     summary: CollectionSummary,
     currency: AppCurrency,
     showGif: Boolean,
+    showNoValue: Boolean,
     onGifFinished: () -> Unit,
 ) {
     Box(
@@ -231,37 +245,51 @@ private fun HeroCard(
             .fillMaxWidth()
             .heightIn(min = 260.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1A1A1A)),
+            // Light card for the "no value" state (design #f4f4f2), dark card for the celebratory drop.
+            .background(if (showNoValue) Color(0xFFF4F4F2) else Color(0xFF1A1A1A)),
     ) {
-        // Layer 0: static last-frame poster — the resting hero background (shown once the gif
-        // has finished, and on every later visit).
-        AsyncImage(
-            model = HeroAssets.POSTER,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.matchParentSize(),
-        )
-        // Layer 1: animated Lego-drop GIF, played over the poster. repeatCount(0) => play once.
-        // onAnimationEnd marks it played *only on completion*, so leaving mid-play replays it
-        // next visit. Collectors with 100+ sets get the larger remote drop; others the small gif.
-        if (showGif) {
-            val heroGif = if (summary.setCount > HeroAssets.SET_THRESHOLD &&
-                HeroAssets.BIG_GIF_URL.isNotBlank()
-            ) {
-                HeroAssets.BIG_GIF_URL
-            } else {
-                HeroAssets.SMALL_GIF
-            }
+        if (showNoValue) {
+            // Small static single-brick art, low and centred (design ~55% width, near the bottom) —
+            // deliberately not full-bleed so the brick reads as small.
             AsyncImage(
-                model = ImageRequest.Builder(LocalPlatformContext.current)
-                    .data(heroGif)
-                    .repeatCount(0)
-                    .onAnimationEnd { onGifFinished() }
-                    .build(),
+                model = HeroAssets.NO_VALUE,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(0.5f)
+                    .padding(bottom = 22.dp),
+            )
+        } else {
+            // Layer 0: resting last-frame poster (the hero's steady background).
+            AsyncImage(
+                model = HeroAssets.POSTER,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
             )
+            // Layer 1: animated Lego-drop GIF, played over the poster once. onAnimationEnd marks it
+            // played only on completion, so leaving mid-play replays it next visit. 100+ sets get the
+            // larger remote drop; others the small bundled gif.
+            if (showGif) {
+                val heroGif = if (summary.setCount > HeroAssets.SET_THRESHOLD &&
+                    HeroAssets.BIG_GIF_URL.isNotBlank()
+                ) {
+                    HeroAssets.BIG_GIF_URL
+                } else {
+                    HeroAssets.SMALL_GIF
+                }
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalPlatformContext.current)
+                        .data(heroGif)
+                        .repeatCount(0)
+                        .onAnimationEnd { onGifFinished() }
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
         }
         // Layer 2: top-weighted dark gradient — keeps the label/value legible over any image.
         Box(

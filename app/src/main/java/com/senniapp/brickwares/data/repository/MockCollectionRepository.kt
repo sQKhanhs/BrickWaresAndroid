@@ -11,7 +11,6 @@ import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.WishlistItem
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,23 +28,12 @@ class MockCollectionRepository : CollectionRepository {
     private val _items get() = itemsFlow
     private val _wishlist get() = wishlistFlow
 
-    override suspend fun getCollectionSummary(): CollectionSummary {
-        delay(300)
-        return CollectionSummary(
-            setCount = 8,
-            minifigCount = 38,
-            pieceCount = 28_553,
-            collectionValue = 90_608_440,
-            paid = 82_939_480,
-            growthPercent = 9.0,
-            bannerImageUrl = null,
-        )
-    }
+    // Summary + themes are now DERIVED from the live items (see CollectionStats) so they read 0
+    // when empty and grow as the user adds — the Home/Collection VMs observe the item Flow directly;
+    // these one-shot methods compute from the current snapshot for any remaining caller.
+    override suspend fun getCollectionSummary(): CollectionSummary = collectionSummaryOf(itemsFlow.value)
 
-    override suspend fun getThemeSummaries(): List<ThemeSummary> {
-        delay(300)
-        return MOCK_THEMES
-    }
+    override suspend fun getThemeSummaries(): List<ThemeSummary> = themeSummariesOf(itemsFlow.value)
 
     override fun getCollectionItems(): Flow<List<CollectionItem>> = _items.asStateFlow()
 
@@ -106,14 +94,10 @@ class MockCollectionRepository : CollectionRepository {
         }
     }
 
-    override suspend fun getSoldItems(): List<SoldItem> {
-        delay(200)
-        return MOCK_SOLD
-    }
+    override suspend fun getSoldItems(): List<SoldItem> = soldFlow.value
 
     override suspend fun getSalesSummary(): SalesSummary {
-        delay(200)
-        val sold = MOCK_SOLD
+        val sold = soldFlow.value
         val totalPaid = sold.sumOf { it.pricePaid }
         val totalProfit = sold.sumOf { it.profit }
         val avg = if (sold.isEmpty()) 0.0 else sold.map { it.profitPercent }.average()
@@ -310,7 +294,12 @@ class MockCollectionRepository : CollectionRepository {
         )
 
         // Process-wide stores shared by all repository instances (see [_items] / [_wishlist]).
-        val itemsFlow = MutableStateFlow(MOCK_ITEMS)
-        val wishlistFlow = MutableStateFlow(MOCK_WISHLIST)
+        // Seeded EMPTY so first open shows the cold-start empty states / NoValue hero; the user
+        // fills them via the add flows. The MOCK_* constants above are kept for a quick demo restore
+        // (swap emptyList() for MOCK_ITEMS / MOCK_WISHLIST / MOCK_SOLD) and are superseded once the
+        // real Supabase/Room user-data slice lands.
+        val itemsFlow = MutableStateFlow<List<CollectionItem>>(emptyList())
+        val wishlistFlow = MutableStateFlow<List<WishlistItem>>(emptyList())
+        val soldFlow = MutableStateFlow<List<SoldItem>>(emptyList())
     }
 }

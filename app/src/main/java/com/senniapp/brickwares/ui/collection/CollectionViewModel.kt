@@ -8,7 +8,8 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
-import com.senniapp.brickwares.data.repository.MockCollectionRepository
+import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.data.repository.collectionSummaryOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
  * list as a Flow (offline-first shape — Room will later back this same Flow).
  */
 class CollectionViewModel(
-    private val repository: CollectionRepository = MockCollectionRepository(),
+    private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
     private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
@@ -30,13 +31,13 @@ class CollectionViewModel(
     init {
         // Warm the catalog cache so the Add-sheet's set-number search has data.
         viewModelScope.launch { catalogRepo.refresh() }
-        viewModelScope.launch {
-            val summary = repository.getCollectionSummary()
-            _uiState.update { it.copy(summary = summary) }
-        }
+        // Summary is derived from the live items so the stat row reads 0 when empty and updates as
+        // copies are added/removed (no longer a static snapshot).
         viewModelScope.launch {
             repository.getCollectionItems().collect { items ->
-                _uiState.update { it.copy(itemsLoaded = true, items = items) }
+                _uiState.update {
+                    it.copy(itemsLoaded = true, items = items, summary = collectionSummaryOf(items))
+                }
             }
         }
         // Sales data isn't needed for the first frame — load it in the background so it doesn't
