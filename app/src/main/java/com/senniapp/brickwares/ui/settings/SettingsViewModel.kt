@@ -1,30 +1,78 @@
 package com.senniapp.brickwares.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.data.repository.AuthRepository
+import com.senniapp.brickwares.data.repository.AuthState
+import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
- * ViewModel for the Settings tab. State is in-memory (mock stage): sign-in/out and delete-account
- * are simulated, preference toggles are stored locally, and not-yet-built actions (export, privacy
+ * ViewModel for the Settings tab. Account state (sign-in/out) is real, backed by Supabase Auth via
+ * [AuthRepository]; preference toggles are still in-memory, and not-yet-built actions (export, privacy
  * policy, feedback…) surface a toast instead of doing work.
  */
-class SettingsViewModel : ViewModel() {
+class SettingsViewModel(
+    private val authRepository: AuthRepository = AuthRepository,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
-    // ---- Account (mock) ----
+    /** Guards against launching a second Credential Manager request while one is in flight. */
+    private var signingIn = false
 
-    fun onSignIn() {
-        _uiState.update { it.copy(isLoggedIn = true) }
+    init {
+        authRepository.authState
+            .onEach { authState ->
+                _uiState.update {
+                    when (authState) {
+                        is AuthState.SignedIn -> it.copy(
+                            isLoggedIn = true,
+                            userName = authState.user.displayName,
+                            userEmail = authState.user.email,
+                        )
+                        AuthState.SignedOut, AuthState.Loading -> it.copy(
+                            isLoggedIn = false,
+                            userName = "",
+                            userEmail = "",
+                            showDeleteConfirm = false,
+                        )
+                    }
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    // ---- Account ----
+
+    /** Requires an Activity context — Credential Manager anchors its UI to the current activity. */
+    fun onSignIn(context: Context) {
+        if (signingIn) return
+        signingIn = true
+        viewModelScope.launch {
+            val message = when (val result = authRepository.signInWithGoogle(context)) {
+                SignInResult.Success -> null // authState flow flips the UI to signed-in
+                SignInResult.Cancelled -> null // user backed out; stay quiet
+                SignInResult.NoCredential ->
+                    "No Google account available on this device"
+                is SignInResult.Error -> "Sign-in failed: ${result.message}"
+            }
+            if (message != null) _uiState.update { it.copy(toastMessage = message) }
+            signingIn = false
+        }
     }
 
     fun onSignOut() {
-        _uiState.update { it.copy(isLoggedIn = false, showDeleteConfirm = false) }
+        viewModelScope.launch { authRepository.signOut() }
     }
 
     fun onRequestDeleteAccount() {
@@ -36,8 +84,13 @@ class SettingsViewModel : ViewModel() {
     }
 
     fun onConfirmDeleteAccount() {
+        // Real account deletion needs a server-side (admin) call that isn't built yet — the client
+        // anon key can't delete an auth user. Surface that honestly instead of faking it.
         _uiState.update {
-            it.copy(isLoggedIn = false, showDeleteConfirm = false, toastMessage = "Account deleted")
+            it.copy(
+                showDeleteConfirm = false,
+                toastMessage = "Account deletion isn't available in this preview yet",
+            )
         }
     }
 
@@ -63,7 +116,7 @@ class SettingsViewModel : ViewModel() {
         _uiState.update { it.copy(showChangelog = !it.showChangelog) }
     }
 
-    /** Placeholder for actions whose real behaviour (files, external links, OAuth) isn't built yet. */
+    /** Placeholder for actions whose real behaviour (files, external links) isn't built yet. */
     fun onComingSoon(action: String) {
         _uiState.update { it.copy(toastMessage = "$action isn't available in this preview yet") }
     }

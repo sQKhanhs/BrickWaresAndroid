@@ -9,14 +9,15 @@ enum class AppLanguage(val label: String) {
 }
 
 /**
- * Immutable UI state for the Settings tab. All values are in-memory at the mock stage (no
- * persistence yet). [isLoggedIn] gates the account card; sign-in is mocked. The theme preference
- * lives at the app level (MainActivity), not here, so it can drive [com.senniapp.brickwares.ui.theme.BrickWaresTheme].
+ * Immutable UI state for the Settings tab. [isLoggedIn]/[userName]/[userEmail] now reflect the real
+ * Supabase session (Google sign-in via [com.senniapp.brickwares.data.repository.AuthRepository]);
+ * preferences below are still in-memory (no persistence yet). The theme preference lives at the app
+ * level (MainActivity), not here, so it can drive [com.senniapp.brickwares.ui.theme.BrickWaresTheme].
  */
 data class SettingsUiState(
     val isLoggedIn: Boolean = false,
-    val userName: String = "John Nguyen",
-    val userEmail: String = "john.nguyen@gmail.com",
+    val userName: String = "",
+    val userEmail: String = "",
     val language: AppLanguage = AppLanguage.ENGLISH,
     val currency: AppCurrency = AppCurrency.VND,
     val retirementAlerts: Boolean = true,

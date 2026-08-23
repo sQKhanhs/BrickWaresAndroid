@@ -29,6 +29,16 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Google "Web" OAuth client id — the serverClientId handed to Credential Manager for native
+        // Google sign-in. Shared by both flavors (the app's ID token audience). An OAuth client id is
+        // NOT a secret (it ships in the APK and is visible on the wire), so it's committed here; only
+        // the client *secret* stays out of git (it lives in Supabase + supabase/.env, never the app).
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"1057688172135-4273me46h3nepbgc9qgt3onul3k55k4r.apps.googleusercontent.com\"",
+        )
     }
 
     buildTypes {
@@ -95,10 +105,15 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    // Supabase (Postgrest for catalog reads) + Ktor engine for Android.
+    // Supabase (Postgrest for catalog reads, Auth for Google sign-in) + Ktor engine for Android.
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
     implementation(libs.ktor.client.android)
+    // Native Google sign-in: Credential Manager + its Play Services backend + Google ID token parsing.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.google.identity.googleid)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
