@@ -66,6 +66,8 @@ class SetDetailViewModel(
             it.copy(
                 loaded = true,
                 set = set,
+                // No catalog to resolve against (offline / not loaded) → show the no-internet placeholder.
+                offline = set == null && all.isEmpty(),
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 totalPaid = owned?.totalPaid ?: 0L,

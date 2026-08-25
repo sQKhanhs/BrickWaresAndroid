@@ -17,8 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,9 +36,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
@@ -68,6 +77,10 @@ fun BrickWaresApp(
     // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
     // its default browse view — a lingering search shouldn't persist across tab switches.
     val searchViewModel: SearchViewModel = viewModel()
+    // Account-switch guard (Decision 10): non-null when a different account signed in over existing
+    // local data. Observing it also starts the SyncCoordinator (auth-driven sync).
+    val pendingSwitch by CollectionRepositoryProvider.syncCoordinator.pendingSwitch
+        .collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = colors.bg,
@@ -110,6 +123,69 @@ fun BrickWaresApp(
                         viewModel = searchViewModel,
                     )
                     BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
+                }
+            }
+        }
+    }
+
+    pendingSwitch?.let { p ->
+        AccountSwitchDialog(
+            accountName = p.accountName,
+            onKeepMerge = { CollectionRepositoryProvider.syncCoordinator.keepAndMerge() },
+            onDiscardLoad = { CollectionRepositoryProvider.syncCoordinator.discardAndLoad() },
+        )
+    }
+}
+
+/**
+ * Account-switch prompt (Decision 10): a different account signed in on a device already holding
+ * another session's data. The user MUST choose — the dialog isn't dismissable — so two accounts'
+ * data are never silently mixed.
+ */
+@Composable
+private fun AccountSwitchDialog(
+    accountName: String,
+    onKeepMerge: () -> Unit,
+    onDiscardLoad: () -> Unit,
+) {
+    val colors = BwTheme.colors
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+    ) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(
+                modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("Different account", style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "This device has collection data from another session. Keep and merge it into " +
+                        "$accountName, or discard it and load $accountName's collection?",
+                    style = BwType.body,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(20.dp))
+                Button(
+                    onClick = onKeepMerge,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandYellow,
+                        contentColor = colors.onYellow,
+                    ),
+                ) {
+                    Text("Keep & merge", style = BwType.pill)
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onDiscardLoad,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
+                ) {
+                    Text("Discard local & load", style = BwType.pill, color = colors.text)
                 }
             }
         }

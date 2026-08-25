@@ -318,9 +318,16 @@ class SupabaseCollectionRepository(
     }
 }
 
-/** App-wide singleton so every ViewModel shares one set of user-data flows (one auth-driven load). */
+/**
+ * App-wide singletons. [instance] is the offline-first [RoomCollectionRepository] (Room source of
+ * truth); [syncCoordinator] runs the two-way Supabase sync + exposes the account-switch prompt for
+ * the app shell. (The older direct-Postgrest [SupabaseCollectionRepository] is superseded.)
+ */
 object CollectionRepositoryProvider {
+    val syncCoordinator: SyncCoordinator by lazy {
+        SyncCoordinator(SupabaseClientProvider.client, CatalogRepositoryProvider.instance)
+    }
     val instance: CollectionRepository by lazy {
-        SupabaseCollectionRepository(SupabaseClientProvider.client, CatalogRepositoryProvider.instance)
+        RoomCollectionRepository(CatalogRepositoryProvider.instance, syncCoordinator)
     }
 }

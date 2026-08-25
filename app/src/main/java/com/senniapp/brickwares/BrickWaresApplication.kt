@@ -8,16 +8,22 @@ import coil3.SingletonImageLoader
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.senniapp.brickwares.data.local.AppGraph
 
 /**
- * Application entry point. Provides the app-wide Coil [ImageLoader] with:
- *  - a network fetcher, so remote http(s) images (Brickset catalog images) load, and
- *  - animated-GIF support so hero/loading animations decode correctly
- *    (platform ImageDecoder on API 28+, Coil's GifDecoder on 26–27).
- * Because this is a custom loader, components must be added explicitly — Coil only
- * auto-registers artifact components (like coil-network-okhttp) for the default loader.
+ * Application entry point.
+ *  - Initializes the local store (Room + DataStore) before any ViewModel/repository needs it.
+ *  - Provides the app-wide Coil [ImageLoader] with a network fetcher (so remote http(s) catalog
+ *    images load) and animated-GIF support (platform ImageDecoder on API 28+, Coil's GifDecoder on
+ *    26–27). Because this is a custom loader, components must be added explicitly.
  */
 class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
+
+    override fun onCreate() {
+        super.onCreate()
+        AppGraph.init(this)
+    }
+
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {

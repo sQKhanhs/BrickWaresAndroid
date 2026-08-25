@@ -61,6 +61,7 @@ import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.blinkAttention
+import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
@@ -88,6 +89,7 @@ fun CollectionScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     CollectionContent(
         state = state,
+        isOnline = rememberIsOnline(),
         onOpenSetDetail = onOpenSetDetail,
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
@@ -113,6 +115,7 @@ fun CollectionScreen(
 @Composable
 private fun CollectionContent(
     state: CollectionUiState,
+    isOnline: Boolean = true,
     onOpenSetDetail: (String) -> Unit,
     onFilterSelected: (CollectionFilter) -> Unit,
     onPageChange: (Int) -> Unit,
@@ -251,23 +254,26 @@ private fun CollectionContent(
         }
 
         // Add FAB (bottom-end) — blinks while the active tab is empty, to prompt the first add.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp)
-                .blinkAttention(enabled = blinkAdd)
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(colors.brandYellow)
-                .clickable(onClick = onAddClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_bw_plus),
-                contentDescription = "Add to collection",
-                tint = colors.onYellow,
-                modifier = Modifier.size(26.dp),
-            )
+        // Hidden offline: adding needs the catalog (network) to pick a set.
+        if (isOnline) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .blinkAttention(enabled = blinkAdd)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable(onClick = onAddClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_plus),
+                    contentDescription = "Add to collection",
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
         }
 
         if (state.showAddSheet) {

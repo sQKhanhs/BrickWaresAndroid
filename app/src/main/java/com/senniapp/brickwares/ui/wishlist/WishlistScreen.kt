@@ -58,6 +58,7 @@ import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.SwipeToDelete
+import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -75,6 +76,7 @@ fun WishlistScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     WishlistContent(
         state = state,
+        isOnline = rememberIsOnline(),
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
         onNavigateToSearch = onNavigateToSearch,
@@ -92,6 +94,7 @@ fun WishlistScreen(
 @Composable
 private fun WishlistContent(
     state: WishlistUiState,
+    isOnline: Boolean = true,
     onFilterSelected: (WishlistFilter) -> Unit,
     onPageChange: (Int) -> Unit,
     onNavigateToSearch: () -> Unit,
@@ -164,24 +167,26 @@ private fun WishlistContent(
         }
 
         // Search FAB (bottom-end) — sends the user to the Search tab to find sets to wishlist;
-        // blinks while the wishlist is empty to prompt that first search.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp)
-                .blinkAttention(enabled = !state.isLoading && state.visibleItems.isEmpty())
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(colors.brandYellow)
-                .clickable(onClick = onNavigateToSearch),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_bw_search),
-                contentDescription = "Search for sets",
-                tint = colors.onYellow,
-                modifier = Modifier.size(26.dp),
-            )
+        // blinks while the wishlist is empty. Hidden offline (Search needs network).
+        if (isOnline) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .blinkAttention(enabled = !state.isLoading && state.visibleItems.isEmpty())
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable(onClick = onNavigateToSearch),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_search),
+                    contentDescription = "Search for sets",
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
         }
 
         state.moveTarget?.let { target ->

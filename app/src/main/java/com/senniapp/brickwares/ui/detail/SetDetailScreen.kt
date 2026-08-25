@@ -48,6 +48,7 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SetThumb
@@ -138,7 +139,9 @@ private fun SetDetailContent(
             }
 
             if (set == null) {
-                if (state.loaded) {
+                if (state.offline) {
+                    EmptyStateArt("No internet connection")
+                } else if (state.loaded) {
                     Text("Set not found.", style = BwType.body, color = colors.textMuted)
                 }
                 return@Column

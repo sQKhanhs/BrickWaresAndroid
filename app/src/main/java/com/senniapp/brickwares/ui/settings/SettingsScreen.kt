@@ -48,6 +48,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.ui.theme.ThemeMode
@@ -62,10 +63,12 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isOnline = rememberIsOnline()
     SettingsContent(
         state = state,
         themeMode = themeMode,
         onThemeModeChange = onThemeModeChange,
+        isOnline = isOnline,
         onSignIn = { viewModel.onSignIn(context) },
         onSignOut = viewModel::onSignOut,
         onOpenAvatarPicker = viewModel::onOpenAvatarPicker,
@@ -90,6 +93,7 @@ private fun SettingsContent(
     state: SettingsUiState,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    isOnline: Boolean = true,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onOpenAvatarPicker: () -> Unit,
@@ -140,7 +144,12 @@ private fun SettingsContent(
                             Text(state.userName, style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.text, maxLines = 1)
                             Text(state.userEmail, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted2, maxLines = 1)
                         }
-                        Pill(text = "Sign Out", filled = true, onClick = onSignOut)
+                        // Sign-out needs network — hidden while offline (an "Offline" chip instead).
+                        if (isOnline) {
+                            Pill(text = "Sign Out", filled = true, onClick = onSignOut)
+                        } else {
+                            Text("Offline", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                        }
                     }
                     RowDivider()
                     NavRow("Delete account", onClick = onRequestDelete, danger = true)
@@ -169,7 +178,16 @@ private fun SettingsContent(
                             style = BwType.body.copy(fontSize = 12.sp),
                             color = colors.textMuted,
                         )
-                        Pill(text = "Sign in with Google", filled = true, onClick = onSignIn)
+                        // Google sign-in needs network — hidden while offline.
+                        if (isOnline) {
+                            Pill(text = "Sign in with Google", filled = true, onClick = onSignIn)
+                        } else {
+                            Text(
+                                "You're offline — sign in when connected.",
+                                style = BwType.body.copy(fontSize = 12.sp),
+                                color = colors.textFaint,
+                            )
+                        }
                     }
                 }
             }

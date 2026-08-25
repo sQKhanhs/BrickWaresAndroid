@@ -11,6 +11,7 @@ import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import io.github.jan.supabase.auth.SignOutScope
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.IDToken
@@ -108,8 +109,9 @@ object AuthRepository {
         }
     }
 
+    /** Clears the on-device session (LOCAL scope → no network; the server token just expires). */
     suspend fun signOut() {
-        client.auth.signOut()
+        runCatching { client.auth.signOut(SignOutScope.LOCAL) }
     }
 }
 

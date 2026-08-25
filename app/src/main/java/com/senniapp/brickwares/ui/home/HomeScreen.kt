@@ -63,6 +63,7 @@ import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.animatedNumber
+import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
@@ -81,6 +82,7 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isOnline = rememberIsOnline()
     // Animate the intro GIF until it has fully played once this session. "Played" is marked
     // only when the animation completes (onGifFinished), so leaving mid-play replays it next
     // visit; once finished, the static poster is shown instead.
@@ -88,6 +90,7 @@ fun HomeScreen(
     HomeContent(
         state = state,
         showHeroGif = showGif,
+        isOnline = isOnline,
         onGifFinished = viewModel::onHeroGifPlayed,
         onShareClick = viewModel::onShareClick,
         onSignInPrompt = viewModel::onSignInPrompt,
@@ -102,6 +105,7 @@ fun HomeScreen(
 private fun HomeContent(
     state: HomeUiState,
     showHeroGif: Boolean,
+    isOnline: Boolean = true,
     onGifFinished: () -> Unit,
     onShareClick: () -> Unit,
     onSignInPrompt: () -> Unit,
@@ -149,7 +153,8 @@ private fun HomeContent(
             Spacer(Modifier.height(24.dp))
         }
 
-        if (!state.isLoggedIn) {
+        // The "!" sign-in prompt only makes sense online (Google sign-in needs network).
+        if (!state.isLoggedIn && isOnline) {
             SignInFab(
                 onClick = onSignInPrompt,
                 modifier = Modifier
