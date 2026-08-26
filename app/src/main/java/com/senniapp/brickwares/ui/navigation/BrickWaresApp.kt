@@ -75,8 +75,15 @@ fun BrickWaresApp(
     // On-demand sign-in overlay (no login wall): gated surfaces call SignInController.request().
     val showLogin by SignInController.showLogin.collectAsStateWithLifecycle()
     val isLoggedIn = rememberIsLoggedIn()
-    // Dismiss the overlay once a session is established.
-    LaunchedEffect(isLoggedIn) { if (isLoggedIn) SignInController.dismiss() }
+    // When the user finishes signing in (the modal was open), dismiss it and land on Collection.
+    // A cold-start auto-login (modal never opened) leaves them on the current tab.
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn && showLogin) {
+            SignInController.dismiss()
+            detailSetNumber = null
+            selectedTab = BwTab.Collection
+        }
+    }
 
     Scaffold(
         containerColor = colors.bg,
