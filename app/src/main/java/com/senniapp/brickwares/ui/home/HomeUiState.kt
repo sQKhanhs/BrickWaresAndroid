@@ -14,7 +14,6 @@ data class HomeUiState(
     val currency: AppCurrency = AppCurrency.VND,
     val summary: CollectionSummary? = null,
     val themes: List<ThemeSummary> = emptyList(),
-    val showSignInDialog: Boolean = false,
 ) {
     /** The header share action only appears when signed in with a non-empty collection. */
     val canShare: Boolean

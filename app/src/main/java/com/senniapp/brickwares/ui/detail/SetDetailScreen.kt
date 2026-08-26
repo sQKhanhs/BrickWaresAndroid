@@ -50,6 +50,8 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -104,6 +106,7 @@ private fun SetDetailContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    val isLoggedIn = rememberIsLoggedIn()
     // When non-null, show the set image full-screen (tapped from the hero).
     var fullImageUrl by remember { mutableStateOf<String?>(null) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
@@ -170,7 +173,8 @@ private fun SetDetailContent(
                         iconRes = R.drawable.ic_bw_pieces,
                         label = "Add to Collection",
                         filled = true,
-                        onClick = onAddCollectionClick,
+                        // Adding needs an account; logged out → prompt sign-in instead.
+                        onClick = { if (isLoggedIn) onAddCollectionClick() else SignInController.request() },
                     )
                     // Wishlist / Wishlisted.
                     ActionButton(
@@ -178,7 +182,11 @@ private fun SetDetailContent(
                         label = if (state.isWishlisted) "Wishlisted" else "Wishlist",
                         filled = false,
                         iconTint = if (state.isWishlisted) WishlistHeart else colors.textMuted,
-                        onClick = if (state.isWishlisted) null else onAddWishlist,
+                        onClick = when {
+                            state.isWishlisted -> null
+                            isLoggedIn -> onAddWishlist
+                            else -> ({ SignInController.request() })
+                        },
                     )
                 }
             }

@@ -65,6 +65,7 @@ class SettingsViewModel(
                 SignInResult.NoCredential ->
                     "No Google account available on this device"
                 is SignInResult.Error -> "Sign-in failed: ${result.message}"
+                SignInResult.EmailConfirmationRequired -> null // n/a for Google sign-in
             }
             if (message != null) _uiState.update { it.copy(toastMessage = message) }
             signingIn = false

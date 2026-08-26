@@ -14,6 +14,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import io.github.jan.supabase.auth.SignOutScope
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
+import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +45,9 @@ sealed interface SignInResult {
 
     /** No usable Google credential on the device (no account, or Play Services unavailable). */
     data object NoCredential : SignInResult
+
+    /** Email sign-up succeeded but the address must be confirmed before the first sign-in. */
+    data object EmailConfirmationRequired : SignInResult
     data class Error(val message: String) : SignInResult
 }
 
@@ -107,6 +111,33 @@ object AuthRepository {
         } catch (e: Exception) {
             SignInResult.Error(e.message ?: "Couldn't complete sign-in")
         }
+    }
+
+    /** Email + password sign-in (for users without a Google account). */
+    suspend fun signInWithEmail(email: String, password: String): SignInResult = try {
+        client.auth.signInWith(Email) {
+            this.email = email.trim()
+            this.password = password
+        }
+        SignInResult.Success
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't sign in")
+    }
+
+    /**
+     * Email + password sign-up. If the project auto-confirms (local dev), a session is created and
+     * this returns [SignInResult.Success]; if email confirmation is required (prod default), no
+     * session yet → [SignInResult.EmailConfirmationRequired].
+     */
+    suspend fun signUpWithEmail(email: String, password: String): SignInResult = try {
+        client.auth.signUpWith(Email) {
+            this.email = email.trim()
+            this.password = password
+        }
+        if (client.auth.currentUserOrNull() != null) SignInResult.Success
+        else SignInResult.EmailConfirmationRequired
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't create account")
     }
 
     /** Clears the on-device session (LOCAL scope → no network; the server token just expires). */

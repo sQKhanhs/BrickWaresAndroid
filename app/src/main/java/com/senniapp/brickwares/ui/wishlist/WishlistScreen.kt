@@ -57,8 +57,11 @@ import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.PaginationBar
+import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.SwipeToDelete
+import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -77,6 +80,7 @@ fun WishlistScreen(
     WishlistContent(
         state = state,
         isOnline = rememberIsOnline(),
+        isLoggedIn = rememberIsLoggedIn(),
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
         onNavigateToSearch = onNavigateToSearch,
@@ -95,6 +99,7 @@ fun WishlistScreen(
 private fun WishlistContent(
     state: WishlistUiState,
     isOnline: Boolean = true,
+    isLoggedIn: Boolean = true,
     onFilterSelected: (WishlistFilter) -> Unit,
     onPageChange: (Int) -> Unit,
     onNavigateToSearch: () -> Unit,
@@ -128,6 +133,27 @@ private fun WishlistContent(
                 )
                 Spacer(Modifier.height(16.dp))
             }
+            if (!isLoggedIn) {
+                // Logged out: still show the summary (all zeros), then a sign-in prompt in place of
+                // the list — only signed-in users can wishlist.
+                item {
+                    StatCardRow(
+                        entries = listOf(
+                            StatEntry(R.drawable.ic_bw_set, 0L, "Sets"),
+                            StatEntry(R.drawable.ic_bw_minifig, 0L, "Minifigs"),
+                            StatEntry(R.drawable.ic_bw_pieces, 0L, "Pieces"),
+                        ),
+                        keyPrefix = "wishlist",
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+                item {
+                    SignInPromptCard(
+                        message = "Sign in to build your wishlist.",
+                        onSignIn = { SignInController.request() },
+                    )
+                }
+            } else {
             item {
                 StatCardRow(
                     entries = listOf(
@@ -164,11 +190,12 @@ private fun WishlistContent(
                     onPageSelected = onPageChange,
                 )
             }
+            }
         }
 
         // Search FAB (bottom-end) — sends the user to the Search tab to find sets to wishlist;
-        // blinks while the wishlist is empty. Hidden offline (Search needs network).
-        if (isOnline) {
+        // blinks while the wishlist is empty. Hidden offline / logged out (Search needs network + login).
+        if (isOnline && isLoggedIn) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

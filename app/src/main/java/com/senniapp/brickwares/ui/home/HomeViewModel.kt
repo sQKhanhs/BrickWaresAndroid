@@ -1,6 +1,5 @@
 package com.senniapp.brickwares.ui.home
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.repository.AuthRepository
@@ -64,25 +63,5 @@ class HomeViewModel(
 
     fun onShareClick() {
         // TODO: open the share sheet once implemented.
-    }
-
-    /** Tapped the red "!" sign-in FAB (logged-out state). */
-    fun onSignInPrompt() {
-        _uiState.update { it.copy(showSignInDialog = true) }
-    }
-
-    fun onDismissSignInDialog() {
-        _uiState.update { it.copy(showSignInDialog = false) }
-    }
-
-    /**
-     * Real Google sign-in from the Home prompt. Requires an Activity context (Credential Manager).
-     * The dialog closes either way; [isLoggedIn] updates from the observed auth session on success.
-     */
-    fun onSignIn(context: Context) {
-        viewModelScope.launch {
-            authRepository.signInWithGoogle(context)
-            _uiState.update { it.copy(showSignInDialog = false) }
-        }
     }
 }

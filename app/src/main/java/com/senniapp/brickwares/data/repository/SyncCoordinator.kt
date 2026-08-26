@@ -13,9 +13,6 @@ import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
@@ -47,11 +44,6 @@ class SyncCoordinator(
     private val salesDao = db.salesDao()
     private val mutex = Mutex()
 
-    data class PendingSwitch(val accountId: String, val accountName: String)
-
-    private val _pendingSwitch = MutableStateFlow<PendingSwitch?>(null)
-    val pendingSwitch: StateFlow<PendingSwitch?> = _pendingSwitch.asStateFlow()
-
     init {
         AuthRepository.authState
             .onEach { state -> if (state is AuthState.SignedIn) onSignedIn(state.user) }
@@ -65,39 +57,24 @@ class SyncCoordinator(
             .launchIn(scope)
     }
 
-    /** Debounced-ish sync request after a local write (no-op if signed out or mid-switch-decision). */
+    /** Debounced-ish sync request after a local write (no-op if signed out). */
     fun requestSync() {
         scope.launch {
             val uid = client.auth.currentUserOrNull()?.id ?: return@launch
-            if (_pendingSwitch.value != null) return@launch
             sync(uid)
-        }
-    }
-
-    fun keepAndMerge() = _pendingSwitch.value?.let { p ->
-        scope.launch { _pendingSwitch.value = null; sync(p.accountId) }
-    }
-
-    fun discardAndLoad() = _pendingSwitch.value?.let { p ->
-        scope.launch {
-            _pendingSwitch.value = null
-            clearLocal()
-            syncState.setLastSyncedAt("") // reset cursor so the full remote set is pulled
-            syncState.setLastAccountId(p.accountId)
-            sync(p.accountId)
         }
     }
 
     private suspend fun onSignedIn(user: AuthUser) {
         val last = syncState.lastAccountId()
-        when {
-            // No prior account, or same account → claim/merge (covers anonymous → first login).
-            last == null || last == user.id -> sync(user.id)
-            // Different account but nothing local to protect → just adopt + pull.
-            !localHasData() -> { syncState.setLastAccountId(user.id); sync(user.id) }
-            // Different account over existing local data → must ask (never silently mix).
-            else -> _pendingSwitch.value = PendingSwitch(user.id, user.displayName)
+        if (last != null && last != user.id) {
+            // Different account → wipe the previous account's local data and load this account's
+            // (Room holds one account at a time; logged-out users can't create data, so nothing to
+            // merge). Reset the pull cursor so the new account's full set is fetched.
+            clearLocal()
+            syncState.setLastSyncedAt("")
         }
+        sync(user.id) // sets last_account_id
     }
 
     private suspend fun sync(uid: String) = mutex.withLock {
@@ -203,9 +180,6 @@ class SyncCoordinator(
         catalog.refresh()
         return catalog.all().mapNotNull { s -> s.setId?.let { it to s } }.toMap()
     }
-
-    private suspend fun localHasData(): Boolean =
-        collectionDao.activeCount() > 0 || wishlistDao.activeCount() > 0 || salesDao.activeCount() > 0
 
     private suspend fun clearLocal() {
         collectionDao.clearAll(); wishlistDao.clearAll(); salesDao.clearAll()

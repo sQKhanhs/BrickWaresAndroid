@@ -1,11 +1,5 @@
 package com.senniapp.brickwares.ui.home
 
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,8 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,24 +26,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
@@ -60,10 +48,11 @@ import coil3.gif.onAnimationEnd
 import coil3.gif.repeatCount
 import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.animatedNumber
-import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
@@ -81,8 +70,6 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val isOnline = rememberIsOnline()
     // Animate the intro GIF until it has fully played once this session. "Played" is marked
     // only when the animation completes (onGifFinished), so leaving mid-play replays it next
     // visit; once finished, the static poster is shown instead.
@@ -90,12 +77,8 @@ fun HomeScreen(
     HomeContent(
         state = state,
         showHeroGif = showGif,
-        isOnline = isOnline,
         onGifFinished = viewModel::onHeroGifPlayed,
         onShareClick = viewModel::onShareClick,
-        onSignInPrompt = viewModel::onSignInPrompt,
-        onDismissSignInDialog = viewModel::onDismissSignInDialog,
-        onSignIn = { viewModel.onSignIn(context) },
         modifier = modifier,
     )
 }
@@ -105,12 +88,8 @@ fun HomeScreen(
 private fun HomeContent(
     state: HomeUiState,
     showHeroGif: Boolean,
-    isOnline: Boolean = true,
     onGifFinished: () -> Unit,
     onShareClick: () -> Unit,
-    onSignInPrompt: () -> Unit,
-    onDismissSignInDialog: () -> Unit,
-    onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -129,42 +108,40 @@ private fun HomeContent(
             Header(canShare = state.canShare, onShareClick = onShareClick)
             Spacer(Modifier.height(14.dp))
             state.summary?.let { summary ->
+                // Logged out shows zeros; Room may still hold the previous session's data (for
+                // offline re-login) but it's hidden until signed in.
+                val shown = if (state.isLoggedIn) summary else summary.copy(
+                    setCount = 0, minifigCount = 0, pieceCount = 0,
+                    collectionValue = 0L, paid = 0L, growthPercent = 0.0,
+                )
                 HeroCard(
-                    summary = summary,
+                    summary = shown,
                     currency = state.currency,
                     showGif = showHeroGif,
-                    showNoValue = summary.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
+                    showNoValue = shown.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
                     onGifFinished = onGifFinished,
                 )
                 Spacer(Modifier.height(14.dp))
                 StatCardRow(
                     entries = listOf(
-                        StatEntry(R.drawable.ic_bw_set, summary.setCount.toLong(), "Sets"),
-                        StatEntry(R.drawable.ic_bw_minifig, summary.minifigCount.toLong(), "Minifigs"),
-                        StatEntry(R.drawable.ic_bw_pieces, summary.pieceCount.toLong(), "Pieces"),
+                        StatEntry(R.drawable.ic_bw_set, shown.setCount.toLong(), "Sets"),
+                        StatEntry(R.drawable.ic_bw_minifig, shown.minifigCount.toLong(), "Minifigs"),
+                        StatEntry(R.drawable.ic_bw_pieces, shown.pieceCount.toLong(), "Pieces"),
                     ),
                     keyPrefix = "home",
                 )
             }
-            if (state.themes.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                ThemesCard(themes = state.themes)
+            Spacer(Modifier.height(14.dp))
+            if (state.isLoggedIn) {
+                if (state.themes.isNotEmpty()) ThemesCard(themes = state.themes)
+            } else {
+                // Logged out: prompt to sign in instead of the "Collection by Theme" card.
+                SignInPromptCard(
+                    message = "Sign in to save and sync your collection across devices.",
+                    onSignIn = { SignInController.request() },
+                )
             }
             Spacer(Modifier.height(24.dp))
-        }
-
-        // The "!" sign-in prompt only makes sense online (Google sign-in needs network).
-        if (!state.isLoggedIn && isOnline) {
-            SignInFab(
-                onClick = onSignInPrompt,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 24.dp),
-            )
-        }
-
-        if (state.showSignInDialog) {
-            SignInDialog(onDismiss = onDismissSignInDialog, onSignIn = onSignIn)
         }
     }
 }
@@ -362,69 +339,6 @@ private fun HeroCard(
 }
 
 @Composable
-private fun SignInFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = BwTheme.colors
-    // Blink attention: opacity pulse 100%→40%→100% over 1.3s (650ms each way, reversed).
-    val transition = rememberInfiniteTransition(label = "signInFab")
-    val blink by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.4f,
-        animationSpec = infiniteRepeatable(tween(650, easing = EaseInOut), RepeatMode.Reverse),
-        label = "blink",
-    )
-    Box(
-        modifier = modifier
-            .size(56.dp)
-            .alpha(blink)
-            .clip(CircleShape)
-            .background(colors.error)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("!", color = Color.White, fontWeight = FontWeight.Black, fontSize = 24.sp)
-    }
-}
-
-@Composable
-private fun SignInDialog(onDismiss: () -> Unit, onSignIn: () -> Unit) {
-    val colors = BwTheme.colors
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
-            Column(
-                modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bw_lock),
-                    contentDescription = null,
-                    tint = colors.textMuted2,
-                    modifier = Modifier.size(40.dp),
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    text = "Sign in to save and sync your collection across devices",
-                    style = BwType.body,
-                    color = colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(18.dp))
-                Button(
-                    onClick = onSignIn,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.brandYellow,
-                        contentColor = colors.onYellow,
-                    ),
-                ) {
-                    Text("Sign In", style = BwType.pill)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ThemesCard(themes: List<ThemeSummary>) {
     val colors = BwTheme.colors
     val maxValue = themes.maxOfOrNull { it.totalValue } ?: 1L
@@ -507,7 +421,7 @@ private fun HomeLoggedInPreview() {
             state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
             showHeroGif = false,
             onGifFinished = {},
-            onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
+            onShareClick = {},
         )
     }
 }
@@ -520,7 +434,7 @@ private fun HomeLoggedOutPreview() {
             state = HomeUiState(isLoading = false, isLoggedIn = false, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
-            onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
+            onShareClick = {},
         )
     }
 }
@@ -533,7 +447,7 @@ private fun HomeDarkPreview() {
             state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
-            onShareClick = {}, onSignInPrompt = {}, onDismissSignInDialog = {}, onSignIn = {},
+            onShareClick = {},
         )
     }
 }

@@ -60,8 +60,11 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.EmptyStateArt
+import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.blinkAttention
+import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
@@ -90,6 +93,7 @@ fun CollectionScreen(
     CollectionContent(
         state = state,
         isOnline = rememberIsOnline(),
+        isLoggedIn = rememberIsLoggedIn(),
         onOpenSetDetail = onOpenSetDetail,
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
@@ -116,6 +120,7 @@ fun CollectionScreen(
 private fun CollectionContent(
     state: CollectionUiState,
     isOnline: Boolean = true,
+    isLoggedIn: Boolean = true,
     onOpenSetDetail: (String) -> Unit,
     onFilterSelected: (CollectionFilter) -> Unit,
     onPageChange: (Int) -> Unit,
@@ -162,7 +167,38 @@ private fun CollectionContent(
                 )
                 Spacer(Modifier.height(16.dp))
             }
-            if (!sales) {
+            if (!isLoggedIn) {
+                // Logged out: still show the summary (all zeros), then a sign-in prompt in place of
+                // the list — only signed-in users can add/edit/delete.
+                if (!sales) {
+                    item {
+                        StatCardRow(
+                            entries = listOf(
+                                StatEntry(R.drawable.ic_bw_set, 0L, "Sets"),
+                                StatEntry(R.drawable.ic_bw_minifig, 0L, "Minifigs"),
+                                StatEntry(R.drawable.ic_bw_pieces, 0L, "Pieces"),
+                            ),
+                            keyPrefix = "collection",
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+                } else {
+                    item {
+                        val zero = SalesSummary(0, 0L, 0L, 0.0, 0.0)
+                        SalesStatsRow(zero)
+                        Spacer(Modifier.height(12.dp))
+                        ProfitBar(zero)
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
+                item {
+                    SignInPromptCard(
+                        message = if (sales) "Sign in to track your sales."
+                        else "Sign in to view and manage your collection.",
+                        onSignIn = { SignInController.request() },
+                    )
+                }
+            } else if (!sales) {
                 state.summary?.let { summary ->
                     item {
                         StatCardRow(
@@ -254,8 +290,8 @@ private fun CollectionContent(
         }
 
         // Add FAB (bottom-end) — blinks while the active tab is empty, to prompt the first add.
-        // Hidden offline: adding needs the catalog (network) to pick a set.
-        if (isOnline) {
+        // Only for signed-in users, and hidden offline (adding needs the catalog/network).
+        if (isOnline && isLoggedIn) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

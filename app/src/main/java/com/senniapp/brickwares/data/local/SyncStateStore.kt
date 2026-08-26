@@ -3,7 +3,6 @@ package com.senniapp.brickwares.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,14 +20,6 @@ class SyncStateStore(private val context: Context) {
     private object Keys {
         val LAST_ACCOUNT_ID = stringPreferencesKey("last_account_id")
         val LAST_SYNCED_AT = stringPreferencesKey("last_synced_at")
-        val STAY_SIGNED_IN = booleanPreferencesKey("stay_signed_in")
-    }
-
-    /** Whether the persisted session should be honored on the next cold start (the login checkbox). */
-    suspend fun staySignedIn(): Boolean = context.syncDataStore.data.first()[Keys.STAY_SIGNED_IN] ?: true
-
-    suspend fun setStaySignedIn(value: Boolean) {
-        context.syncDataStore.edit { it[Keys.STAY_SIGNED_IN] = value }
     }
 
     suspend fun lastAccountId(): String? = context.syncDataStore.data.first()[Keys.LAST_ACCOUNT_ID]

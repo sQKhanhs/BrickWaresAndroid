@@ -59,6 +59,8 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SetThumb
@@ -576,6 +578,10 @@ private fun ResultCard(
     onAddWishlist: () -> Unit,
 ) {
     val colors = BwTheme.colors
+    // Adding/wishlisting needs an account; logged out → prompt sign-in instead.
+    val isLoggedIn = rememberIsLoggedIn()
+    val add = { if (isLoggedIn) onAddCollection() else SignInController.request() }
+    val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -613,7 +619,7 @@ private fun ResultCard(
                     .padding(top = 2.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(colors.brandYellow)
-                    .clickable(onClick = onAddCollection)
+                    .clickable(onClick = add)
                     .padding(vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -627,7 +633,7 @@ private fun ResultCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(999.dp))
                 .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
-                .then(if (wishlisted) Modifier else Modifier.clickable(onClick = onAddWishlist))
+                .then(if (wishlisted) Modifier else Modifier.clickable(onClick = wish))
                 .padding(vertical = 7.dp)
             Row(
                 modifier = wishlistModifier,
