@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -164,7 +165,7 @@ fun NoImagePlaceholder(itemType: ItemType, modifier: Modifier = Modifier, iconSi
         )
         Spacer(Modifier.height(3.dp))
         Text(
-            text = "No image",
+            text = stringResource(R.string.no_image),
             style = BwType.body.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
             color = colors.textMuted,
             textAlign = TextAlign.Center,
@@ -234,13 +235,14 @@ fun MetaLine(label: String, value: String) {
 @Composable
 fun StatusBadge(status: Availability) {
     val colors = BwTheme.colors
-    val (text, color) = when (status) {
-        Availability.RETIRED -> "Retired" to colors.error
-        Availability.EXCLUSIVE -> "Exclusive" to colors.linkAccent2
-        Availability.GWP -> "GWP" to colors.gwp
-        Availability.PROMO -> "Promotional" to colors.promo
-        Availability.AVAILABLE -> "Available" to colors.success
+    val (textRes, color) = when (status) {
+        Availability.RETIRED -> R.string.status_retired to colors.error
+        Availability.EXCLUSIVE -> R.string.status_exclusive to colors.linkAccent2
+        Availability.GWP -> R.string.status_gwp to colors.gwp
+        Availability.PROMO -> R.string.status_promotional to colors.promo
+        Availability.AVAILABLE -> R.string.status_available to colors.success
     }
+    val text = stringResource(textRes)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -275,10 +277,15 @@ fun PriceLine(label: String, value: String) {
 fun GrowthPill(percent: Double) {
     val colors = BwTheme.colors
     val pct = percent.roundToInt()
-    val (text, color) = when {
-        pct > 0 -> "▲ +$pct% Growth" to colors.success
-        pct < 0 -> "▼ $pct% Growth" to colors.error
-        else -> "0% Growth" to colors.textMuted
+    val text = when {
+        pct > 0 -> stringResource(R.string.growth_up, pct)
+        pct < 0 -> stringResource(R.string.growth_down, pct)
+        else -> stringResource(R.string.growth_flat)
+    }
+    val color = when {
+        pct > 0 -> colors.success
+        pct < 0 -> colors.error
+        else -> colors.textMuted
     }
     Box(
         modifier = Modifier

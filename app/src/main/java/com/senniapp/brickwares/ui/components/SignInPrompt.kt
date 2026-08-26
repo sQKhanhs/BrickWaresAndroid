@@ -16,10 +16,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -62,7 +64,7 @@ fun SignInPromptCard(
                 contentColor = colors.onYellow,
             ),
         ) {
-            Text("Sign In", style = BwType.pill)
+            Text(stringResource(R.string.action_sign_in), style = BwType.pill)
         }
         Spacer(Modifier.height(28.dp))
         Text(

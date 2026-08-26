@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -124,9 +126,9 @@ private fun HomeContent(
                 Spacer(Modifier.height(14.dp))
                 StatCardRow(
                     entries = listOf(
-                        StatEntry(R.drawable.ic_bw_set, shown.setCount.toLong(), "Sets"),
-                        StatEntry(R.drawable.ic_bw_minifig, shown.minifigCount.toLong(), "Minifigs"),
-                        StatEntry(R.drawable.ic_bw_pieces, shown.pieceCount.toLong(), "Pieces"),
+                        StatEntry(R.drawable.ic_bw_set, shown.setCount.toLong(), stringResource(R.string.stat_sets)),
+                        StatEntry(R.drawable.ic_bw_minifig, shown.minifigCount.toLong(), stringResource(R.string.stat_minifigs)),
+                        StatEntry(R.drawable.ic_bw_pieces, shown.pieceCount.toLong(), stringResource(R.string.stat_pieces)),
                     ),
                     keyPrefix = "home",
                 )
@@ -137,7 +139,7 @@ private fun HomeContent(
             } else {
                 // Logged out: prompt to sign in instead of the "Collection by Theme" card.
                 SignInPromptCard(
-                    message = "Sign in to save and sync your collection",
+                    message = stringResource(R.string.home_signin_prompt),
                     onSignIn = { SignInController.request() },
                 )
             }
@@ -173,7 +175,7 @@ private fun Header(canShare: Boolean, onShareClick: () -> Unit) {
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_bw_share),
-                    contentDescription = "Share collection",
+                    contentDescription = stringResource(R.string.home_share_cd),
                     tint = colors.text,
                     modifier = Modifier.size(18.dp),
                 )
@@ -291,7 +293,7 @@ private fun HeroCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Collection Value",
+                text = stringResource(R.string.home_collection_value),
                 style = BwType.heroLabel,
                 color = BwTheme.colors.brandYellow,
             )
@@ -309,7 +311,7 @@ private fun HeroCard(
             ) {
                 // Paid pill
                 Text(
-                    text = "Paid ${formatMoney(summary.paid, currency)}",
+                    text = stringResource(R.string.home_paid_pill, formatMoney(summary.paid, currency)),
                     style = BwType.pill.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                     color = Color.White,
                     modifier = Modifier
@@ -319,10 +321,15 @@ private fun HeroCard(
                 )
                 // Growth pill (▲/▼ glyph + coloured text, per spec)
                 val pct = summary.growthPercent.roundToInt()
-                val (label, growthColor) = when {
-                    pct > 0 -> "▲ +$pct% Growth" to Color(0xFF4ADE80)
-                    pct < 0 -> "▼ $pct% Growth" to Color(0xFFF87171)
-                    else -> "0% Growth" to Color.White
+                val label = when {
+                    pct > 0 -> stringResource(R.string.growth_up, pct)
+                    pct < 0 -> stringResource(R.string.growth_down, pct)
+                    else -> stringResource(R.string.growth_flat)
+                }
+                val growthColor = when {
+                    pct > 0 -> Color(0xFF4ADE80)
+                    pct < 0 -> Color(0xFFF87171)
+                    else -> Color.White
                 }
                 Text(
                     text = label,
@@ -348,7 +355,7 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
         border = BorderStroke(1.dp, colors.borderSoft),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Collection by Theme", style = BwType.cardTitle, color = colors.text)
+            Text(stringResource(R.string.home_collection_by_theme), style = BwType.cardTitle, color = colors.text)
             themes.forEach { theme ->
                 Spacer(Modifier.height(12.dp))
                 Row(
@@ -363,7 +370,7 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${theme.setCount} ${if (theme.setCount == 1) "set" else "sets"} · ",
+                            pluralStringResource(R.plurals.home_theme_set_count, theme.setCount, theme.setCount) + " · ",
                             style = BwType.body.copy(fontSize = 12.sp),
                             color = colors.textMuted,
                         )

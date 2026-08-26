@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -129,7 +130,7 @@ private fun WishlistContent(
             item {
                 Banner(
                     imageAsset = "file:///android_asset/wishlist_banner.png",
-                    title = "My Wishlist",
+                    title = stringResource(R.string.wishlist_title),
                 )
                 Spacer(Modifier.height(16.dp))
             }
@@ -139,9 +140,9 @@ private fun WishlistContent(
                 item {
                     StatCardRow(
                         entries = listOf(
-                            StatEntry(R.drawable.ic_bw_set, 0L, "Sets"),
-                            StatEntry(R.drawable.ic_bw_minifig, 0L, "Minifigs"),
-                            StatEntry(R.drawable.ic_bw_pieces, 0L, "Pieces"),
+                            StatEntry(R.drawable.ic_bw_set, 0L, stringResource(R.string.stat_sets)),
+                            StatEntry(R.drawable.ic_bw_minifig, 0L, stringResource(R.string.stat_minifigs)),
+                            StatEntry(R.drawable.ic_bw_pieces, 0L, stringResource(R.string.stat_pieces)),
                         ),
                         keyPrefix = "wishlist",
                     )
@@ -149,7 +150,7 @@ private fun WishlistContent(
                 }
                 item {
                     SignInPromptCard(
-                        message = "Sign in to build your wishlist",
+                        message = stringResource(R.string.wishlist_signin_prompt),
                         onSignIn = { SignInController.request() },
                     )
                 }
@@ -157,9 +158,9 @@ private fun WishlistContent(
             item {
                 StatCardRow(
                     entries = listOf(
-                        StatEntry(R.drawable.ic_bw_set, state.setCount.toLong(), "Sets"),
-                        StatEntry(R.drawable.ic_bw_minifig, state.minifigCount.toLong(), "Minifigs"),
-                        StatEntry(R.drawable.ic_bw_pieces, state.pieceCount.toLong(), "Pieces"),
+                        StatEntry(R.drawable.ic_bw_set, state.setCount.toLong(), stringResource(R.string.stat_sets)),
+                        StatEntry(R.drawable.ic_bw_minifig, state.minifigCount.toLong(), stringResource(R.string.stat_minifigs)),
+                        StatEntry(R.drawable.ic_bw_pieces, state.pieceCount.toLong(), stringResource(R.string.stat_pieces)),
                     ),
                     keyPrefix = "wishlist",
                 )
@@ -170,7 +171,7 @@ private fun WishlistContent(
                 Spacer(Modifier.height(14.dp))
             }
             if (!state.isLoading && state.visibleItems.isEmpty()) {
-                item { EmptyStateArt("Nothing here yet, look something up") }
+                item { EmptyStateArt(stringResource(R.string.wishlist_empty)) }
             }
             items(state.pageItems, key = { it.setNumber }) { item ->
                 SwipeToDelete(onSwiped = { onRemove(item.setNumber) }, autoDismiss = true) {
@@ -209,7 +210,7 @@ private fun WishlistContent(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_bw_search),
-                    contentDescription = "Search for sets",
+                    contentDescription = stringResource(R.string.wishlist_search_fab_cd),
                     tint = colors.onYellow,
                     modifier = Modifier.size(26.dp),
                 )
@@ -233,9 +234,9 @@ private fun WishlistContent(
 @Composable
 private fun FilterChips(selected: WishlistFilter, onSelect: (WishlistFilter) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipItem(R.drawable.ic_bw_all, "All", selected == WishlistFilter.ALL, { onSelect(WishlistFilter.ALL) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_set, "Set", selected == WishlistFilter.SET, { onSelect(WishlistFilter.SET) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_minifig, "Minifig", selected == WishlistFilter.MINIFIG, { onSelect(WishlistFilter.MINIFIG) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_all, stringResource(R.string.filter_all), selected == WishlistFilter.ALL, { onSelect(WishlistFilter.ALL) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_set, stringResource(R.string.filter_set), selected == WishlistFilter.SET, { onSelect(WishlistFilter.SET) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_minifig, stringResource(R.string.filter_minifig), selected == WishlistFilter.MINIFIG, { onSelect(WishlistFilter.MINIFIG) }, Modifier.weight(1f))
     }
 }
 
@@ -278,9 +279,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 color = colors.linkAccent,
                 modifier = Modifier.clickable(onClick = onOpenDetail),
             )
-            MetaLine("Theme", item.theme)
-            MetaLine("Release", formatRelease(item.releaseMonth, item.releaseYear))
-            MetaLine("Pieces / Minifigs", "${item.pieces} / ${item.minifigs}")
+            MetaLine(stringResource(R.string.meta_theme), item.theme)
+            MetaLine(stringResource(R.string.meta_release), formatRelease(item.releaseMonth, item.releaseYear))
+            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
             StatusBadge(item.status)
         }
 
@@ -292,9 +293,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine("Retail", formatMoney(item.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
             if (item.currentValue != null) {
-                PriceLine("Value", formatMoney(item.currentValue, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_value), formatMoney(item.currentValue, AppCurrency.VND))
                 item.growthPercent?.let { GrowthPill(it) }
             }
             // Move to collection — full-width yellow button (matches design).
@@ -311,7 +312,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             ) {
                 Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Add", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
+                Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
             }
             // "Wishlisted" button — tap (or swipe the card) to remove from the wishlist.
             Row(
@@ -324,9 +325,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(painter = painterResource(R.drawable.ic_bw_heart), contentDescription = "Remove from wishlist", tint = WishlistHeart, modifier = Modifier.size(14.dp))
+                Icon(painter = painterResource(R.drawable.ic_bw_heart), contentDescription = stringResource(R.string.wishlist_remove_cd), tint = WishlistHeart, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Wishlisted", style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                Text(stringResource(R.string.action_wishlisted), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
             }
         }
     }

@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +43,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -90,7 +92,7 @@ fun LoginScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        if (signUp) "Create your account" else "Welcome back",
+                        stringResource(if (signUp) R.string.login_create_account else R.string.login_welcome_back),
                         style = BwType.body.copy(fontSize = 13.sp),
                         color = colors.textMuted,
                     )
@@ -102,13 +104,13 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(50),
                     ) {
-                        Text("Continue with Google", style = BwType.pill, color = colors.text)
+                        Text(stringResource(R.string.login_google), style = BwType.pill, color = colors.text)
                     }
 
                     Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
-                        Text("  OR  ", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                        Text("  ${stringResource(R.string.login_or)}  ", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
                     }
                     Spacer(Modifier.height(16.dp))
@@ -123,7 +125,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = state.email,
                         onValueChange = viewModel::onEmailChange,
-                        placeholder = { Text("Email") },
+                        placeholder = { Text(stringResource(R.string.login_email)) },
                         singleLine = true,
                         enabled = !busy,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -135,7 +137,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = state.password,
                         onValueChange = viewModel::onPasswordChange,
-                        placeholder = { Text("Password") },
+                        placeholder = { Text(stringResource(R.string.login_password)) },
                         singleLine = true,
                         enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(),
@@ -149,7 +151,7 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = state.confirmPassword,
                             onValueChange = viewModel::onConfirmPasswordChange,
-                            placeholder = { Text("Confirm password") },
+                            placeholder = { Text(stringResource(R.string.login_confirm_password)) },
                             singleLine = true,
                             enabled = !busy,
                             visualTransformation = PasswordVisualTransformation(),
@@ -176,19 +178,19 @@ fun LoginScreen(
                         if (busy) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.onYellow)
                         } else {
-                            Text(if (signUp) "Sign Up" else "Sign In", style = BwType.pill)
+                            Text(stringResource(if (signUp) R.string.login_signup_action else R.string.action_sign_in), style = BwType.pill)
                         }
                     }
 
                     Spacer(Modifier.height(14.dp))
                     Row {
                         Text(
-                            if (signUp) "Already have an account? " else "Don't have an account? ",
+                            stringResource(if (signUp) R.string.login_have_account else R.string.login_no_account),
                             style = BwType.body.copy(fontSize = 13.sp),
                             color = colors.textMuted,
                         )
                         Text(
-                            if (signUp) "Sign in" else "Sign up",
+                            stringResource(if (signUp) R.string.settings_sign_in else R.string.login_signup_link),
                             style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
                             color = colors.brandYellow,
                             modifier = Modifier.clickable { viewModel.onSwitchMode() },
@@ -206,7 +208,7 @@ fun LoginScreen(
                     if (!isOnline) {
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "No internet connection — connect to sign in.",
+                            stringResource(R.string.login_offline),
                             style = BwType.body.copy(fontSize = 13.sp),
                             color = colors.textFaint,
                             textAlign = TextAlign.Center,

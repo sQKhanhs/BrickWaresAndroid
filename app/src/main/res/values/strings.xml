@@ -1,3 +1,197 @@
 <resources>
     <!-- app_name is provided per build flavor via resValue (see app/build.gradle.kts). -->
+
+    <!-- ============ Shared / common ============ -->
+    <string name="stat_sets">Sets</string>
+    <string name="stat_minifigs">Minifigs</string>
+    <string name="stat_pieces">Pieces</string>
+
+    <string name="meta_theme">Theme</string>
+    <string name="meta_subtheme">Subtheme</string>
+    <string name="meta_release">Release</string>
+    <string name="meta_pieces_minifigs">Pieces / Minifigs</string>
+
+    <string name="price_retail">Retail</string>
+    <string name="price_paid">Paid</string>
+    <string name="price_value">Value</string>
+
+    <string name="action_add">Add</string>
+    <string name="action_wishlist">Wishlist</string>
+    <string name="action_wishlisted">Wishlisted</string>
+    <string name="action_add_to_collection">Add to Collection</string>
+    <string name="action_see_detail">See Detail</string>
+    <string name="action_sign_in">Sign In</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_ok">OK</string>
+
+    <!-- Availability badges -->
+    <string name="status_available">Available</string>
+    <string name="status_exclusive">Exclusive</string>
+    <string name="status_gwp">GWP</string>
+    <string name="status_promotional">Promotional</string>
+    <string name="status_retired">Retired</string>
+
+    <!-- Growth pill (%1$d = signed percent; %% is a literal percent sign) -->
+    <string name="growth_up">▲ +%1$d%% Growth</string>
+    <string name="growth_down">▼ %1$d%% Growth</string>
+    <string name="growth_flat">0%% Growth</string>
+
+    <!-- No-image thumbnail fallback -->
+    <string name="no_image">No image</string>
+
+    <!-- ============ Bottom navigation ============ -->
+    <string name="nav_home">Home</string>
+    <string name="nav_collection">Collection</string>
+    <string name="nav_wishlist">Wishlist</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- ============ Home ============ -->
+    <string name="home_share_cd">Share collection</string>
+    <string name="home_collection_value">Collection Value</string>
+    <string name="home_paid_pill">Paid %1$s</string>
+    <string name="home_signin_prompt">Sign in to save and sync your collection</string>
+    <string name="home_collection_by_theme">Collection by Theme</string>
+    <plurals name="home_theme_set_count">
+        <item quantity="one">%1$d set</item>
+        <item quantity="other">%1$d sets</item>
+    </plurals>
+
+    <!-- ============ Settings ============ -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_section_data">Data</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_change_avatar_cd">Change avatar</string>
+    <string name="settings_sign_out">Sign Out</string>
+    <string name="settings_offline">Offline</string>
+    <string name="settings_delete_account">Delete account</string>
+    <string name="settings_delete_confirm_body">This permanently removes your account and all collection data. This can\'t be undone.</string>
+    <string name="settings_sign_in">Sign in</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_currency">Currency</string>
+    <string name="settings_theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_export_csv">Export collection (CSV)</string>
+    <string name="settings_import_csv">Import collection (CSV)</string>
+    <string name="settings_retirement_alerts">Retirement alerts</string>
+    <string name="settings_privacy_policy">Privacy Policy</string>
+    <string name="settings_terms">Terms of Service</string>
+    <string name="settings_usage_analytics">Usage analytics</string>
+    <string name="settings_usage_analytics_desc">Share anonymous usage data to help improve the app.</string>
+    <string name="settings_data_attribution">Data attribution</string>
+    <string name="settings_attribution_body">Catalog data from Brickset and Rebrickable. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</string>
+    <string name="settings_version">Version · v0.1.0 (preview)</string>
+    <string name="settings_changelog_body">Preview build on mock data: Home, Collection, Wishlist, Search, Set Detail and Settings. Backend sync coming soon.</string>
+    <string name="settings_send_feedback">Send feedback</string>
+    <string name="settings_rate">Rate BrickWares</string>
+    <string name="settings_choose_avatar">Choose Avatar</string>
+
+    <!-- ============ Collection / Sales ============ -->
+    <string name="collection_title">My Collection</string>
+    <string name="sales_title">My Sales</string>
+    <string name="collection_signin_prompt">Sign in to view and manage your collection</string>
+    <string name="sales_signin_prompt">Sign in to track your sales</string>
+    <string name="collection_empty">Nothing here yet, add something</string>
+    <string name="sales_empty">No sales yet</string>
+    <string name="collection_toggle_sales_cd">Toggle sales mode</string>
+    <string name="collection_add_fab_cd">Add to collection</string>
+    <string name="collection_delete_title">Delete set</string>
+    <string name="collection_delete_confirm">Delete \"%1$s\" and all its copies from your collection?</string>
+    <string name="filter_all">All</string>
+    <string name="filter_set">Set</string>
+    <string name="filter_minifig">Minifig</string>
+    <string name="sales_total_sold">TOTAL SOLD</string>
+    <string name="sales_sale_value">SALE VALUE</string>
+    <string name="sales_profit_prefix">Profit %1$s</string>
+    <string name="sales_profit_label">Profit</string>
+    <string name="price_sale">Sale</string>
+    <string name="sd_cond">Cond.</string>
+    <string name="sd_date">Date</string>
+    <string name="sd_qty">Qty</string>
+    <string name="sd_avg">Avg</string>
+    <string name="sd_toggle_note_cd">Toggle note</string>
+    <string name="sd_edit_copy_cd">Edit copy</string>
+    <string name="sd_delete_copy_cd">Delete copy</string>
+
+    <!-- ============ Wishlist ============ -->
+    <string name="wishlist_title">My Wishlist</string>
+    <string name="wishlist_signin_prompt">Sign in to build your wishlist</string>
+    <string name="wishlist_empty">Nothing here yet, look something up</string>
+    <string name="wishlist_search_fab_cd">Search for sets</string>
+    <string name="wishlist_remove_cd">Remove from wishlist</string>
+
+    <!-- ============ Set detail ============ -->
+    <string name="detail_set_not_found">Set not found.</string>
+    <string name="detail_no_internet">No internet connection</string>
+    <string name="detail_set_details">Set Details</string>
+    <string name="detail_pricing">Pricing</string>
+    <string name="detail_set_number">Set number</string>
+    <string name="detail_name">Name</string>
+    <string name="detail_released">Released</string>
+    <string name="detail_availability">Availability</string>
+    <string name="detail_my_collection">My Collection</string>
+    <string name="detail_total_paid">Total paid</string>
+    <string name="detail_more_in">More in %1$s</string>
+
+    <!-- ============ Search ============ -->
+    <string name="search_title">Search Sets</string>
+    <string name="search_placeholder">Search by name or set number</string>
+    <string name="search_no_matches">No matches for \"%1$s\"</string>
+    <string name="search_results_for">Results for \"%1$s\" (%2$d)</string>
+    <string name="search_no_results">No sets found for \"%1$s\"</string>
+    <string name="search_unmark_favorite_cd">Unmark favorite</string>
+    <string name="search_mark_favorite_cd">Mark favorite</string>
+    <string name="search_all_subthemes">All Subthemes</string>
+    <string name="search_sort_label">Sort</string>
+    <string name="search_too_many">There are too many results for \"%1$s\", please narrow your search.</string>
+    <string name="search_tips_title">Search Tips</string>
+    <string name="search_tip_1">Include the set\'s number, name, or theme.</string>
+    <string name="search_tip_2">The quickest way to find a set is to enter its number.</string>
+    <string name="search_tip_3">Try more specific terms or fewer keywords.</string>
+    <string name="search_tip_4">Check the spelling and try again.</string>
+    <!-- Theme browse sort -->
+    <string name="sort_alphabetical">Alphabetical</string>
+    <string name="sort_amount">Amount of sets</string>
+    <string name="sort_favorites">Favorites</string>
+    <!-- Theme detail sort -->
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_price_high">Price: high to low</string>
+    <string name="sort_price_low">Price: low to high</string>
+    <string name="sort_name">Name</string>
+
+    <!-- ============ Sign-in modal ============ -->
+    <string name="login_welcome_back">Welcome back</string>
+    <string name="login_create_account">Create your account</string>
+    <string name="login_google">Continue with Google</string>
+    <string name="login_or">OR</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_confirm_password">Confirm password</string>
+    <string name="login_signup_action">Sign Up</string>
+    <string name="login_have_account">Already have an account? </string>
+    <string name="login_no_account">Don\'t have an account? </string>
+    <string name="login_signup_link">Sign up</string>
+    <string name="login_offline">No internet connection — connect to sign in.</string>
+
+    <!-- ============ Add-to-collection sheet ============ -->
+    <string name="sheet_edit_item">Edit Item</string>
+    <string name="sheet_enter_set_number">Enter set number, e.g. 75192</string>
+    <string name="sheet_theme_pcs">%1$s · %2$d pcs</string>
+    <string name="sheet_field_paid">Paid</string>
+    <string name="sheet_field_qty">Qty</string>
+    <string name="sheet_field_condition">Condition</string>
+    <string name="sheet_condition_new">New</string>
+    <string name="sheet_condition_used">Used</string>
+    <string name="sheet_field_date_added">Date Added</string>
+    <string name="sheet_field_note">Note</string>
+    <string name="sheet_note_optional">Optional</string>
+    <string name="sheet_save">Save</string>
+    <string name="sheet_add_item">Add Item</string>
 </resources>

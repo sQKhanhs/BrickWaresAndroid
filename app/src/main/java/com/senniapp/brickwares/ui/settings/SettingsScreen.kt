@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
@@ -119,10 +120,10 @@ private fun SettingsContent(
                 .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text("Settings", style = BwType.wordmark, color = colors.text, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
+            Text(stringResource(R.string.settings_title), style = BwType.wordmark, color = colors.text, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
 
             // ---- Account ----
-            Section("Account") {
+            Section(stringResource(R.string.settings_section_account)) {
                 if (state.isLoggedIn) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -131,7 +132,7 @@ private fun SettingsContent(
                     ) {
                         AsyncImage(
                             model = state.avatar.asset,
-                            contentDescription = "Change avatar",
+                            contentDescription = stringResource(R.string.settings_change_avatar_cd),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(44.dp)
@@ -145,23 +146,23 @@ private fun SettingsContent(
                         }
                         // Sign-out needs network — hidden while offline (an "Offline" chip instead).
                         if (isOnline) {
-                            Pill(text = "Sign Out", filled = true, onClick = onSignOut)
+                            Pill(text = stringResource(R.string.settings_sign_out), filled = true, onClick = onSignOut)
                         } else {
-                            Text("Offline", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                            Text(stringResource(R.string.settings_offline), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         }
                     }
                     RowDivider()
-                    NavRow("Delete account", onClick = onRequestDelete, danger = true)
+                    NavRow(stringResource(R.string.settings_delete_account), onClick = onRequestDelete, danger = true)
                     if (state.showDeleteConfirm) {
                         Column(modifier = Modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                "This permanently removes your account and all collection data. This can't be undone.",
+                                stringResource(R.string.settings_delete_confirm_body),
                                 style = BwType.body.copy(fontSize = 11.sp),
                                 color = colors.textMuted,
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinePill("Cancel", onClick = onCancelDelete, modifier = Modifier.weight(1f))
-                                DangerPill("Delete", onClick = onConfirmDelete, modifier = Modifier.weight(1f))
+                                OutlinePill(stringResource(R.string.action_cancel), onClick = onCancelDelete, modifier = Modifier.weight(1f))
+                                DangerPill(stringResource(R.string.action_delete), onClick = onConfirmDelete, modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -180,23 +181,23 @@ private fun SettingsContent(
                                 contentColor = colors.onYellow,
                             ),
                         ) {
-                            Text("Sign in", style = BwType.pill)
+                            Text(stringResource(R.string.settings_sign_in), style = BwType.pill)
                         }
                     }
                 }
             }
 
             // ---- Display ----
-            Section("Display") {
+            Section(stringResource(R.string.settings_section_display)) {
                 DropdownRow(
-                    label = "Language",
+                    label = stringResource(R.string.settings_language),
                     selectedLabel = state.language.label,
                     options = AppLanguage.entries.map { it to it.label },
                     onSelect = onLanguageChange,
                 )
                 RowDivider()
                 DropdownRow(
-                    label = "Currency",
+                    label = stringResource(R.string.settings_currency),
                     selectedLabel = currencyLabel(state.currency),
                     options = listOf(AppCurrency.VND to currencyLabel(AppCurrency.VND), AppCurrency.USD to currencyLabel(AppCurrency.USD)),
                     onSelect = onCurrencyChange,
@@ -207,65 +208,66 @@ private fun SettingsContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Theme", style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
+                    Text(stringResource(R.string.settings_theme), style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ThemeMode.entries.forEach { mode ->
-                            SegmentButton(label = mode.label, selected = mode == themeMode, onClick = { onThemeModeChange(mode) })
+                            val label = stringResource(if (mode == ThemeMode.DARK) R.string.theme_dark else R.string.theme_light)
+                            SegmentButton(label = label, selected = mode == themeMode, onClick = { onThemeModeChange(mode) })
                         }
                     }
                 }
             }
 
             // ---- Data ----
-            Section("Data") {
-                NavRow("Export collection (CSV)", onClick = { onComingSoon("Export") })
+            Section(stringResource(R.string.settings_section_data)) {
+                NavRow(stringResource(R.string.settings_export_csv), onClick = { onComingSoon("Export") })
                 RowDivider()
-                NavRow("Import collection (CSV)", onClick = { onComingSoon("Import") })
+                NavRow(stringResource(R.string.settings_import_csv), onClick = { onComingSoon("Import") })
             }
 
             // ---- Notifications ----
-            Section("Notifications") {
-                ToggleRow("Retirement alerts", checked = state.retirementAlerts, onToggle = onToggleRetirement)
+            Section(stringResource(R.string.settings_section_notifications)) {
+                ToggleRow(stringResource(R.string.settings_retirement_alerts), checked = state.retirementAlerts, onToggle = onToggleRetirement)
             }
 
             // ---- Privacy ----
-            Section("Privacy") {
-                NavRow("Privacy Policy", onClick = { onComingSoon("Privacy Policy") })
+            Section(stringResource(R.string.settings_section_privacy)) {
+                NavRow(stringResource(R.string.settings_privacy_policy), onClick = { onComingSoon("Privacy Policy") })
                 RowDivider()
-                NavRow("Terms of Service", onClick = { onComingSoon("Terms of Service") })
+                NavRow(stringResource(R.string.settings_terms), onClick = { onComingSoon("Terms of Service") })
                 RowDivider()
                 ToggleRow(
-                    "Usage analytics",
+                    stringResource(R.string.settings_usage_analytics),
                     checked = state.analyticsConsent,
                     onToggle = onToggleAnalytics,
-                    description = "Share anonymous usage data to help improve the app.",
+                    description = stringResource(R.string.settings_usage_analytics_desc),
                 )
             }
 
             // ---- About ----
-            Section("About") {
+            Section(stringResource(R.string.settings_section_about)) {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Data attribution", style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold), color = colors.text)
+                    Text(stringResource(R.string.settings_data_attribution), style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold), color = colors.text)
                     Text(
-                        "Catalog data from Brickset and Rebrickable. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.",
+                        stringResource(R.string.settings_attribution_body),
                         style = BwType.body.copy(fontSize = 11.sp),
                         color = colors.textMuted2,
                     )
                 }
                 RowDivider()
-                NavRow("Version · v0.1.0 (preview)", onClick = onToggleChangelog)
+                NavRow(stringResource(R.string.settings_version), onClick = onToggleChangelog)
                 if (state.showChangelog) {
                     Text(
-                        "Preview build on mock data: Home, Collection, Wishlist, Search, Set Detail and Settings. Backend sync coming soon.",
+                        stringResource(R.string.settings_changelog_body),
                         style = BwType.body.copy(fontSize = 11.sp),
                         color = colors.textMuted2,
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
                 RowDivider()
-                NavRow("Send feedback", onClick = { onComingSoon("Feedback") })
+                NavRow(stringResource(R.string.settings_send_feedback), onClick = { onComingSoon("Feedback") })
                 RowDivider()
-                NavRow("Rate BrickWares", onClick = { onComingSoon("Rate") })
+                NavRow(stringResource(R.string.settings_rate), onClick = { onComingSoon("Rate") })
             }
         }
 
@@ -291,7 +293,7 @@ private fun AvatarPickerDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Choose Avatar", style = BwType.cardTitle, color = colors.text)
+                Text(stringResource(R.string.settings_choose_avatar), style = BwType.cardTitle, color = colors.text)
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     AvatarGender.entries.forEach { avatar ->

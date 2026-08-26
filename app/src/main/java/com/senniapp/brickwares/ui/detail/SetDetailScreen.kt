@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -145,9 +146,9 @@ private fun SetDetailContent(
 
             if (set == null) {
                 if (state.offline) {
-                    EmptyStateArt("No internet connection")
+                    EmptyStateArt(stringResource(R.string.detail_no_internet))
                 } else if (state.loaded) {
-                    Text("Set not found.", style = BwType.body, color = colors.textMuted)
+                    Text(stringResource(R.string.detail_set_not_found), style = BwType.body, color = colors.textMuted)
                 }
                 return@Column
             }
@@ -173,7 +174,7 @@ private fun SetDetailContent(
                     // Add to Collection.
                     ActionButton(
                         iconRes = R.drawable.ic_bw_pieces,
-                        label = "Add to Collection",
+                        label = stringResource(R.string.action_add_to_collection),
                         filled = true,
                         // Adding needs an account; logged out → prompt sign-in instead.
                         onClick = { if (isLoggedIn) onAddCollectionClick() else SignInController.request() },
@@ -181,7 +182,7 @@ private fun SetDetailContent(
                     // Wishlist / Wishlisted.
                     ActionButton(
                         iconRes = R.drawable.ic_bw_heart,
-                        label = if (state.isWishlisted) "Wishlisted" else "Wishlist",
+                        label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
                         filled = false,
                         iconTint = if (state.isWishlisted) WishlistHeart else colors.textMuted,
                         onClick = when {
@@ -194,28 +195,28 @@ private fun SetDetailContent(
             }
 
             // Set details card.
-            SectionCard(title = "Set Details") {
-                DetailRow("Set number", set.setNumber)
-                DetailRow("Name", set.name)
-                DetailLinkRow("Theme", set.theme, onNavigateToSearch)
-                DetailLinkRow("Subtheme", set.subtheme, onNavigateToSearch)
-                DetailRow("Released", formatRelease(set.releaseMonth, set.releaseYear))
+            SectionCard(title = stringResource(R.string.detail_set_details)) {
+                DetailRow(stringResource(R.string.detail_set_number), set.setNumber)
+                DetailRow(stringResource(R.string.detail_name), set.name)
+                DetailLinkRow(stringResource(R.string.meta_theme), set.theme, onNavigateToSearch)
+                DetailLinkRow(stringResource(R.string.meta_subtheme), set.subtheme, onNavigateToSearch)
+                DetailRow(stringResource(R.string.detail_released), formatRelease(set.releaseMonth, set.releaseYear))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Availability", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                    Text(stringResource(R.string.detail_availability), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                     StatusBadge(set.status)
                 }
-                DetailRow("Pieces", set.pieces.toString())
-                if (set.minifigs > 0) DetailRow("Minifigs", set.minifigs.toString())
+                DetailRow(stringResource(R.string.stat_pieces), set.pieces.toString())
+                if (set.minifigs > 0) DetailRow(stringResource(R.string.stat_minifigs), set.minifigs.toString())
             }
 
             // Pricing card.
-            SectionCard(title = "Pricing") {
-                DetailRow("Retail", formatRetail(set.retailPrice, AppCurrency.VND), strong = true)
+            SectionCard(title = stringResource(R.string.detail_pricing)) {
+                DetailRow(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND), strong = true)
                 if (state.isOwned) {
                     HorizontalDivider(color = colors.borderSoft)
-                    Text("My Collection", style = BwType.micro, color = colors.textMuted)
+                    Text(stringResource(R.string.detail_my_collection), style = BwType.micro, color = colors.textMuted)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Total paid", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                        Text(stringResource(R.string.detail_total_paid), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         Text(
                             "${formatMoney(state.totalPaid, AppCurrency.VND)}  ×${state.ownedCount}",
                             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
@@ -227,7 +228,7 @@ private fun SetDetailContent(
 
             // Related.
             if (state.related.isNotEmpty()) {
-                Text("More in ${set.theme}", style = BwType.cardTitle.copy(fontSize = 15.sp), color = colors.text)
+                Text(stringResource(R.string.detail_more_in, set.theme), style = BwType.cardTitle.copy(fontSize = 15.sp), color = colors.text)
                 state.related.forEach { rel ->
                     RelatedCard(set = rel, onClick = { onOpenSetDetail(rel.id) })
                 }
@@ -377,8 +378,8 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, maxLines = 1)
-            MetaLine("Release", formatRelease(set.releaseMonth, set.releaseYear))
-            PriceLine("Retail", formatRetail(set.retailPrice, AppCurrency.VND))
+            MetaLine(stringResource(R.string.meta_release), formatRelease(set.releaseMonth, set.releaseYear))
+            PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
         }
     }
 }

@@ -37,10 +37,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Condition
@@ -92,7 +94,7 @@ fun AddToCollectionSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(if (isEdit) "Edit Item" else "Add to Collection", style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
+            Text(stringResource(if (isEdit) R.string.sheet_edit_item else R.string.action_add_to_collection), style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
 
             val currentSelection = selected
             if (currentSelection == null) {
@@ -101,7 +103,7 @@ fun AddToCollectionSheet(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("Enter set number, e.g. 75192") },
+                    placeholder = { Text(stringResource(R.string.sheet_enter_set_number)) },
                 )
                 suggestions.take(6).forEach { set ->
                     Row(
@@ -117,7 +119,7 @@ fun AddToCollectionSheet(
                     ) {
                         Column {
                             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
-                            Text("${set.theme} · ${set.pieces} pcs", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+                            Text(stringResource(R.string.sheet_theme_pcs, set.theme, set.pieces), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
                         }
                     }
                 }
@@ -145,7 +147,7 @@ fun AddToCollectionSheet(
                 }
             }
 
-            FieldLabel("Paid")
+            FieldLabel(stringResource(R.string.sheet_field_paid))
             OutlinedTextField(
                 value = paid,
                 onValueChange = { input -> paid = input.filter { it.isDigit() } },
@@ -156,7 +158,7 @@ fun AddToCollectionSheet(
                 placeholder = { Text("0") },
             )
 
-            FieldLabel("Qty")
+            FieldLabel(stringResource(R.string.sheet_field_qty))
             OutlinedTextField(
                 value = qty,
                 onValueChange = { input -> qty = input.filter { it.isDigit() } },
@@ -165,13 +167,13 @@ fun AddToCollectionSheet(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
 
-            FieldLabel("Condition")
+            FieldLabel(stringResource(R.string.sheet_field_condition))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ConditionChip("New", condition == Condition.NEW, { condition = Condition.NEW }, Modifier.weight(1f))
-                ConditionChip("Used", condition == Condition.USED, { condition = Condition.USED }, Modifier.weight(1f))
+                ConditionChip(stringResource(R.string.sheet_condition_new), condition == Condition.NEW, { condition = Condition.NEW }, Modifier.weight(1f))
+                ConditionChip(stringResource(R.string.sheet_condition_used), condition == Condition.USED, { condition = Condition.USED }, Modifier.weight(1f))
             }
 
-            FieldLabel("Date Added")
+            FieldLabel(stringResource(R.string.sheet_field_date_added))
             Box {
                 OutlinedTextField(
                     value = dateAdded,
@@ -201,22 +203,22 @@ fun AddToCollectionSheet(
                                 dateAdded = LocalDate.ofEpochDay(millis / 86_400_000L).toString()
                             }
                             showDatePicker = false
-                        }) { Text("OK") }
+                        }) { Text(stringResource(R.string.action_ok)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                        TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.action_cancel)) }
                     },
                 ) {
                     DatePicker(state = dpState)
                 }
             }
 
-            FieldLabel("Note")
+            FieldLabel(stringResource(R.string.sheet_field_note))
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
                 modifier = Modifier.fillMaxWidth().height(90.dp),
-                placeholder = { Text("Optional") },
+                placeholder = { Text(stringResource(R.string.sheet_note_optional)) },
             )
 
             Spacer(Modifier.height(4.dp))
@@ -255,7 +257,7 @@ fun AddToCollectionSheet(
                     disabledContentColor = colors.textMuted,
                 ),
             ) {
-                Text(if (isEdit) "Save" else "Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+                Text(stringResource(if (isEdit) R.string.sheet_save else R.string.sheet_add_item), style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }

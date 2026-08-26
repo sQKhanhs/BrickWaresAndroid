@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,6 +59,18 @@ enum class BwTab(val label: String, @param:DrawableRes val icon: Int) {
     Search("Search", R.drawable.ic_bw_search),
     Settings("Settings", R.drawable.ic_bw_settings),
 }
+
+/** Localized bottom-nav label. */
+@Composable
+private fun BwTab.text(): String = stringResource(
+    when (this) {
+        BwTab.Home -> R.string.nav_home
+        BwTab.Collection -> R.string.nav_collection
+        BwTab.Wishlist -> R.string.nav_wishlist
+        BwTab.Search -> R.string.nav_search
+        BwTab.Settings -> R.string.nav_settings
+    },
+)
 
 /** Root app shell: persistent bottom nav + the selected tab's content (or a Set Detail overlay). */
 @Composable
@@ -179,14 +192,15 @@ private fun NavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        val label = tab.text()
         Icon(
             painter = painterResource(tab.icon),
-            contentDescription = tab.label,
+            contentDescription = label,
             tint = tint,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.height(4.dp))
-        Text(tab.label, style = BwType.navLabel, color = tint)
+        Text(label, style = BwType.navLabel, color = tint)
         Spacer(Modifier.height(4.dp))
         // Active-tab underline indicator (yellow).
         Box(

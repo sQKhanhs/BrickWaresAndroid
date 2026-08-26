@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -75,7 +76,7 @@ private fun DeleteBackground(state: SwipeToDismissBoxState) {
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_bw_delete),
-            contentDescription = "Delete",
+            contentDescription = stringResource(R.string.action_delete),
             tint = Color.White,
             modifier = Modifier.size(22.dp),
         )

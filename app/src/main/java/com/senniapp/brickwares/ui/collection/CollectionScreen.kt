@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -164,7 +165,7 @@ private fun CollectionContent(
             item {
                 Banner(
                     imageAsset = if (sales) "file:///android_asset/sales_banner.png" else "file:///android_asset/collection_banner.png",
-                    title = if (sales) "My Sales" else "My Collection",
+                    title = stringResource(if (sales) R.string.sales_title else R.string.collection_title),
                 )
                 Spacer(Modifier.height(16.dp))
             }
@@ -175,9 +176,9 @@ private fun CollectionContent(
                     item {
                         StatCardRow(
                             entries = listOf(
-                                StatEntry(R.drawable.ic_bw_set, 0L, "Sets"),
-                                StatEntry(R.drawable.ic_bw_minifig, 0L, "Minifigs"),
-                                StatEntry(R.drawable.ic_bw_pieces, 0L, "Pieces"),
+                                StatEntry(R.drawable.ic_bw_set, 0L, stringResource(R.string.stat_sets)),
+                                StatEntry(R.drawable.ic_bw_minifig, 0L, stringResource(R.string.stat_minifigs)),
+                                StatEntry(R.drawable.ic_bw_pieces, 0L, stringResource(R.string.stat_pieces)),
                             ),
                             keyPrefix = "collection",
                         )
@@ -194,8 +195,7 @@ private fun CollectionContent(
                 }
                 item {
                     SignInPromptCard(
-                        message = if (sales) "Sign in to track your sales"
-                        else "Sign in to view and manage your collection",
+                        message = stringResource(if (sales) R.string.sales_signin_prompt else R.string.collection_signin_prompt),
                         onSignIn = { SignInController.request() },
                     )
                 }
@@ -204,9 +204,9 @@ private fun CollectionContent(
                     item {
                         StatCardRow(
                             entries = listOf(
-                                StatEntry(R.drawable.ic_bw_set, summary.setCount.toLong(), "Sets"),
-                                StatEntry(R.drawable.ic_bw_minifig, summary.minifigCount.toLong(), "Minifigs"),
-                                StatEntry(R.drawable.ic_bw_pieces, summary.pieceCount.toLong(), "Pieces"),
+                                StatEntry(R.drawable.ic_bw_set, summary.setCount.toLong(), stringResource(R.string.stat_sets)),
+                                StatEntry(R.drawable.ic_bw_minifig, summary.minifigCount.toLong(), stringResource(R.string.stat_minifigs)),
+                                StatEntry(R.drawable.ic_bw_pieces, summary.pieceCount.toLong(), stringResource(R.string.stat_pieces)),
                             ),
                             keyPrefix = "collection",
                         )
@@ -218,7 +218,7 @@ private fun CollectionContent(
                     Spacer(Modifier.height(14.dp))
                 }
                 if (state.visibleItems.isEmpty()) {
-                    item { EmptyStateArt("Nothing here yet, add something") }
+                    item { EmptyStateArt(stringResource(R.string.collection_empty)) }
                 } else {
                     items(state.pageItems, key = { it.setNumber }) { item ->
                         SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
@@ -250,7 +250,7 @@ private fun CollectionContent(
                     }
                 }
                 if (state.soldItems.isEmpty()) {
-                    item { EmptyStateArt("No sales yet") }
+                    item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
                     items(state.salesPageItems, key = { it.setNumber }) { sold ->
                         SoldCard(sold)
@@ -283,7 +283,7 @@ private fun CollectionContent(
             val swapTint = if (salesActive) colors.onYellow else colors.text
             Icon(
                 painter = painterResource(R.drawable.ic_bw_sales_swap),
-                contentDescription = "Toggle sales mode",
+                contentDescription = stringResource(R.string.collection_toggle_sales_cd),
                 tint = swapTint,
                 modifier = Modifier.size(26.dp),
             )
@@ -306,7 +306,7 @@ private fun CollectionContent(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_bw_plus),
-                    contentDescription = "Add to collection",
+                    contentDescription = stringResource(R.string.collection_add_fab_cd),
                     tint = colors.onYellow,
                     modifier = Modifier.size(26.dp),
                 )
@@ -335,7 +335,7 @@ private fun CollectionContent(
 
         state.pendingDeleteItem?.let { item ->
             ConfirmDeleteDialog(
-                message = "Delete \"${item.name}\" and all its copies from your collection?",
+                message = stringResource(R.string.collection_delete_confirm, item.name),
                 onConfirm = onConfirmDeleteItem,
                 onCancel = onCancelDeleteItem,
             )
@@ -354,7 +354,7 @@ private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel
                 modifier = Modifier.padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Delete set", style = BwType.cardTitle, color = colors.text)
+                Text(stringResource(R.string.collection_delete_title), style = BwType.cardTitle, color = colors.text)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     message,
@@ -376,7 +376,7 @@ private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Cancel", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
+                        Text(stringResource(R.string.action_cancel), style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
                     }
                     Box(
                         modifier = Modifier
@@ -387,7 +387,7 @@ private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Delete", style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
+                        Text(stringResource(R.string.action_delete), style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
                     }
                 }
             }
@@ -398,9 +398,9 @@ private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel
 @Composable
 private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipItem(R.drawable.ic_bw_all, "All", selected == CollectionFilter.ALL, { onSelect(CollectionFilter.ALL) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_set, "Set", selected == CollectionFilter.SET, { onSelect(CollectionFilter.SET) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_minifig, "Minifig", selected == CollectionFilter.MINIFIG, { onSelect(CollectionFilter.MINIFIG) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_all, stringResource(R.string.filter_all), selected == CollectionFilter.ALL, { onSelect(CollectionFilter.ALL) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_set, stringResource(R.string.filter_set), selected == CollectionFilter.SET, { onSelect(CollectionFilter.SET) }, Modifier.weight(1f))
+        ChipItem(R.drawable.ic_bw_minifig, stringResource(R.string.filter_minifig), selected == CollectionFilter.MINIFIG, { onSelect(CollectionFilter.MINIFIG) }, Modifier.weight(1f))
     }
 }
 
@@ -443,9 +443,9 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 color = colors.linkAccent,
                 modifier = Modifier.clickable(onClick = onOpenDetail),
             )
-            MetaLine("Theme", item.theme)
-            MetaLine("Release", formatRelease(item.releaseMonth, item.releaseYear))
-            MetaLine("Pieces / Minifigs", "${item.pieces} / ${item.minifigs}")
+            MetaLine(stringResource(R.string.meta_theme), item.theme)
+            MetaLine(stringResource(R.string.meta_release), formatRelease(item.releaseMonth, item.releaseYear))
+            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
             StatusBadge(item.status)
         }
 
@@ -457,10 +457,10 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine("Retail", formatMoney(item.retailPrice, AppCurrency.VND))
-            PriceLine("Paid", formatMoney(item.totalPaid, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
             if (item.currentValue != null) {
-                PriceLine("Value", formatMoney(item.currentValue, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_value), formatMoney(item.currentValue, AppCurrency.VND))
                 item.growthPercent?.let { GrowthPill(it) }
             }
             Row(
@@ -474,7 +474,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(painter = painterResource(R.drawable.ic_bw_check), contentDescription = null, tint = colors.text, modifier = Modifier.size(13.dp))
-                Text("See Detail", style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                Text(stringResource(R.string.action_see_detail), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
             }
         }
     }
@@ -505,7 +505,7 @@ private fun SalesStatsRow(summary: SalesSummary) {
         ) {
             Icon(painterResource(R.drawable.ic_bw_set), null, tint = gold, modifier = Modifier.size(22.dp))
             Spacer(Modifier.height(6.dp))
-            Text("TOTAL SOLD", style = BwType.micro, color = gold)
+            Text(stringResource(R.string.sales_total_sold), style = BwType.micro, color = gold)
             Spacer(Modifier.height(2.dp))
             Text(animatedNumber(summary.totalSold.toLong(), "sales_total_sold").toString(), style = BwType.statNumber, color = colors.text)
         }
@@ -521,7 +521,7 @@ private fun SalesStatsRow(summary: SalesSummary) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("$", style = BwType.cardTitle.copy(fontSize = 18.sp), color = gold)
-                Text("SALE VALUE", style = BwType.micro.copy(fontSize = 12.sp), color = gold)
+                Text(stringResource(R.string.sales_sale_value), style = BwType.micro.copy(fontSize = 12.sp), color = gold)
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -557,7 +557,7 @@ private fun ProfitBar(summary: SalesSummary) {
                 modifier = Modifier.size(18.dp),
             )
             Text(
-                "Profit ${signedMoney(animatedNumber(summary.totalProfit, "sales_profit"))}",
+                stringResource(R.string.sales_profit_prefix, signedMoney(animatedNumber(summary.totalProfit, "sales_profit"))),
                 style = BwType.body.copy(fontWeight = FontWeight.Bold),
                 color = color,
             )
@@ -596,16 +596,16 @@ private fun SoldCard(sold: SoldItem) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
-            MetaLine("Theme", sold.theme)
-            MetaLine("Release", formatRelease(sold.releaseMonth, sold.releaseYear))
+            MetaLine(stringResource(R.string.meta_theme), sold.theme)
+            MetaLine(stringResource(R.string.meta_release), formatRelease(sold.releaseMonth, sold.releaseYear))
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            PriceLine("Retail", formatMoney(sold.retailPrice, AppCurrency.VND))
-            PriceLine("Sale", formatMoney(sold.saleValue, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_sale), formatMoney(sold.saleValue, AppCurrency.VND))
             val profitColor = if (sold.profit >= 0) colors.success else colors.error
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Profit", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+                Text(stringResource(R.string.sales_profit_label), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
                 Spacer(Modifier.width(6.dp))
                 Text(signedMoney(sold.profit), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
             }
@@ -653,10 +653,10 @@ private fun SeeDetailsDialog(
 
                 // Column header
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                    Text("Cond.", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1f))
-                    Text("Date", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.3f))
-                    Text("Qty", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(0.5f))
-                    Text("Paid", style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.5f))
+                    Text(stringResource(R.string.sd_cond), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.sd_date), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.3f))
+                    Text(stringResource(R.string.sd_qty), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(0.5f))
+                    Text(stringResource(R.string.price_paid), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.5f))
                     Spacer(Modifier.width(84.dp))
                 }
                 HorizontalDivider(color = colors.borderSoft)
@@ -666,14 +666,14 @@ private fun SeeDetailsDialog(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (copy.condition == Condition.NEW) "New" else "Used", style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
+                        Text(stringResource(if (copy.condition == Condition.NEW) R.string.sheet_condition_new else R.string.sheet_condition_used), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
                         Text(copy.dateAdded, style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
                         Text(copy.qty.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
                         Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
                         Row(modifier = Modifier.width(84.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_note),
-                                contentDescription = "Toggle note",
+                                contentDescription = stringResource(R.string.sd_toggle_note_cd),
                                 tint = if (copy.note != null) colors.linkAccent else colors.borderStrong,
                                 modifier = Modifier
                                     .size(20.dp)
@@ -684,7 +684,7 @@ private fun SeeDetailsDialog(
                             )
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_edit),
-                                contentDescription = "Edit copy",
+                                contentDescription = stringResource(R.string.sd_edit_copy_cd),
                                 tint = colors.textMuted2,
                                 modifier = Modifier
                                     .size(20.dp)
@@ -693,7 +693,7 @@ private fun SeeDetailsDialog(
                             )
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_delete),
-                                contentDescription = "Delete copy",
+                                contentDescription = stringResource(R.string.sd_delete_copy_cd),
                                 tint = colors.error,
                                 modifier = Modifier
                                     .size(20.dp)
@@ -716,7 +716,7 @@ private fun SeeDetailsDialog(
                 HorizontalDivider(color = colors.borderStrong)
                 // Avg row
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Avg", style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.sd_avg), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
                     Spacer(Modifier.weight(1.3f))
                     Text(item.totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
                     Text(formatMoney(item.avgPaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
@@ -730,7 +730,7 @@ private fun SeeDetailsDialog(
                     shape = RoundedCornerShape(999.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.brandYellow, contentColor = colors.onYellow),
                 ) {
-                    Text("Add Item", style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+                    Text(stringResource(R.string.sheet_add_item), style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         }

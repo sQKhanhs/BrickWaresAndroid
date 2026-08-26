@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -172,7 +174,7 @@ private fun SearchContent(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
             item {
-                Banner(imageAsset = "file:///android_asset/search_banner.png", title = "Search Sets")
+                Banner(imageAsset = "file:///android_asset/search_banner.png", title = stringResource(R.string.search_title))
                 Spacer(Modifier.height(16.dp))
             }
             item {
@@ -205,7 +207,7 @@ private fun SearchContent(
 
                 state.showSuggestions -> {
                     if (state.suggestions.isEmpty()) {
-                        item { SectionLabel("No matches for \"${state.query}\"") }
+                        item { SectionLabel(stringResource(R.string.search_no_matches, state.query)) }
                     } else {
                         item { SuggestionList(state.suggestions) { onOpenSetDetail(it.id) } }
                     }
@@ -221,7 +223,7 @@ private fun SearchContent(
 
                 else -> {
                     item {
-                        SectionLabel("Results for \"${state.submittedQuery.orEmpty()}\" (${state.results.size})")
+                        SectionLabel(stringResource(R.string.search_results_for, state.submittedQuery.orEmpty(), state.results.size))
                         Spacer(Modifier.height(10.dp))
                     }
                     items(state.results, key = { it.id }) { set ->
@@ -266,7 +268,7 @@ private fun SearchField(
         onValueChange = onQueryChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        placeholder = { Text("Search by name or set number") },
+        placeholder = { Text(stringResource(R.string.search_placeholder)) },
         leadingIcon = {
             Icon(painterResource(R.drawable.ic_bw_search), contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
         },
@@ -360,7 +362,7 @@ private fun ThemeCard(
         // Favorite star (top-right overlay).
         Icon(
             painter = painterResource(R.drawable.ic_bw_star),
-            contentDescription = if (isFavorite) "Unmark favorite" else "Mark favorite",
+            contentDescription = stringResource(if (isFavorite) R.string.search_unmark_favorite_cd else R.string.search_mark_favorite_cd),
             tint = if (isFavorite) colors.brandYellow else StarInactive,
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -425,22 +427,23 @@ private fun ThemeDetailView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "$totalCount ${if (totalCount == 1) "set" else "sets"}",
+                    pluralStringResource(R.plurals.home_theme_set_count, totalCount, totalCount),
                     style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                     color = colors.textMuted,
                 )
                 Spacer(Modifier.weight(1f))
+                val allSubthemesLabel = stringResource(R.string.search_all_subthemes)
                 if (subOptions.size > 1) {
-                    val subLabel = if (sub == ALL_SUBTHEMES) "All Subthemes" else sub
+                    val subLabel = if (sub == ALL_SUBTHEMES) allSubthemesLabel else sub
                     OptionDropdown(
                         selectedLabel = subLabel,
-                        options = listOf(ALL_SUBTHEMES to "All Subthemes") + subOptions.map { it.name to "${it.name} (${it.count})" },
+                        options = listOf(ALL_SUBTHEMES to allSubthemesLabel) + subOptions.map { it.name to "${it.name} (${it.count})" },
                         onSelect = onSubChange,
                     )
                 }
                 OptionDropdown(
-                    selectedLabel = sort.label,
-                    options = ThemeDetailSort.entries.map { it to it.label },
+                    selectedLabel = sort.text(),
+                    options = ThemeDetailSort.entries.map { it to it.text() },
                     onSelect = onSortChange,
                 )
             }
@@ -506,7 +509,7 @@ private fun ThemeSortSelector(selected: ThemeSort, onSelect: (ThemeSort) -> Unit
     val colors = BwTheme.colors
     var expanded by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Sort", style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.textMuted)
+        Text(stringResource(R.string.search_sort_label), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.textMuted)
         Box(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier
@@ -518,13 +521,13 @@ private fun ThemeSortSelector(selected: ThemeSort, onSelect: (ThemeSort) -> Unit
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(selected.label, style = BwType.body.copy(fontSize = 13.sp), color = colors.textSecondary)
+                Text(selected.text(), style = BwType.body.copy(fontSize = 13.sp), color = colors.textSecondary)
                 Text("▾", style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 ThemeSort.entries.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option.label, style = BwType.body.copy(fontSize = 13.sp), color = colors.text) },
+                        text = { Text(option.text(), style = BwType.body.copy(fontSize = 13.sp), color = colors.text) },
                         onClick = {
                             onSelect(option)
                             expanded = false
@@ -607,9 +610,9 @@ private fun ResultCard(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
-            MetaLine("Theme", set.theme)
-            MetaLine("Release", formatRelease(set.releaseMonth, set.releaseYear))
-            MetaLine("Pieces / Minifigs", "${set.pieces} / ${set.minifigs}")
+            MetaLine(stringResource(R.string.meta_theme), set.theme)
+            MetaLine(stringResource(R.string.meta_release), formatRelease(set.releaseMonth, set.releaseYear))
+            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
             StatusBadge(set.status)
         }
         Spacer(Modifier.width(10.dp))
@@ -618,7 +621,7 @@ private fun ResultCard(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine("Retail", formatRetail(set.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
             // Add to collection.
             Row(
                 modifier = Modifier
@@ -633,7 +636,7 @@ private fun ResultCard(
             ) {
                 Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Add", style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
+                Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
             }
             // Wishlist / Wishlisted.
             val wishlistModifier = Modifier
@@ -654,7 +657,7 @@ private fun ResultCard(
                     modifier = Modifier.size(14.dp),
                 )
                 Spacer(Modifier.width(6.dp))
-                Text(if (wishlisted) "Wishlisted" else "Wishlist", style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                Text(stringResource(if (wishlisted) R.string.action_wishlisted else R.string.action_wishlist), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
             }
         }
     }
@@ -680,17 +683,17 @@ private fun TooManyResults(query: String) {
                 Text("!", style = BwType.body.copy(fontWeight = FontWeight.Black), color = colors.card)
             }
             Text(
-                "There are too many results for \"$query\", please narrow your search.",
+                stringResource(R.string.search_too_many, query),
                 style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
                 color = colors.text,
             )
         }
-        Text("Search Tips", style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.textSecondary)
+        Text(stringResource(R.string.search_tips_title), style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.textSecondary)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Tip("Include the set's number, name, or theme.")
-            Tip("The quickest way to find a set is to enter its number.")
-            Tip("Try more specific terms or fewer keywords.")
-            Tip("Check the spelling and try again.")
+            Tip(stringResource(R.string.search_tip_1))
+            Tip(stringResource(R.string.search_tip_2))
+            Tip(stringResource(R.string.search_tip_3))
+            Tip(stringResource(R.string.search_tip_4))
         }
     }
 }
@@ -710,6 +713,28 @@ private fun NoResults(query: String) {
         modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("No sets found for \"$query\"", style = BwType.body.copy(fontSize = 13.sp), color = BwTheme.colors.textMuted)
+        Text(stringResource(R.string.search_no_results, query), style = BwType.body.copy(fontSize = 13.sp), color = BwTheme.colors.textMuted)
     }
 }
+
+/** Localized display label for the theme-browse sort order. */
+@Composable
+private fun ThemeSort.text(): String = stringResource(
+    when (this) {
+        ThemeSort.ALPHABETICAL -> R.string.sort_alphabetical
+        ThemeSort.COUNT -> R.string.sort_amount
+        ThemeSort.FAVORITE -> R.string.sort_favorites
+    },
+)
+
+/** Localized display label for the theme-detail sort order. */
+@Composable
+private fun ThemeDetailSort.text(): String = stringResource(
+    when (this) {
+        ThemeDetailSort.NEWEST -> R.string.sort_newest
+        ThemeDetailSort.OLDEST -> R.string.sort_oldest
+        ThemeDetailSort.PRICE_HIGH -> R.string.sort_price_high
+        ThemeDetailSort.PRICE_LOW -> R.string.sort_price_low
+        ThemeDetailSort.NAME -> R.string.sort_name
+    },
+)
