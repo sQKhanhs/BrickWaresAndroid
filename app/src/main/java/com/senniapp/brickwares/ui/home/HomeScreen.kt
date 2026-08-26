@@ -137,7 +137,7 @@ private fun HomeContent(
             } else {
                 // Logged out: prompt to sign in instead of the "Collection by Theme" card.
                 SignInPromptCard(
-                    message = "Sign in to save and sync your collection across devices.",
+                    message = "Sign in to save and sync your collection",
                     onSignIn = { SignInController.request() },
                 )
             }

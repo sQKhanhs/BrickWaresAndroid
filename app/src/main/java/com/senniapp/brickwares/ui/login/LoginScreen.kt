@@ -72,12 +72,6 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         ) {
             Box {
-                Text(
-                    "✕",
-                    style = BwType.cardTitle.copy(fontSize = 20.sp),
-                    color = colors.textMuted,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).clickable(onClick = onDismiss),
-                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -219,6 +213,13 @@ fun LoginScreen(
                         )
                     }
                 }
+                // Close (drawn after the Column so it stays on top and stays tappable).
+                Text(
+                    "✕",
+                    style = BwType.cardTitle.copy(fontSize = 20.sp),
+                    color = colors.textMuted,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).clickable(onClick = onDismiss),
+                )
             }
         }
     }

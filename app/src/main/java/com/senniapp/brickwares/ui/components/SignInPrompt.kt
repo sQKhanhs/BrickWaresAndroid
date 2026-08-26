@@ -1,31 +1,32 @@
 package com.senniapp.brickwares.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.senniapp.brickwares.R
+import coil3.compose.AsyncImage
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+
+/** Bundled "sign in" illustration (waving minifig with a phone), shown in the logged-out prompt. */
+private const val SIGN_IN_ART = "file:///android_asset/sign_in.png"
 
 /** Live signed-in state, for gating write features (add/edit/delete need an account). */
 @Composable
@@ -36,8 +37,8 @@ fun rememberIsLoggedIn(): Boolean {
 
 /**
  * The logged-out placeholder shown where owned-item content would be (Home theme card, the
- * Collection/Wishlist/Sales lists): a lock + message + a "Sign In" button that opens the sign-in
- * overlay. Only signed-in users can add/edit/delete; logged-out users can still browse + search.
+ * Collection/Wishlist/Sales lists): a centered **Sign In** button, then the message and the sign-in
+ * illustration below it. Only signed-in users can add/edit/delete; logged-out users still browse/search.
  */
 @Composable
 fun SignInPromptCard(
@@ -49,27 +50,13 @@ fun SignInPromptCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 32.dp, start = 12.dp, end = 12.dp),
+            .padding(top = 20.dp, start = 12.dp, end = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_bw_lock),
-            contentDescription = null,
-            tint = colors.textFaint,
-            modifier = Modifier.size(30.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            message,
-            style = BwType.body.copy(fontSize = 13.sp),
-            color = colors.textMuted,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(18.dp))
         Button(
             onClick = onSignIn,
-            shape = RoundedCornerShape(50),
+            modifier = Modifier.fillMaxWidth(0.5f).height(52.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.brandYellow,
                 contentColor = colors.onYellow,
@@ -77,5 +64,19 @@ fun SignInPromptCard(
         ) {
             Text("Sign In", style = BwType.pill)
         }
+        Spacer(Modifier.height(28.dp))
+        Text(
+            message,
+            style = BwType.cardTitle,
+            color = colors.text,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
+        AsyncImage(
+            model = SIGN_IN_ART,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.width(160.dp).aspectRatio(450f / 601f),
+        )
     }
 }

@@ -1,11 +1,9 @@
 package com.senniapp.brickwares.ui.settings
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
-import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,9 +24,6 @@ class SettingsViewModel(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
-
-    /** Guards against launching a second Credential Manager request while one is in flight. */
-    private var signingIn = false
 
     init {
         authRepository.authState
@@ -52,25 +47,7 @@ class SettingsViewModel(
             .launchIn(viewModelScope)
     }
 
-    // ---- Account ----
-
-    /** Requires an Activity context — Credential Manager anchors its UI to the current activity. */
-    fun onSignIn(context: Context) {
-        if (signingIn) return
-        signingIn = true
-        viewModelScope.launch {
-            val message = when (val result = authRepository.signInWithGoogle(context)) {
-                SignInResult.Success -> null // authState flow flips the UI to signed-in
-                SignInResult.Cancelled -> null // user backed out; stay quiet
-                SignInResult.NoCredential ->
-                    "No Google account available on this device"
-                is SignInResult.Error -> "Sign-in failed: ${result.message}"
-                SignInResult.EmailConfirmationRequired -> null // n/a for Google sign-in
-            }
-            if (message != null) _uiState.update { it.copy(toastMessage = message) }
-            signingIn = false
-        }
-    }
+    // ---- Account (sign-in is handled by the shared sign-in modal via SignInController) ----
 
     fun onSignOut() {
         viewModelScope.launch { authRepository.signOut() }

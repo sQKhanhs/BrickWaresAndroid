@@ -47,9 +47,11 @@ fun EmptyStateArt(text: String, modifier: Modifier = Modifier) {
             model = EMPTY_ART,
             contentDescription = null,
             contentScale = ContentScale.Fit,
+            // Same displayed width as the logged-out sign-in illustration (SignInPromptCard); the
+            // art is tight-cropped to the figure so it renders at a matching size.
             modifier = Modifier
-                .width(230.dp)
-                .aspectRatio(600f / 328f),
+                .width(160.dp)
+                .aspectRatio(350f / 431f),
         )
     }
 }

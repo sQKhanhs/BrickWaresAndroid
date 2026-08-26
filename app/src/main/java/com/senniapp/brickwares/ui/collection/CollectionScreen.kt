@@ -193,8 +193,8 @@ private fun CollectionContent(
                 }
                 item {
                     SignInPromptCard(
-                        message = if (sales) "Sign in to track your sales."
-                        else "Sign in to view and manage your collection.",
+                        message = if (sales) "Sign in to track your sales"
+                        else "Sign in to view and manage your collection",
                         onSignIn = { SignInController.request() },
                     )
                 }

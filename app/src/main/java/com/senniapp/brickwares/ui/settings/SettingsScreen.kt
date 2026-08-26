@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -35,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
@@ -49,6 +50,7 @@ import androidx.compose.material3.DropdownMenuItem
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.ui.theme.ThemeMode
@@ -62,14 +64,12 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val isOnline = rememberIsOnline()
     SettingsContent(
         state = state,
         themeMode = themeMode,
         onThemeModeChange = onThemeModeChange,
         isOnline = isOnline,
-        onSignIn = { viewModel.onSignIn(context) },
         onSignOut = viewModel::onSignOut,
         onOpenAvatarPicker = viewModel::onOpenAvatarPicker,
         onCloseAvatarPicker = viewModel::onCloseAvatarPicker,
@@ -94,7 +94,6 @@ private fun SettingsContent(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     isOnline: Boolean = true,
-    onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onOpenAvatarPicker: () -> Unit,
     onCloseAvatarPicker: () -> Unit,
@@ -168,25 +167,20 @@ private fun SettingsContent(
                     }
                 } else {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(painterResource(R.drawable.ic_bw_lock), contentDescription = null, tint = colors.textFaint, modifier = Modifier.size(28.dp))
-                        Text(
-                            "Sign in to sync your collection across devices and back it up.",
-                            style = BwType.body.copy(fontSize = 12.sp),
-                            color = colors.textMuted,
-                        )
-                        // Google sign-in needs network — hidden while offline.
-                        if (isOnline) {
-                            Pill(text = "Sign in with Google", filled = true, onClick = onSignIn)
-                        } else {
-                            Text(
-                                "You're offline — sign in when connected.",
-                                style = BwType.body.copy(fontSize = 12.sp),
-                                color = colors.textFaint,
-                            )
+                        // Opens the sign-in modal (Google + email/password), which handles offline.
+                        Button(
+                            onClick = { SignInController.request() },
+                            modifier = Modifier.fillMaxWidth(0.5f).height(52.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.brandYellow,
+                                contentColor = colors.onYellow,
+                            ),
+                        ) {
+                            Text("Sign in", style = BwType.pill)
                         }
                     }
                 }

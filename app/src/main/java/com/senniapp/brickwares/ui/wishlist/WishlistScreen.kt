@@ -149,7 +149,7 @@ private fun WishlistContent(
                 }
                 item {
                     SignInPromptCard(
-                        message = "Sign in to build your wishlist.",
+                        message = "Sign in to build your wishlist",
                         onSignIn = { SignInController.request() },
                     )
                 }
