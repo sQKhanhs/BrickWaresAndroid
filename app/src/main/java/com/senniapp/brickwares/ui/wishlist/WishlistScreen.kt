@@ -30,20 +30,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
-import com.senniapp.brickwares.ui.components.NoImagePlaceholder
+import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.rememberCardImageReveal
 import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.Banner
@@ -258,28 +256,15 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Image (placeholder until real photography is wired).
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.placeholderA)
-                .clickable(onClick = onOpenDetail),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (item.imageUrl == null || reveal.failed) {
-                NoImagePlaceholder(item.itemType)
-            }
-            if (item.imageUrl != null) {
-                AsyncImage(
-                    model = item.imageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
-                    onState = reveal.onState,
-                )
-            }
-        }
+        // Whole-image fit (matches the Search card) so the full set is visible, not cropped.
+        SetThumb(
+            imageUrl = item.imageUrl,
+            itemType = item.itemType,
+            size = 72.dp,
+            iconSize = 30.dp,
+            modifier = Modifier.clickable(onClick = onOpenDetail),
+            onState = reveal.onState,
+        )
 
         Spacer(Modifier.width(12.dp))
 

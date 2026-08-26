@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,7 +45,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -68,7 +66,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
-import com.senniapp.brickwares.ui.components.NoImagePlaceholder
+import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.rememberCardImageReveal
 import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.PaginationBar
@@ -422,30 +420,15 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Image (placeholder until real photography is wired).
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.placeholderA)
-                .clickable(onClick = onOpenDetail),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Placeholder when there's no URL or the photo failed to load; it sits behind the
-            // AsyncImage, which covers it on success.
-            if (item.imageUrl == null || reveal.failed) {
-                NoImagePlaceholder(item.itemType)
-            }
-            if (item.imageUrl != null) {
-                AsyncImage(
-                    model = item.imageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
-                    onState = reveal.onState,
-                )
-            }
-        }
+        // Whole-image fit (matches the Search card) so the full set is visible, not cropped.
+        SetThumb(
+            imageUrl = item.imageUrl,
+            itemType = item.itemType,
+            size = 72.dp,
+            iconSize = 30.dp,
+            modifier = Modifier.clickable(onClick = onOpenDetail),
+            onState = reveal.onState,
+        )
 
         Spacer(Modifier.width(12.dp))
 
@@ -603,17 +586,13 @@ private fun SoldCard(sold: SoldItem) {
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        Box(
-            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (sold.imageUrl == null || reveal.failed) {
-                NoImagePlaceholder(sold.itemType)
-            }
-            if (sold.imageUrl != null) {
-                AsyncImage(model = sold.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize(), onState = reveal.onState)
-            }
-        }
+        SetThumb(
+            imageUrl = sold.imageUrl,
+            itemType = sold.itemType,
+            size = 72.dp,
+            iconSize = 30.dp,
+            onState = reveal.onState,
+        )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
