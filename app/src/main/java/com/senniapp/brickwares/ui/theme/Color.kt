@@ -12,7 +12,15 @@ import androidx.compose.ui.graphics.Color
 val BrandYellow = Color(0xFFFFD500)
 val OnYellow = Color(0xFF1A1A1A)
 val SuccessGreen = Color(0xFF2F7D4F)
+// Brighter green for dark theme so success text/badges don't read dim against dark cards.
+val DarkSuccessGreen = Color(0xFF57C46E)
 val ErrorRed = Color(0xFFC0392B)
+// Status badges — Gift With Purchase (violet) and Promotional (teal). Distinct from the existing
+// red/gold/green/blue; darker in light theme for text contrast, lighter in dark theme.
+val LightGwp = Color(0xFF7A3E9D)
+val DarkGwp = Color(0xFFC79BE6)
+val LightPromo = Color(0xFF1E7F7B)
+val DarkPromo = Color(0xFF57C4BF)
 
 // ---- Light theme ----
 val LightBg = Color(0xFFFAF8F5)

@@ -9,10 +9,14 @@ import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 /**
  * Supabase-backed catalog. Fetches the `sets` table once, maps rows to [CatalogSet], and caches
@@ -25,6 +29,8 @@ class SupabaseCatalogRepository(
     @Volatile
     private var cache: List<CatalogSet> = emptyList()
     private val loadMutex = Mutex()
+    private val _revision = MutableStateFlow(0)
+    override val revision: StateFlow<Int> = _revision.asStateFlow()
 
     override suspend fun refresh() {
         if (cache.isNotEmpty()) return
@@ -36,11 +42,13 @@ class SupabaseCatalogRepository(
                     .select(
                         Columns.raw(
                             "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
-                                "minifigs,set_prices(region,retail_price)",
+                                "minifigs,availability,set_prices(region,retail_price,date_last_available)",
                         ),
                     )
                     .decodeList<SetRow>()
                 cache = rows.map { it.toCatalogSet() }
+                // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
+                _revision.value += 1
             } catch (e: Exception) {
                 // Don't crash the app on a network/permission failure — leave the cache empty so
                 // callers show an empty state and a later call can retry. (TODO: surface an error state.)
@@ -74,6 +82,8 @@ class SupabaseCatalogRepository(
         val year: Int? = null,
         val pieces: Int? = null,
         val minifigs: Int? = null,
+        /** Brickset sales channel: "Retail", "LEGO exclusive", "Retail - limited", GWP, etc. */
+        val availability: String? = null,
         @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
         /**
@@ -88,6 +98,28 @@ class SupabaseCatalogRepository(
             return CurrencyConverter.toVnd(chosen.retailPrice!!, currency)
         }
 
+        /**
+         * Availability badge (Arch Decision: only mark RETIRED when actually retired — no forward
+         * estimate). Retirement wins over the sales-channel badge: a set is RETIRED once the latest
+         * known `date_last_available` (LEGO.com exit date) is in the past. Otherwise the Brickset
+         * `availability` channel maps to EXCLUSIVE (LEGO exclusive), GWP (gift with purchase), or
+         * PROMO (promotional); anything else is AVAILABLE. Sets with no exit date are treated as still
+         * available (unknown, not retired).
+         */
+        private fun deriveStatus(): Availability {
+            val lastAvailable = prices
+                .mapNotNull { it.dateLastAvailable?.take(10) }
+                .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+                .maxOrNull()
+            if (lastAvailable != null && lastAvailable.isBefore(LocalDate.now())) return Availability.RETIRED
+            return when {
+                availability.equals("LEGO exclusive", ignoreCase = true) -> Availability.EXCLUSIVE
+                availability.equals("LEGO Gift with Purchase", ignoreCase = true) -> Availability.GWP
+                availability.equals("Promotional", ignoreCase = true) -> Availability.PROMO
+                else -> Availability.AVAILABLE
+            }
+        }
+
         fun toCatalogSet(): CatalogSet = CatalogSet(
             setNumber = setNumber,
             name = name ?: "",
@@ -100,8 +132,7 @@ class SupabaseCatalogRepository(
             minifigs = minifigs ?: 0,
             // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
             retailPrice = retailVnd(),
-            // TODO: derive RETIRED from set_prices.date_last_available once that's read.
-            status = Availability.AVAILABLE,
+            status = deriveStatus(),
             subtheme = subtheme ?: "General",
             // Brickset's image host is behind Cloudflare (blocks non-browser clients), so use
             // Rebrickable's open CDN, addressed by set number + variant. Falls back to a type icon
@@ -118,6 +149,8 @@ class SupabaseCatalogRepository(
     private data class PriceRow(
         val region: String? = null,
         @SerialName("retail_price") val retailPrice: Double? = null,
+        /** LEGO.com exit date (YYYY-MM-DD) for this region; past = retired. Null while still sold. */
+        @SerialName("date_last_available") val dateLastAvailable: String? = null,
     )
 }
 

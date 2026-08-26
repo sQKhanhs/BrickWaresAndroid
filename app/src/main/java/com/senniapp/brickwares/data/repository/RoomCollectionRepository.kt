@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -41,15 +42,27 @@ class RoomCollectionRepository(
     private val wishlistDao = db.wishlistDao()
     private val salesDao = db.salesDao()
 
+    init {
+        // Warm the catalog so the status overlay below has data to reconcile against (idempotent).
+        scope.launch { catalog.refresh() }
+    }
+
     // ---- Reads (Room is the source of truth) ----
 
+    // Reads are combined with the catalog [revision] so that when the catalog (re)loads, the
+    // catalog-derived status (e.g. RETIRED) is re-overlaid onto rows whose stored status is stale
+    // (it was denormalized at add-time). Room stays the source of truth for user data; status is
+    // reference data, so the live catalog value wins when available, falling back to the stored one.
+
     override fun getCollectionItems(): Flow<List<CollectionItem>> =
-        collectionDao.observeActive().map { rows ->
+        combine(collectionDao.observeActive(), catalog.revision) { rows, _ ->
             rows.groupBy { it.setNumber }.map { (_, group) -> group.toCollectionItem() }
         }
 
     override fun getWishlistItems(): Flow<List<WishlistItem>> =
-        wishlistDao.observeActive().map { rows -> rows.map { it.toWishlistItem() } }
+        combine(wishlistDao.observeActive(), catalog.revision) { rows, _ ->
+            rows.map { it.toWishlistItem() }
+        }
 
     override suspend fun getCollectionSummary(): CollectionSummary =
         collectionSummaryOf(getCollectionItems().first())
@@ -166,13 +179,24 @@ class RoomCollectionRepository(
     private fun String.toItemType() = if (this == "minifig") ItemType.MINIFIG else ItemType.SET
     private fun Condition.dbName() = if (this == Condition.USED) "used" else "new"
 
+    /**
+     * Current catalog status for a user row (matched by set_id, else set number), or null when the
+     * catalog isn't loaded (offline / not yet fetched) — callers then keep the stored denormalized
+     * status. This reconciles items added before the status logic (or before a set retired).
+     */
+    private fun catalogStatusFor(setId: Long?, setNumber: String): Availability? =
+        catalog.all().firstOrNull { c ->
+            (setId != null && c.setId == setId) || c.setNumber == setNumber
+        }?.status
+
     private fun List<CollectionCopyEntity>.toCollectionItem(): CollectionItem {
         val head = first()
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
             theme = head.theme, releaseYear = head.releaseYear, releaseMonth = head.releaseMonth,
             pieces = head.pieces, minifigs = head.minifigs, retailPrice = head.retailPrice ?: 0L,
-            currentValue = null, growthPercent = null, status = head.status.toAvailability(),
+            currentValue = null, growthPercent = null,
+            status = catalogStatusFor(head.setId, head.setNumber) ?: head.status.toAvailability(),
             imageUrl = head.imageUrl,
             copies = map { e ->
                 Copy(
@@ -189,7 +213,7 @@ class RoomCollectionRepository(
         setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
         releaseYear = releaseYear, releaseMonth = releaseMonth, pieces = pieces, minifigs = minifigs,
         retailPrice = retailPrice ?: 0L, currentValue = null, growthPercent = null,
-        status = status.toAvailability(), imageUrl = imageUrl,
+        status = catalogStatusFor(setId, setNumber) ?: status.toAvailability(), imageUrl = imageUrl,
     )
 
     private fun String.toAvailability(): Availability =

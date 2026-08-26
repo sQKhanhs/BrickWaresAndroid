@@ -7,7 +7,7 @@ enum class ItemType { SET, MINIFIG }
  * Availability status — every item always has one. RETIRED is derived from
  * `date_last_available` in the real data; AVAILABLE/EXCLUSIVE describe currently-sold sets.
  */
-enum class Availability { AVAILABLE, EXCLUSIVE, RETIRED }
+enum class Availability { AVAILABLE, EXCLUSIVE, GWP, PROMO, RETIRED }
 
 /**
  * One owned copy of a set. A set can hold several copies bought at different times, conditions

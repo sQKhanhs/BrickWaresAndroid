@@ -39,6 +39,8 @@ data class BwColors(
     val onYellow: Color,
     val success: Color,
     val error: Color,
+    val gwp: Color,
+    val promo: Color,
     val isDark: Boolean,
 )
 
@@ -63,6 +65,8 @@ private val LightBwColors = BwColors(
     onYellow = OnYellow,
     success = SuccessGreen,
     error = ErrorRed,
+    gwp = LightGwp,
+    promo = LightPromo,
     isDark = false,
 )
 
@@ -85,8 +89,10 @@ private val DarkBwColors = BwColors(
     placeholderB = DarkPlaceholderB,
     brandYellow = BrandYellow,
     onYellow = OnYellow,
-    success = SuccessGreen,
+    success = DarkSuccessGreen,
     error = ErrorRed,
+    gwp = DarkGwp,
+    promo = DarkPromo,
     isDark = true,
 )
 

@@ -72,7 +72,7 @@ const date = (v) => (v ? `'${String(v).slice(0, 10)}'` : "null"); // ISO datetim
 function setRow(s) {
   return `(${num(s.setID)}, ${q(s.number)}, ${num(s.numberVariant) || 1}, ${q(s.name)}, ${num(s.year)}, ` +
     `${q(s.theme)}, ${q(s.themeGroup)}, ${q(s.subtheme)}, ${q(s.category)}, 'set', ${num(s.pieces)}, ` +
-    `${num(s.minifigs)}, ${num(s.ageRange?.min)}, ${bool(s.released)}, null, ${q(s.image?.imageURL)}, ` +
+    `${num(s.minifigs)}, ${num(s.ageRange?.min)}, ${bool(s.released)}, ${q(s.availability)}, ${q(s.image?.imageURL)}, ` +
     `${q(s.image?.thumbnailURL)}, ${q(s.bricksetURL)}, ${num(s.rating)}, ${num(s.reviewCount)})`;
 }
 

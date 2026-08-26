@@ -237,6 +237,8 @@ fun StatusBadge(status: Availability) {
     val (text, color) = when (status) {
         Availability.RETIRED -> "Retired" to colors.error
         Availability.EXCLUSIVE -> "Exclusive" to colors.linkAccent2
+        Availability.GWP -> "GWP" to colors.gwp
+        Availability.PROMO -> "Promotional" to colors.promo
         Availability.AVAILABLE -> "Available" to colors.success
     }
     Box(

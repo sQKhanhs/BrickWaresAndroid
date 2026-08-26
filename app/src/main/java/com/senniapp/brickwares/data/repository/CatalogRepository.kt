@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.data.repository
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Read-only access to the reference catalog (sets/minifigs), sourced from Supabase.
@@ -14,6 +15,13 @@ import com.senniapp.brickwares.data.model.CatalogSet
 interface CatalogRepository {
     /** Loads the catalog into the in-memory cache if not already loaded (idempotent, safe to call often). */
     suspend fun refresh()
+
+    /**
+     * Bumps each time the in-memory cache is (re)loaded. Reactive consumers can [kotlinx.coroutines.flow.combine]
+     * this with their own flow to re-read [all]/[search] once the catalog becomes available — e.g. to
+     * overlay fresh catalog-derived status onto denormalized user rows.
+     */
+    val revision: StateFlow<Int>
 
     /** Snapshot of the cached catalog (empty until [refresh] has completed at least once). */
     fun all(): List<CatalogSet>
