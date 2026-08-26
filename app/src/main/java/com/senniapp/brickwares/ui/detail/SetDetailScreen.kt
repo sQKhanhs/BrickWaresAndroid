@@ -54,6 +54,8 @@ import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SetThumb
+import com.senniapp.brickwares.ui.components.rememberCardImageReveal
+import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -353,9 +355,12 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
 @Composable
 private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
     val colors = BwTheme.colors
+    val thumbUrl = set.thumbnailUrl ?: set.imageUrl
+    val reveal = rememberCardImageReveal(thumbUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -363,10 +368,11 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = set.thumbnailUrl ?: set.imageUrl,
+            imageUrl = thumbUrl,
             itemType = set.itemType,
             size = 60.dp,
             iconSize = 26.dp,
+            onState = reveal.onState,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

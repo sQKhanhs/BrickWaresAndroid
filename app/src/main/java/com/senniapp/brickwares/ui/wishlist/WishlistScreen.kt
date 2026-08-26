@@ -41,9 +41,11 @@ import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
-import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
+import com.senniapp.brickwares.ui.components.NoImagePlaceholder
+import com.senniapp.brickwares.ui.components.rememberCardImageReveal
+import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ChipItem
@@ -245,9 +247,12 @@ private val WishlistHeart = Color(0xFFC9506F)
 @Composable
 private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
+    // Reveal the card only once its image has resolved (loaded or failed); no URL reveals immediately.
+    val reveal = rememberCardImageReveal(item.imageUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -262,19 +267,16 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 .clickable(onClick = onOpenDetail),
             contentAlignment = Alignment.Center,
         ) {
+            if (item.imageUrl == null || reveal.failed) {
+                NoImagePlaceholder(item.itemType)
+            }
             if (item.imageUrl != null) {
                 AsyncImage(
                     model = item.imageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize(),
-                )
-            } else {
-                Icon(
-                    painter = painterResource(if (item.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                    contentDescription = null,
-                    tint = colors.textFaint,
-                    modifier = Modifier.size(30.dp),
+                    onState = reveal.onState,
                 )
             }
         }

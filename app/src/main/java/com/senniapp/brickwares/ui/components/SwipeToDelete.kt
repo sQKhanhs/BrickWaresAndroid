@@ -57,8 +57,13 @@ fun SwipeToDelete(
 @Composable
 private fun DeleteBackground(state: SwipeToDismissBoxState) {
     val colors = BwTheme.colors
+    val direction = state.dismissDirection
+    // Only paint the red affordance while actively swiping. At rest, keep it fully transparent so it
+    // never shows through a card that is itself transparent — e.g. during the fade-in reveal, where
+    // otherwise every not-yet-revealed card would flash a full red background.
+    if (direction == SwipeToDismissBoxValue.Settled) return
     val alignment =
-        if (state.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart
+        if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart
         else Alignment.CenterEnd
     Box(
         modifier = Modifier

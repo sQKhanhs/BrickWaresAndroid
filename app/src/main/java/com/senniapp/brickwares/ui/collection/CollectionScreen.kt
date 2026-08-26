@@ -68,6 +68,9 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.NoImagePlaceholder
+import com.senniapp.brickwares.ui.components.rememberCardImageReveal
+import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.animatedNumber
@@ -406,9 +409,14 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 @Composable
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
+    // Reveal the whole card only once its image has resolved, so a freshly added item never flashes
+    // a blank thumbnail before the photo streams in. A failed load (e.g. a set not on the CDN) still
+    // reveals the card (with a "No image" placeholder), and items without a URL reveal immediately.
+    val reveal = rememberCardImageReveal(item.imageUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -423,19 +431,18 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 .clickable(onClick = onOpenDetail),
             contentAlignment = Alignment.Center,
         ) {
+            // Placeholder when there's no URL or the photo failed to load; it sits behind the
+            // AsyncImage, which covers it on success.
+            if (item.imageUrl == null || reveal.failed) {
+                NoImagePlaceholder(item.itemType)
+            }
             if (item.imageUrl != null) {
                 AsyncImage(
                     model = item.imageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize(),
-                )
-            } else {
-                Icon(
-                    painter = painterResource(if (item.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                    contentDescription = null,
-                    tint = colors.textFaint,
-                    modifier = Modifier.size(30.dp),
+                    onState = reveal.onState,
                 )
             }
         }
@@ -586,9 +593,11 @@ private fun ProfitBar(summary: SalesSummary) {
 @Composable
 private fun SoldCard(sold: SoldItem) {
     val colors = BwTheme.colors
+    val reveal = rememberCardImageReveal(sold.imageUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -598,10 +607,11 @@ private fun SoldCard(sold: SoldItem) {
             modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(colors.placeholderA),
             contentAlignment = Alignment.Center,
         ) {
+            if (sold.imageUrl == null || reveal.failed) {
+                NoImagePlaceholder(sold.itemType)
+            }
             if (sold.imageUrl != null) {
-                AsyncImage(model = sold.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
-            } else {
-                Icon(painterResource(R.drawable.ic_bw_set), null, tint = colors.textFaint, modifier = Modifier.size(30.dp))
+                AsyncImage(model = sold.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize(), onState = reveal.onState)
             }
         }
         Spacer(Modifier.width(12.dp))

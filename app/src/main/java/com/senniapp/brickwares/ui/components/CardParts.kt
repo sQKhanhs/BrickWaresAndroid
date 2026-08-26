@@ -18,22 +18,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImagePainter
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.ItemType
@@ -48,8 +56,44 @@ import kotlin.math.roundToInt
  */
 
 /**
- * A set/minifig thumbnail: the catalog image when available, else the item-type icon on a
- * placeholder. [modifier] (e.g. `clickable`) is applied after the clip so ripples stay rounded.
+ * Tracks whether an item card's lead image has resolved, so the whole card can be revealed only
+ * once the photo is ready (no blank-thumbnail flash). A card creates one via [rememberCardImageReveal],
+ * feeds [onState] into its image (AsyncImage/SetThumb), applies [Modifier.revealWhenReady], and shows
+ * a [NoImagePlaceholder] while [failed] (or when there is no URL). Items with no URL start [ready].
+ */
+@Stable
+class CardImageReveal(hasImage: Boolean) {
+    var ready by mutableStateOf(!hasImage)
+        private set
+    var failed by mutableStateOf(false)
+        private set
+
+    val onState: (AsyncImagePainter.State) -> Unit = { state ->
+        when (state) {
+            is AsyncImagePainter.State.Success -> { failed = false; ready = true }
+            is AsyncImagePainter.State.Error -> { failed = true; ready = true }
+            else -> {}
+        }
+    }
+}
+
+/** Remembers a [CardImageReveal] for [imageUrl]; re-initializes if the URL changes. */
+@Composable
+fun rememberCardImageReveal(imageUrl: String?): CardImageReveal =
+    remember(imageUrl) { CardImageReveal(hasImage = imageUrl != null) }
+
+/** Fades a card in (via alpha) once its [reveal] image has resolved (loaded or failed). */
+@Composable
+fun Modifier.revealWhenReady(reveal: CardImageReveal): Modifier {
+    val alpha by animateFloatAsState(if (reveal.ready) 1f else 0f, label = "cardReveal")
+    return this.graphicsLayer { this.alpha = alpha }
+}
+
+/**
+ * A set/minifig thumbnail: the catalog image when available, else a "No image" placeholder (also
+ * shown if the image fails to load, e.g. a set not on the CDN). [modifier] (e.g. `clickable`) is
+ * applied after the clip so ripples stay rounded. Pass [onState] to let a parent card gate its
+ * reveal on this image's load.
  */
 @Composable
 fun SetThumb(
@@ -59,18 +103,10 @@ fun SetThumb(
     iconSize: Dp,
     corner: Dp = 10.dp,
     modifier: Modifier = Modifier,
+    onState: ((AsyncImagePainter.State) -> Unit)? = null,
 ) {
     val colors = BwTheme.colors
-    val typeIcon: @Composable () -> Unit = {
-        Icon(
-            painter = painterResource(
-                if (itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set,
-            ),
-            contentDescription = null,
-            tint = colors.textFaint,
-            modifier = Modifier.size(iconSize),
-        )
-    }
+    var failed by remember(imageUrl) { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .size(size)
@@ -82,19 +118,57 @@ fun SetThumb(
             .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
-        if (imageUrl == null) {
-            typeIcon()
-        } else {
-            // SubcomposeAsyncImage so a failed/missing image (e.g. set not on the CDN) falls back
-            // to the type icon instead of a blank box.
-            SubcomposeAsyncImage(
+        // Placeholder behind the image; the loaded photo covers it on success.
+        if (imageUrl == null || failed) {
+            NoImagePlaceholder(itemType, iconSize = iconSize)
+        }
+        if (imageUrl != null) {
+            AsyncImage(
                 model = imageUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize().padding(6.dp),
-                error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { typeIcon() } },
+                onState = { state ->
+                    when (state) {
+                        is AsyncImagePainter.State.Success -> failed = false
+                        is AsyncImagePainter.State.Error -> failed = true
+                        else -> {}
+                    }
+                    onState?.invoke(state)
+                },
             )
         }
+    }
+}
+
+/**
+ * Fallback shown inside a card thumbnail when an item has no image URL, or its photo failed to load
+ * (e.g. a set not on the CDN): the item-type icon over a small "No image available" caption. Sized
+ * to fit small (72dp) card thumbnails.
+ */
+@Composable
+fun NoImagePlaceholder(itemType: ItemType, modifier: Modifier = Modifier, iconSize: Dp = 24.dp) {
+    val colors = BwTheme.colors
+    Column(
+        modifier = modifier.fillMaxSize().padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            painter = painterResource(
+                if (itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set,
+            ),
+            contentDescription = null,
+            tint = colors.textFaint,
+            modifier = Modifier.size(iconSize),
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = "No image",
+            style = BwType.body.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+            color = colors.textMuted,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

@@ -97,7 +97,7 @@ class RoomCollectionRepository(
                     releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                     pieces = item.pieces, minifigs = item.minifigs,
                     retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                    status = item.status.name, imageUrl = item.imageUrl,
+                    status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
                     quantity = copy.qty, condition = copy.condition.dbName(),
                     pricePaid = copy.pricePaid, acquiredOn = copy.dateAdded.ifBlank { null },
                     notes = copy.note, deleted = false, updatedAt = now, dirty = true,
@@ -137,7 +137,7 @@ class RoomCollectionRepository(
                 releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                 pieces = item.pieces, minifigs = item.minifigs,
                 retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                status = item.status.name, imageUrl = item.imageUrl,
+                status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
                 deleted = false, updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
