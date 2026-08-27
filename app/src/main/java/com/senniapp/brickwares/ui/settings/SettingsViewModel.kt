@@ -89,10 +89,8 @@ class SettingsViewModel(
     }
 
     // ---- Preferences ----
-
-    fun onLanguageChange(language: AppLanguage) {
-        _uiState.update { it.copy(language = language) }
-    }
+    // Language is applied by persisting the tag + recreating the activity (SettingsScreen), and the
+    // initial selection is derived from the effective locale above — so there's no VM setter for it.
 
     fun onCurrencyChange(currency: AppCurrency) {
         _uiState.update { it.copy(currency = currency) }

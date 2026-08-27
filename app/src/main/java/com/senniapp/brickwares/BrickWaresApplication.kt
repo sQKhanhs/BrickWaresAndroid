@@ -9,6 +9,7 @@ import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.senniapp.brickwares.data.local.AppGraph
+import com.senniapp.brickwares.data.local.LocalePrefs
 
 /**
  * Application entry point.
@@ -21,6 +22,7 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        LocalePrefs.init(this)
         AppGraph.init(this)
     }
 

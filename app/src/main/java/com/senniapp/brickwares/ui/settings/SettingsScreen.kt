@@ -36,7 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.app.Activity
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
@@ -49,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.rememberIsOnline
@@ -67,6 +71,10 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val isOnline = rememberIsOnline()
+    val context = LocalContext.current
+    // Derive the active language from the live config, not retained VM state (the VM survives the
+    // recreate, so its init-time snapshot would go stale after a switch).
+    val currentLanguage = AppLanguage.fromTag(LocalConfiguration.current.locales[0].language)
     SettingsContent(
         state = state,
         themeMode = themeMode,
@@ -79,7 +87,14 @@ fun SettingsScreen(
         onRequestDelete = viewModel::onRequestDeleteAccount,
         onCancelDelete = viewModel::onCancelDeleteAccount,
         onConfirmDelete = viewModel::onConfirmDeleteAccount,
-        onLanguageChange = viewModel::onLanguageChange,
+        // Persist the chosen language and recreate the activity so resources re-resolve to it.
+        currentLanguage = currentLanguage,
+        onLanguageChange = { lang ->
+            if (lang != currentLanguage) {
+                LocalePrefs.languageTag = lang.tag
+                (context as? Activity)?.recreate()
+            }
+        },
         onCurrencyChange = viewModel::onCurrencyChange,
         onToggleRetirement = viewModel::onToggleRetirementAlerts,
         onToggleAnalytics = viewModel::onToggleAnalytics,
@@ -103,6 +118,7 @@ private fun SettingsContent(
     onRequestDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
+    currentLanguage: AppLanguage,
     onLanguageChange: (AppLanguage) -> Unit,
     onCurrencyChange: (AppCurrency) -> Unit,
     onToggleRetirement: () -> Unit,
@@ -192,7 +208,7 @@ private fun SettingsContent(
             Section(stringResource(R.string.settings_section_display)) {
                 DropdownRow(
                     label = stringResource(R.string.settings_language),
-                    selectedLabel = state.language.label,
+                    selectedLabel = currentLanguage.label,
                     options = AppLanguage.entries.map { it to it.label },
                     onSelect = onLanguageChange,
                 )
