@@ -107,8 +107,8 @@
     <string name="settings_choose_avatar">Chọn ảnh đại diện</string>
 
     <!-- ============ Collection / Sales ============ -->
-    <string name="collection_title">Bộ sưu tập của tôi</string>
-    <string name="sales_title">Đã bán của tôi</string>
+    <string name="collection_title">Bộ sưu tập</string>
+    <string name="sales_title">Đã bán</string>
     <string name="collection_signin_prompt">Đăng nhập để xem và quản lý bộ sưu tập của bạn</string>
     <string name="sales_signin_prompt">Đăng nhập để theo dõi doanh số của bạn</string>
     <string name="collection_empty">Chưa có gì ở đây, hãy thêm mới</string>
@@ -134,7 +134,7 @@
     <string name="sd_delete_copy_cd">Xóa bản sao</string>
 
     <!-- ============ Wishlist ============ -->
-    <string name="wishlist_title">Mong muốn của tôi</string>
+    <string name="wishlist_title">Danh sách mong muốn</string>
     <string name="wishlist_signin_prompt">Đăng nhập để tạo danh sách mong muốn của bạn</string>
     <string name="wishlist_empty">Chưa có gì ở đây, hãy tìm kiếm</string>
     <string name="wishlist_search_fab_cd">Tìm kiếm bộ</string>
