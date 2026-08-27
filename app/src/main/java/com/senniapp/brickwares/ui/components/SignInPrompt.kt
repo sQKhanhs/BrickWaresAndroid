@@ -33,7 +33,8 @@ private const val SIGN_IN_ART = "file:///android_asset/sign_in.png"
 /** Live signed-in state, for gating write features (add/edit/delete need an account). */
 @Composable
 fun rememberIsLoggedIn(): Boolean {
-    val state by AuthRepository.authState.collectAsStateWithLifecycle(initialValue = AuthState.Loading)
+    // authState is a hot StateFlow, so this seeds from its current value — no logged-out flash.
+    val state by AuthRepository.authState.collectAsStateWithLifecycle()
     return state is AuthState.SignedIn
 }
 

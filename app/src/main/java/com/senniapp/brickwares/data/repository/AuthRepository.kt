@@ -17,8 +17,13 @@ import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -62,9 +67,14 @@ sealed interface SignInResult {
 object AuthRepository {
 
     private val client get() = SupabaseClientProvider.client
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Emits the live auth state; re-emits on sign-in, sign-out, and token refresh. */
-    val authState: Flow<AuthState> = client.auth.sessionStatus.map { status ->
+    /**
+     * The live auth state, held as a hot [StateFlow] shared eagerly from app start. Being hot means it
+     * always has a current [value], so UI collectors (e.g. `rememberIsLoggedIn`) start from the real
+     * state instead of flashing [Loading]/logged-out for a frame on every recomposition.
+     */
+    val authState: StateFlow<AuthState> = client.auth.sessionStatus.map { status ->
         when (status) {
             is SessionStatus.Authenticated ->
                 status.session.user?.let { AuthState.SignedIn(it.toAuthUser()) } ?: AuthState.SignedOut
@@ -72,7 +82,7 @@ object AuthRepository {
             is SessionStatus.RefreshFailure -> AuthState.SignedOut
             is SessionStatus.Initializing -> AuthState.Loading
         }
-    }
+    }.stateIn(scope, SharingStarted.Eagerly, AuthState.Loading)
 
     /**
      * Launches the native Google account picker and establishes a Supabase session from the returned
