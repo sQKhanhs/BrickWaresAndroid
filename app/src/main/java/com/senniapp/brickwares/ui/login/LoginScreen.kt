@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 
@@ -199,11 +200,11 @@ fun LoginScreen(
 
                     state.error?.let {
                         Spacer(Modifier.height(12.dp))
-                        Text(it, style = BwType.body.copy(fontSize = 13.sp), color = colors.error, textAlign = TextAlign.Center)
+                        Text(it.resolve(), style = BwType.body.copy(fontSize = 13.sp), color = colors.error, textAlign = TextAlign.Center)
                     }
                     state.info?.let {
                         Spacer(Modifier.height(12.dp))
-                        Text(it, style = BwType.body.copy(fontSize = 13.sp), color = colors.textSecondary, textAlign = TextAlign.Center)
+                        Text(it.resolve(), style = BwType.body.copy(fontSize = 13.sp), color = colors.textSecondary, textAlign = TextAlign.Center)
                     }
                     if (!isOnline) {
                         Spacer(Modifier.height(12.dp))

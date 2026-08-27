@@ -2,6 +2,8 @@ package com.senniapp.brickwares.ui.collection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
@@ -131,7 +133,7 @@ class CollectionViewModel(
         val item = _uiState.value.pendingDeleteItem ?: return
         repository.removeItem(item.setNumber)
         _uiState.update {
-            it.copy(pendingDeleteSetNumber = null, toastMessage = "${item.name} removed from Collection")
+            it.copy(pendingDeleteSetNumber = null, toastMessage = UiText.Res(R.string.toast_removed_collection, listOf(item.name)))
         }
     }
 

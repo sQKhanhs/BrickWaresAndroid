@@ -47,6 +47,7 @@ import com.senniapp.brickwares.ui.components.rememberCardImageReveal
 import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.blinkAttention
@@ -228,7 +229,7 @@ private fun WishlistContent(
             )
         }
 
-        BwToast(message = state.toastMessage, onDismiss = onToastShown)
+        BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
     }
 }
 

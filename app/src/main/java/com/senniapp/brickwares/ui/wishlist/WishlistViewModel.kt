@@ -2,6 +2,8 @@ package com.senniapp.brickwares.ui.wishlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
@@ -52,7 +54,7 @@ class WishlistViewModel(
         val item = _uiState.value.items.find { it.setNumber == setNumber }
         repository.removeFromWishlist(setNumber)
         if (item != null) {
-            _uiState.update { it.copy(toastMessage = "${item.name} removed from Wishlist") }
+            _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(item.name))) }
         }
     }
 

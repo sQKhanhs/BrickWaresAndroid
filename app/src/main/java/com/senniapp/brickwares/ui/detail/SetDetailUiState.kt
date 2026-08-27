@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.detail
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.ui.components.UiText
 
 /**
  * Immutable UI state for the Set Detail page. [set] is the catalog record; the ownership fields
@@ -19,5 +20,5 @@ data class SetDetailUiState(
     val addTarget: CatalogSet? = null,
     /** The catalog isn't available (offline / not yet loaded) so the detail can't be shown. */
     val offline: Boolean = false,
-    val toastMessage: String? = null,
+    val toastMessage: UiText? = null,
 )

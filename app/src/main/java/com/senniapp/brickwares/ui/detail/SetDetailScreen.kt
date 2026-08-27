@@ -54,6 +54,7 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
@@ -266,7 +267,7 @@ private fun SetDetailContent(
             ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
         }
 
-        BwToast(message = state.toastMessage, onDismiss = onToastShown)
+        BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
     }
 }
 

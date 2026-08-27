@@ -40,6 +40,21 @@
     <!-- No-image thumbnail fallback -->
     <string name="no_image">No image</string>
 
+    <!-- ============ Toasts (ViewModel-generated) ============ -->
+    <string name="toast_added_collection">%1$s added to Collection</string>
+    <string name="toast_added_wishlist">%1$s added to Wishlist</string>
+    <string name="toast_removed_collection">%1$s removed from Collection</string>
+    <string name="toast_removed_wishlist">%1$s removed from Wishlist</string>
+    <string name="toast_coming_soon">This isn\'t available in this preview yet</string>
+    <string name="toast_delete_account_soon">Account deletion isn\'t available in this preview yet</string>
+
+    <!-- Sign-in messages -->
+    <string name="login_err_no_google">No Google account available on this device</string>
+    <string name="login_info_confirm_email">Check your email to confirm your account, then sign in.</string>
+    <string name="login_err_invalid_email">Enter a valid email address</string>
+    <string name="login_err_password_short">Password must be at least %1$d characters</string>
+    <string name="login_err_password_mismatch">Passwords don\'t match</string>
+
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Home</string>
     <string name="nav_collection">Collection</string>

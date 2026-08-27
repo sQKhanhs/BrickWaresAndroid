@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.settings
 
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.ui.components.UiText
 
 /** Display language, chosen in Settings. (UI selection only for now — i18n isn't wired yet.) */
 enum class AppLanguage(val label: String) {
@@ -34,5 +35,5 @@ data class SettingsUiState(
     val avatar: AvatarGender = AvatarGender.MALE,
     /** Whether the "Choose Avatar" picker sheet is open. */
     val showAvatarPicker: Boolean = false,
-    val toastMessage: String? = null,
+    val toastMessage: UiText? = null,
 )

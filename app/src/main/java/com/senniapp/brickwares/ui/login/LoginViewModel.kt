@@ -4,8 +4,10 @@ import android.content.Context
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.SignInResult
+import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,9 +23,9 @@ data class LoginUiState(
     val password: String = "",
     val confirmPassword: String = "",
     val signingIn: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
     /** Non-error status, e.g. "check your email to confirm" after sign-up on a confirm-required project. */
-    val info: String? = null,
+    val info: UiText? = null,
 )
 
 /**
@@ -52,10 +54,10 @@ class LoginViewModel(
         if (_uiState.value.signingIn) return
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
-            val message = when (val result = authRepository.signInWithGoogle(context)) {
+            val message: UiText? = when (val result = authRepository.signInWithGoogle(context)) {
                 SignInResult.Success, SignInResult.Cancelled -> null
-                SignInResult.NoCredential -> "No Google account available on this device"
-                is SignInResult.Error -> result.message
+                SignInResult.NoCredential -> UiText.Res(R.string.login_err_no_google)
+                is SignInResult.Error -> UiText.Raw(result.message)
                 SignInResult.EmailConfirmationRequired -> null
             }
             _uiState.update { it.copy(signingIn = false, error = message) }
@@ -79,9 +81,9 @@ class LoginViewModel(
                     SignInResult.Success -> it.copy(signingIn = false) // AuthGate routes to the app
                     SignInResult.EmailConfirmationRequired -> it.copy(
                         signingIn = false, mode = LoginMode.SIGN_IN, password = "", confirmPassword = "",
-                        info = "Check your email to confirm your account, then sign in.",
+                        info = UiText.Res(R.string.login_info_confirm_email),
                     )
-                    is SignInResult.Error -> it.copy(signingIn = false, error = result.message)
+                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Raw(result.message))
                     else -> it.copy(signingIn = false)
                 }
             }
@@ -89,11 +91,11 @@ class LoginViewModel(
     }
 
     /** Returns an error message if the form is invalid, else null. */
-    private fun validate(s: LoginUiState): String? = when {
+    private fun validate(s: LoginUiState): UiText? = when {
         s.email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(s.email.trim()).matches() ->
-            "Enter a valid email address"
-        s.password.length < MIN_PASSWORD -> "Password must be at least $MIN_PASSWORD characters"
-        s.mode == LoginMode.SIGN_UP && s.password != s.confirmPassword -> "Passwords don't match"
+            UiText.Res(R.string.login_err_invalid_email)
+        s.password.length < MIN_PASSWORD -> UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD))
+        s.mode == LoginMode.SIGN_UP && s.password != s.confirmPassword -> UiText.Res(R.string.login_err_password_mismatch)
         else -> null
     }
 

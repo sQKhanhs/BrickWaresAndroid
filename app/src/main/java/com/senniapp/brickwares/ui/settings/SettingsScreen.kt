@@ -50,6 +50,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -279,7 +280,7 @@ private fun SettingsContent(
             )
         }
 
-        BwToast(message = state.toastMessage, onDismiss = onToastShown)
+        BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
     }
 }
 

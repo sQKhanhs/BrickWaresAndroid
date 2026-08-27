@@ -2,6 +2,7 @@ package com.senniapp.brickwares.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
@@ -9,6 +10,7 @@ import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -182,7 +184,7 @@ class SearchViewModel(
                 imageUrl = set.thumbnailUrl ?: set.imageUrl,
             ),
         )
-        _uiState.update { it.copy(toastMessage = "${set.name} added to Wishlist") }
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_added_wishlist, listOf(set.name))) }
     }
 
     // ---- Add to collection (shared sheet) ----
@@ -197,7 +199,7 @@ class SearchViewModel(
 
     fun onAddToCollectionSubmit(item: CollectionItem) {
         repository.addItem(item)
-        _uiState.update { it.copy(addTarget = null, toastMessage = "${item.name} added to Collection") }
+        _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name))) }
     }
 
     fun onToastShown() {

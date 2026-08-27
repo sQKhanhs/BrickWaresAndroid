@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.wishlist
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.ui.components.PAGE_SIZE
@@ -22,7 +23,7 @@ data class WishlistUiState(
     /** 1-based current page for the numbered pagination. */
     val page: Int = 1,
     /** Transient toast message (e.g. after a remove); cleared once shown. */
-    val toastMessage: String? = null,
+    val toastMessage: UiText? = null,
 ) {
     val isLoading: Boolean get() = !itemsLoaded
 

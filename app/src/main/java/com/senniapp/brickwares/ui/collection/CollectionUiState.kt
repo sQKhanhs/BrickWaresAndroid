@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.collection
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.Copy
@@ -41,7 +42,7 @@ data class CollectionUiState(
     /** When non-null, the swipe-to-delete confirmation dialog is open for this set. */
     val pendingDeleteSetNumber: String? = null,
     /** Transient toast message (e.g. after a delete); cleared once shown. */
-    val toastMessage: String? = null,
+    val toastMessage: UiText? = null,
 ) {
     /** The first Collection frame needs the summary *and* the items, so gate on both. */
     val isLoading: Boolean get() = summary == null || !itemsLoaded

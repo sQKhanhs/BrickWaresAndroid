@@ -2,8 +2,10 @@ package com.senniapp.brickwares.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,7 +83,7 @@ class SettingsViewModel(
         _uiState.update {
             it.copy(
                 showDeleteConfirm = false,
-                toastMessage = "Account deletion isn't available in this preview yet",
+                toastMessage = UiText.Res(R.string.toast_delete_account_soon),
             )
         }
     }
@@ -109,8 +111,8 @@ class SettingsViewModel(
     }
 
     /** Placeholder for actions whose real behaviour (files, external links) isn't built yet. */
-    fun onComingSoon(action: String) {
-        _uiState.update { it.copy(toastMessage = "$action isn't available in this preview yet") }
+    fun onComingSoon(@Suppress("UNUSED_PARAMETER") action: String) {
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_coming_soon)) }
     }
 
     fun onToastShown() {

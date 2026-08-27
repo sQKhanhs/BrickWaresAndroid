@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.search
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.ui.components.PAGE_SIZE
 
 /** A subtheme within a theme, with how many catalog sets it has. */
@@ -61,7 +62,7 @@ data class SearchUiState(
     val themeDetailPage: Int = 1,
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
-    val toastMessage: String? = null,
+    val toastMessage: UiText? = null,
 ) {
     val showThemeDetail: Boolean get() = themeDetail != null
     val showBrowse: Boolean get() = submittedQuery == null && query.isBlank()
