@@ -446,7 +446,9 @@ private fun Pill(text: String, filled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (filled) colors.text else colors.card)
+            // Theme-stable dark fill (not colors.text, which flips to near-white in dark and left the
+            // yellow label unreadable) so the pill stays dark with yellow text in both themes.
+            .background(if (filled) colors.onYellow else colors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
     ) {

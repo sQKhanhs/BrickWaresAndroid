@@ -10,9 +10,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import kotlinx.coroutines.delay
 
@@ -24,19 +24,22 @@ import kotlinx.coroutines.delay
 @Composable
 fun BoxScope.BwToast(message: String?, onDismiss: () -> Unit) {
     if (message == null) return
+    val colors = BwTheme.colors
     LaunchedEffect(message) {
         delay(2200)
         onDismiss()
     }
+    // Inverse-surface pill so it always contrasts with the page: dark pill + light text in the light
+    // theme, light pill + dark text in dark (a near-black pill was invisible on the dark background).
     Text(
         text = message,
         style = BwType.body.copy(fontSize = 12.sp),
-        color = Color.White,
+        color = colors.bg,
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(bottom = 100.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(Color(0xFF1A1A1A))
+            .background(colors.text)
             .padding(horizontal = 16.dp, vertical = 9.dp),
     )
 }
