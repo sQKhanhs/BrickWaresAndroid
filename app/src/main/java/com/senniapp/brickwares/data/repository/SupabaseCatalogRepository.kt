@@ -5,6 +5,7 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
@@ -134,10 +135,11 @@ class SupabaseCatalogRepository(
             retailPrice = retailVnd(),
             status = deriveStatus(),
             subtheme = subtheme ?: "General",
-            // Brickset's image host is behind Cloudflare (blocks non-browser clients), so use
-            // Rebrickable's open CDN, addressed by set number + variant. Falls back to a type icon
-            // in the UI when a set isn't on Rebrickable.
-            imageUrl = "https://cdn.rebrickable.com/media/sets/$setNumber-${numberVariant ?: 1}.jpg",
+            // Brickset's image host is Cloudflare-blocked for non-browser clients, so images come from
+            // hosts that load over plain HTTP: the built-set render from Rebrickable's CDN, and the
+            // preferred box shot from BrickLink — both addressed by set number + variant.
+            imageUrl = CatalogImages.renderUrl(setNumber, numberVariant ?: 1),
+            boxImageUrl = CatalogImages.boxUrl(setNumber, numberVariant ?: 1),
             thumbnailUrl = null,
             numberVariant = numberVariant ?: 1,
             setId = setId,

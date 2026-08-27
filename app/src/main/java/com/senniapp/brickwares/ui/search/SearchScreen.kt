@@ -587,9 +587,10 @@ private fun ResultCard(
     val isLoggedIn = rememberIsLoggedIn()
     val add = { if (isLoggedIn) onAddCollection() else SignInController.request() }
     val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
-    val thumbUrl = set.thumbnailUrl ?: set.imageUrl
-    // Reveal the card only once its image has resolved (loaded or failed).
-    val reveal = rememberCardImageReveal(thumbUrl)
+    // Prefer the box shot; fall back to the render. Reveal once the final image resolves.
+    val boxUrl = set.boxImageUrl
+    val renderUrl = set.thumbnailUrl ?: set.imageUrl
+    val reveal = rememberCardImageReveal(boxUrl ?: renderUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -600,7 +601,8 @@ private fun ResultCard(
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = thumbUrl,
+            imageUrl = boxUrl,
+            fallbackUrl = renderUrl,
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,

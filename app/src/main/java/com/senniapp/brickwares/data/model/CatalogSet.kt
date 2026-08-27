@@ -22,8 +22,13 @@ data class CatalogSet(
     val status: Availability,
     /** Sub-grouping within a theme (e.g. "Landmarks"). Defaults for catalog rows built from owned items. */
     val subtheme: String = "General",
-    /** Full catalog image (Brickset). Null for rows built from owned items without one. */
+    /** Rebrickable render of the built set. Null for rows built from owned items without one. */
     val imageUrl: String? = null,
+    /**
+     * BrickLink "original box" packaging photo — the preferred display image on cards and the detail
+     * hero. Falls back to [imageUrl] (the render) when a set has no box item (404).
+     */
+    val boxImageUrl: String? = null,
     /** Smaller image for list cards; falls back to [imageUrl] when absent. */
     val thumbnailUrl: String? = null,
     /** Brickset number variant (e.g. 1 for "10282-1"); disambiguates same-number sets in lists. */

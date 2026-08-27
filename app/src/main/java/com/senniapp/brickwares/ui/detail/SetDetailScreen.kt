@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,8 +27,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -62,6 +67,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
+import kotlinx.coroutines.launch
 import com.senniapp.brickwares.util.formatRetail
 import com.senniapp.brickwares.util.formatRelease
 
@@ -110,10 +116,18 @@ private fun SetDetailContent(
 ) {
     val colors = BwTheme.colors
     val isLoggedIn = rememberIsLoggedIn()
-    // When non-null, show the set image full-screen (tapped from the hero).
-    var fullImageUrl by remember { mutableStateOf<String?>(null) }
+    // Tapping the hero opens a full-screen image gallery (box shot + set render, swipeable).
+    var showGallery by remember { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         val set = state.set
+        // The URL the hero actually loaded (box, or its render fallback for a boxless set) — the
+        // gallery lists only images that exist, so a boxless set shows just the render (no dead page).
+        var heroResolved by remember(set?.id) { mutableStateOf<String?>(null) }
+        val galleryImages = when (heroResolved) {
+            set?.boxImageUrl -> listOfNotNull(set?.boxImageUrl, set?.imageUrl).distinct()
+            set?.imageUrl -> listOfNotNull(set?.imageUrl)
+            else -> emptyList()
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -153,18 +167,19 @@ private fun SetDetailContent(
                 return@Column
             }
 
-            // Hero: image + title + actions.
+            // Hero: image + title + actions. Prefer the box shot, fall back to the render.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                val heroImage = set.imageUrl ?: set.thumbnailUrl
                 SetThumb(
-                    imageUrl = heroImage,
+                    imageUrl = set.boxImageUrl,
+                    fallbackUrl = set.imageUrl,
                     itemType = set.itemType,
                     size = 96.dp,
                     iconSize = 40.dp,
                     corner = 12.dp,
-                    // Tap the image to view it full-screen (only when there's an image to show).
-                    modifier = if (heroImage != null) {
-                        Modifier.clickable { fullImageUrl = heroImage }
+                    onResolvedUrl = { heroResolved = it },
+                    // Tap the image to open the full-screen gallery (only when one has loaded).
+                    modifier = if (galleryImages.isNotEmpty()) {
+                        Modifier.clickable { showGallery = true }
                     } else {
                         Modifier
                     },
@@ -245,28 +260,10 @@ private fun SetDetailContent(
             )
         }
 
-        // Full-screen image viewer (tap anywhere / back to dismiss).
-        val fullImg = fullImageUrl
-        if (fullImg != null) {
-            Dialog(
-                onDismissRequest = { fullImageUrl = null },
-                properties = DialogProperties(usePlatformDefaultWidth = false),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xF2000000))
-                        .clickable { fullImageUrl = null },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AsyncImage(
-                        model = fullImg,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    )
-                }
-            }
+        // Full-screen image gallery: swipe between the images that actually loaded, tap a thumbnail
+        // to jump, tap the backdrop or back to dismiss.
+        if (showGallery && galleryImages.isNotEmpty()) {
+            ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
         }
 
         BwToast(message = state.toastMessage, onDismiss = onToastShown)
@@ -356,8 +353,9 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
 @Composable
 private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
     val colors = BwTheme.colors
-    val thumbUrl = set.thumbnailUrl ?: set.imageUrl
-    val reveal = rememberCardImageReveal(thumbUrl)
+    val boxUrl = set.boxImageUrl
+    val renderUrl = set.thumbnailUrl ?: set.imageUrl
+    val reveal = rememberCardImageReveal(boxUrl ?: renderUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -369,7 +367,8 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = thumbUrl,
+            imageUrl = boxUrl,
+            fallbackUrl = renderUrl,
             itemType = set.itemType,
             size = 60.dp,
             iconSize = 26.dp,
@@ -380,6 +379,83 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, maxLines = 1)
             MetaLine(stringResource(R.string.meta_release), formatRelease(set.releaseMonth, set.releaseYear))
             PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
+        }
+    }
+}
+
+/**
+ * Full-screen image gallery: a swipeable pager over the [candidates] (box shot + set render) with a
+ * thumbnail strip for jumping between them. Any candidate whose image 404s (e.g. a set that has a box
+ * but no render, or vice-versa) is dropped, so only real photos are listed. Tap the backdrop (or
+ * back) to dismiss.
+ */
+@Composable
+private fun ImageGalleryDialog(candidates: List<String>, onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    // Images that failed to load — removed from the pager and the thumbnail strip.
+    val failed = remember(candidates) { mutableStateListOf<String>() }
+    val images = candidates.filterNot { it in failed }
+    val onImageError: (String) -> Unit = { url -> if (url !in failed) failed.add(url) }
+    val pagerState = rememberPagerState(pageCount = { candidates.size - failed.size })
+    val scope = rememberCoroutineScope()
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                val url = images.getOrNull(page)
+                Box(
+                    modifier = Modifier.fillMaxSize().clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (url != null) {
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 96.dp),
+                            onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
+                        )
+                    }
+                }
+            }
+            // Close affordance.
+            Text(
+                "✕",
+                style = BwType.cardTitle.copy(fontSize = 22.sp),
+                color = Color.White,
+                modifier = Modifier.align(Alignment.TopEnd).padding(20.dp).clickable(onClick = onDismiss),
+            )
+            // Thumbnail strip — only meaningful with more than one image. The thumbnails render all
+            // candidates, so a 404 is detected and dropped even if the user never swipes to it.
+            if (images.size > 1) {
+                Row(
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    images.forEachIndexed { i, url ->
+                        val selected = i == pagerState.currentPage
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                                .border(
+                                    BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.brandYellow else Color(0x55FFFFFF)),
+                                    RoundedCornerShape(8.dp),
+                                )
+                                .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize().padding(4.dp),
+                                onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

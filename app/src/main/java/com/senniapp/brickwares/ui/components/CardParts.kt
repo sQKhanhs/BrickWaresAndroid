@@ -91,10 +91,11 @@ fun Modifier.revealWhenReady(reveal: CardImageReveal): Modifier {
 }
 
 /**
- * A set/minifig thumbnail: the catalog image when available, else a "No image" placeholder (also
- * shown if the image fails to load, e.g. a set not on the CDN). [modifier] (e.g. `clickable`) is
- * applied after the clip so ripples stay rounded. Pass [onState] to let a parent card gate its
- * reveal on this image's load.
+ * A set/minifig thumbnail: [imageUrl] first, then [fallbackUrl] if it fails to load (e.g. the box
+ * photo isn't on BrickLink → fall back to the render), else a "No image" placeholder. [modifier]
+ * (e.g. `clickable`) is applied after the clip so ripples stay rounded. [onState] reports only the
+ * TERMINAL load state (a mid-chain failure that has a fallback left is not forwarded), so a parent
+ * card can gate its reveal on the final image.
  */
 @Composable
 fun SetThumb(
@@ -104,10 +105,19 @@ fun SetThumb(
     iconSize: Dp,
     corner: Dp = 10.dp,
     modifier: Modifier = Modifier,
+    fallbackUrl: String? = null,
     onState: ((AsyncImagePainter.State) -> Unit)? = null,
+    /** Reports the URL that actually loaded (the box or its fallback), or null when all failed. */
+    onResolvedUrl: ((String?) -> Unit)? = null,
 ) {
     val colors = BwTheme.colors
-    var failed by remember(imageUrl) { mutableStateOf(false) }
+    // The ordered chain of URLs to try (dropping a fallback identical to the primary).
+    val urls = remember(imageUrl, fallbackUrl) {
+        listOfNotNull(imageUrl, fallbackUrl?.takeIf { it != imageUrl })
+    }
+    var index by remember(imageUrl, fallbackUrl) { mutableStateOf(0) }
+    var failed by remember(imageUrl, fallbackUrl) { mutableStateOf(urls.isEmpty()) }
+    val current = urls.getOrNull(index)
     Box(
         modifier = Modifier
             .size(size)
@@ -119,23 +129,23 @@ fun SetThumb(
             .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
-        // Placeholder behind the image; the loaded photo covers it on success.
-        if (imageUrl == null || failed) {
+        if (current == null || failed) {
             NoImagePlaceholder(itemType, iconSize = iconSize)
         }
-        if (imageUrl != null) {
+        if (current != null && !failed) {
             AsyncImage(
-                model = imageUrl,
+                model = current,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize().padding(6.dp),
                 onState = { state ->
                     when (state) {
-                        is AsyncImagePainter.State.Success -> failed = false
-                        is AsyncImagePainter.State.Error -> failed = true
+                        is AsyncImagePainter.State.Success -> { onState?.invoke(state); onResolvedUrl?.invoke(current) }
+                        is AsyncImagePainter.State.Error ->
+                            if (index < urls.lastIndex) index++
+                            else { failed = true; onState?.invoke(state); onResolvedUrl?.invoke(null) }
                         else -> {}
                     }
-                    onState?.invoke(state)
                 },
             )
         }

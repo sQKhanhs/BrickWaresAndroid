@@ -66,6 +66,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRelease
@@ -246,8 +247,9 @@ private val WishlistHeart = Color(0xFFC9506F)
 @Composable
 private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
-    // Reveal the card only once its image has resolved (loaded or failed); no URL reveals immediately.
-    val reveal = rememberCardImageReveal(item.imageUrl)
+    // Box shot first (fall back to the stored render). Reveal once the final image resolves.
+    val boxUrl = CatalogImages.boxUrl(item.setNumber)
+    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -257,9 +259,10 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Whole-image fit (matches the Search card) so the full set is visible, not cropped.
+        // Box shot first (fall back to the stored render); whole-image fit so nothing is cropped.
         SetThumb(
-            imageUrl = item.imageUrl,
+            imageUrl = boxUrl,
+            fallbackUrl = item.imageUrl,
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,

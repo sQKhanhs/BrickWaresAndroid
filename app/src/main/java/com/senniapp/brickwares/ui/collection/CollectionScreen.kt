@@ -80,6 +80,7 @@ import com.senniapp.brickwares.ui.components.SwipeToDelete
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRelease
@@ -410,7 +411,8 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
     // Reveal the whole card only once its image has resolved, so a freshly added item never flashes
     // a blank thumbnail before the photo streams in. A failed load (e.g. a set not on the CDN) still
     // reveals the card (with a "No image" placeholder), and items without a URL reveal immediately.
-    val reveal = rememberCardImageReveal(item.imageUrl)
+    val boxUrl = CatalogImages.boxUrl(item.setNumber)
+    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -420,9 +422,10 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Whole-image fit (matches the Search card) so the full set is visible, not cropped.
+        // Box shot first (fall back to the stored render), whole-image fit so nothing is cropped.
         SetThumb(
-            imageUrl = item.imageUrl,
+            imageUrl = boxUrl,
+            fallbackUrl = item.imageUrl,
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
@@ -576,7 +579,8 @@ private fun ProfitBar(summary: SalesSummary) {
 @Composable
 private fun SoldCard(sold: SoldItem) {
     val colors = BwTheme.colors
-    val reveal = rememberCardImageReveal(sold.imageUrl)
+    val boxUrl = CatalogImages.boxUrl(sold.setNumber)
+    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -587,7 +591,8 @@ private fun SoldCard(sold: SoldItem) {
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = sold.imageUrl,
+            imageUrl = boxUrl,
+            fallbackUrl = sold.imageUrl,
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
