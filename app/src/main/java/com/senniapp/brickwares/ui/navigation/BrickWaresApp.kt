@@ -104,9 +104,11 @@ fun BrickWaresApp(
             BwBottomBar(
                 selected = selectedTab,
                 onSelect = { tab ->
-                    // Reset Search only when arriving from a different tab (not when returning from
-                    // a Set Detail overlay, which keeps the current results in place).
-                    if (tab == BwTab.Search && selectedTab != BwTab.Search) searchViewModel.resetToDefault()
+                    // Tapping the Search nav always returns to the search home (browse view) — even
+                    // from results, a theme-detail list, or a Set Detail overlay — so the user can
+                    // start a fresh search from anywhere. (The detail's back arrow still restores the
+                    // previous results, since that path doesn't reset.)
+                    if (tab == BwTab.Search) searchViewModel.resetToDefault()
                     selectedTab = tab
                     detailSetNumber = null
                 },
@@ -125,6 +127,8 @@ fun BrickWaresApp(
                     onBack = { detailSetNumber = null },
                     onOpenSetDetail = { detailSetNumber = it },
                     onNavigateToSearch = { detailSetNumber = null; selectedTab = BwTab.Search },
+                    // Show the quick-search FAB on the detail only when it's opened from the Search tab.
+                    showSearchFab = selectedTab == BwTab.Search,
                 )
             } else {
                 when (selectedTab) {

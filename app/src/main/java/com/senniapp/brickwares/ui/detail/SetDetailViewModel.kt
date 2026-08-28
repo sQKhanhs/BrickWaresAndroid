@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
@@ -73,6 +74,7 @@ class SetDetailViewModel(
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 totalPaid = owned?.totalPaid ?: 0L,
+                ownedItem = owned,
                 isWishlisted = wishlist.any { w -> w.setNumber == sn },
                 related = related,
             )
@@ -98,13 +100,34 @@ class SetDetailViewModel(
     }
 
     fun onDismissAdd() {
-        _uiState.update { it.copy(addTarget = null) }
+        _uiState.update { it.copy(addTarget = null, editingCopy = null) }
     }
 
     fun onAddToCollectionSubmit(item: CollectionItem) {
-        repository.addItem(item)
-        _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name))) }
+        if (_uiState.value.editingCopy != null) {
+            // Edit mode: replace the copy rather than adding a new one.
+            repository.updateCopy(item.setNumber, item.copies.first())
+            _uiState.update { it.copy(addTarget = null, editingCopy = null) }
+        } else {
+            repository.addItem(item)
+            _uiState.update {
+                it.copy(addTarget = null, editingCopy = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name)))
+            }
+        }
     }
+
+    // ---- Owned-item copies (the See-Details dialog, shown for a set already in the collection) ----
+
+    fun onSeeCopies() = _uiState.update { it.copy(showCopies = true) }
+    fun onDismissCopies() = _uiState.update { it.copy(showCopies = false) }
+
+    fun onDeleteCopy(setNumber: String, copyId: String) = repository.removeCopy(setNumber, copyId)
+
+    /** Add another copy of this owned set (opens the Add sheet, fresh copy). */
+    fun onAddCopyForSet() = _uiState.update { it.copy(showCopies = false, editingCopy = null, addTarget = it.set) }
+
+    /** Edit an existing copy (opens the Add sheet in edit mode). */
+    fun onEditCopy(copy: Copy) = _uiState.update { it.copy(showCopies = false, editingCopy = copy, addTarget = it.set) }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 

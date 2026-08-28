@@ -51,6 +51,7 @@ import coil3.compose.AsyncImagePainter
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
@@ -60,9 +61,9 @@ import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.SearchModal
+import com.senniapp.brickwares.ui.components.SeeDetailsDialog
 import com.senniapp.brickwares.ui.components.SetThumb
-import com.senniapp.brickwares.ui.components.rememberCardImageReveal
-import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -82,6 +83,8 @@ fun SetDetailScreen(
     onOpenSetDetail: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    /** When true (the detail is viewed from the Search tab), a quick-search FAB is shown. */
+    showSearchFab: Boolean = false,
     viewModel: SetDetailViewModel = viewModel(),
 ) {
     LaunchedEffect(setNumber) { viewModel.load(setNumber) }
@@ -96,7 +99,13 @@ fun SetDetailScreen(
         onDismissAdd = viewModel::onDismissAdd,
         onSearchCatalog = viewModel::searchCatalog,
         onAddCollectionSubmit = viewModel::onAddToCollectionSubmit,
+        onSeeCopies = viewModel::onSeeCopies,
+        onDismissCopies = viewModel::onDismissCopies,
+        onDeleteCopy = viewModel::onDeleteCopy,
+        onEditCopy = viewModel::onEditCopy,
+        onAddCopyForSet = viewModel::onAddCopyForSet,
         onToastShown = viewModel::onToastShown,
+        showSearchFab = showSearchFab,
         modifier = modifier,
     )
 }
@@ -112,10 +121,17 @@ private fun SetDetailContent(
     onDismissAdd: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddCollectionSubmit: (CollectionItem) -> Unit,
+    onSeeCopies: () -> Unit,
+    onDismissCopies: () -> Unit,
+    onDeleteCopy: (String, String) -> Unit,
+    onEditCopy: (Copy) -> Unit,
+    onAddCopyForSet: () -> Unit,
     onToastShown: () -> Unit,
+    showSearchFab: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    var showSearchModal by remember { mutableStateOf(false) }
     val isLoggedIn = rememberIsLoggedIn()
     // Tapping the hero opens a full-screen image gallery (box shot + set render, swipeable).
     var showGallery by remember { mutableStateOf(false) }
@@ -187,26 +203,36 @@ private fun SetDetailContent(
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
-                    // Add to Collection.
-                    ActionButton(
-                        iconRes = R.drawable.ic_bw_pieces,
-                        label = stringResource(R.string.action_add_to_collection),
-                        filled = true,
-                        // Adding needs an account; logged out → prompt sign-in instead.
-                        onClick = { if (isLoggedIn) onAddCollectionClick() else SignInController.request() },
-                    )
-                    // Wishlist / Wishlisted.
-                    ActionButton(
-                        iconRes = R.drawable.ic_bw_heart,
-                        label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
-                        filled = false,
-                        iconTint = if (state.isWishlisted) WishlistHeart else colors.textMuted,
-                        onClick = when {
-                            state.isWishlisted -> null
-                            isLoggedIn -> onAddWishlist
-                            else -> ({ SignInController.request() })
-                        },
-                    )
+                    if (state.isOwned) {
+                        // Already owned → a single "See Detail" opening the copies dialog (no add/wishlist).
+                        ActionButton(
+                            iconRes = R.drawable.ic_bw_check,
+                            label = stringResource(R.string.action_see_detail),
+                            filled = true,
+                            onClick = onSeeCopies,
+                        )
+                    } else {
+                        // Add to Collection.
+                        ActionButton(
+                            iconRes = R.drawable.ic_bw_pieces,
+                            label = stringResource(R.string.action_add_to_collection),
+                            filled = true,
+                            // Adding needs an account; logged out → prompt sign-in instead.
+                            onClick = { if (isLoggedIn) onAddCollectionClick() else SignInController.request() },
+                        )
+                        // Wishlist / Wishlisted.
+                        ActionButton(
+                            iconRes = R.drawable.ic_bw_heart,
+                            label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
+                            filled = false,
+                            iconTint = if (state.isWishlisted) WishlistHeart else colors.textMuted,
+                            onClick = when {
+                                state.isWishlisted -> null
+                                isLoggedIn -> onAddWishlist
+                                else -> ({ SignInController.request() })
+                            },
+                        )
+                    }
                 }
             }
 
@@ -254,17 +280,59 @@ private fun SetDetailContent(
         state.addTarget?.let { target ->
             AddToCollectionSheet(
                 initialSet = target,
-                initialCopy = null,
+                initialCopy = state.editingCopy,
                 onDismiss = onDismissAdd,
                 onSearch = onSearchCatalog,
                 onAdd = onAddCollectionSubmit,
             )
         }
 
+        // Owned set → the copies "See Details" dialog (view/edit/delete/add-copy).
+        if (state.showCopies) {
+            state.ownedItem?.let { owned ->
+                SeeDetailsDialog(
+                    item = owned,
+                    onDismiss = onDismissCopies,
+                    onDeleteCopy = onDeleteCopy,
+                    onEditCopy = onEditCopy,
+                    onAddItem = onAddCopyForSet,
+                )
+            }
+        }
+
         // Full-screen image gallery: swipe between the images that actually loaded, tap a thumbnail
         // to jump, tap the backdrop or back to dismiss.
         if (showGallery && galleryImages.isNotEmpty()) {
             ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
+        }
+
+        // Quick-search FAB — only when this detail is viewed from the Search tab, so the user can
+        // start a new search without backing out first. Tapping a result opens that set's detail.
+        if (showSearchFab) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable { showSearchModal = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_search),
+                    contentDescription = stringResource(R.string.nav_search),
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+        if (showSearchModal) {
+            SearchModal(
+                onSearch = onSearchCatalog,
+                onOpenSetDetail = { id -> showSearchModal = false; onOpenSetDetail(id) },
+                onDismiss = { showSearchModal = false },
+            )
         }
 
         BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
@@ -356,11 +424,9 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
     val colors = BwTheme.colors
     val boxUrl = set.boxImageUrl
     val renderUrl = set.thumbnailUrl ?: set.imageUrl
-    val reveal = rememberCardImageReveal(boxUrl ?: renderUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -373,7 +439,6 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             itemType = set.itemType,
             size = 60.dp,
             iconSize = 26.dp,
-            onState = reveal.onState,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

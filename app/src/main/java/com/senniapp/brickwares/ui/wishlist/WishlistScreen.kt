@@ -43,8 +43,6 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.SetThumb
-import com.senniapp.brickwares.ui.components.rememberCardImageReveal
-import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
@@ -248,19 +246,17 @@ private val WishlistHeart = Color(0xFFC9506F)
 @Composable
 private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
-    // Box shot first (fall back to the stored render). Reveal once the final image resolves.
+    // The card shows immediately; the thumbnail fills in with a crossfade. Box shot first, falling
+    // back to the stored render; whole-image fit so nothing is cropped.
     val boxUrl = CatalogImages.boxUrl(item.setNumber)
-    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Box shot first (fall back to the stored render); whole-image fit so nothing is cropped.
         SetThumb(
             imageUrl = boxUrl,
             fallbackUrl = item.imageUrl,
@@ -268,7 +264,6 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             size = 72.dp,
             iconSize = 30.dp,
             modifier = Modifier.clickable(onClick = onOpenDetail),
-            onState = reveal.onState,
         )
 
         Spacer(Modifier.width(12.dp))

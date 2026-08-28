@@ -8,6 +8,7 @@ import coil3.SingletonImageLoader
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.crossfade
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.LocalePrefs
 
@@ -28,6 +29,8 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
+            // Fade thumbnails in as they load, instead of popping — smoother list scrolling.
+            .crossfade(true)
             .components {
                 add(OkHttpNetworkFetcherFactory())
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

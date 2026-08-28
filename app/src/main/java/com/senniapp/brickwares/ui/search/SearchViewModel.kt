@@ -45,6 +45,12 @@ class SearchViewModel(
                 _uiState.update { it.copy(wishlistedNumbers = items.map { w -> w.setNumber }.toSet()) }
             }
         }
+        // Observe the collection so result cards for owned sets show "See Detail" instead of add/wishlist.
+        viewModelScope.launch {
+            repository.getCollectionItems().collect { items ->
+                _uiState.update { it.copy(ownedNumbers = items.map { c -> c.setNumber }.toSet()) }
+            }
+        }
     }
 
     fun onQueryChange(query: String) {

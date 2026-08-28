@@ -18,11 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -56,46 +53,14 @@ import kotlin.math.roundToInt
  * and the same header banner and filter chips.
  */
 
-/**
- * Tracks whether an item card's lead image has resolved, so the whole card can be revealed only
- * once the photo is ready (no blank-thumbnail flash). A card creates one via [rememberCardImageReveal],
- * feeds [onState] into its image (AsyncImage/SetThumb), applies [Modifier.revealWhenReady], and shows
- * a [NoImagePlaceholder] while [failed] (or when there is no URL). Items with no URL start [ready].
- */
-@Stable
-class CardImageReveal(hasImage: Boolean) {
-    var ready by mutableStateOf(!hasImage)
-        private set
-    var failed by mutableStateOf(false)
-        private set
-
-    val onState: (AsyncImagePainter.State) -> Unit = { state ->
-        when (state) {
-            is AsyncImagePainter.State.Success -> { failed = false; ready = true }
-            is AsyncImagePainter.State.Error -> { failed = true; ready = true }
-            else -> {}
-        }
-    }
-}
-
-/** Remembers a [CardImageReveal] for [imageUrl]; re-initializes if the URL changes. */
-@Composable
-fun rememberCardImageReveal(imageUrl: String?): CardImageReveal =
-    remember(imageUrl) { CardImageReveal(hasImage = imageUrl != null) }
-
-/** Fades a card in (via alpha) once its [reveal] image has resolved (loaded or failed). */
-@Composable
-fun Modifier.revealWhenReady(reveal: CardImageReveal): Modifier {
-    val alpha by animateFloatAsState(if (reveal.ready) 1f else 0f, label = "cardReveal")
-    return this.graphicsLayer { this.alpha = alpha }
-}
 
 /**
  * A set/minifig thumbnail: [imageUrl] first, then [fallbackUrl] if it fails to load (e.g. the box
- * photo isn't on BrickLink → fall back to the render), else a "No image" placeholder. [modifier]
- * (e.g. `clickable`) is applied after the clip so ripples stay rounded. [onState] reports only the
- * TERMINAL load state (a mid-chain failure that has a fallback left is not forwarded), so a parent
- * card can gate its reveal on the final image.
+ * photo isn't on BrickLink → fall back to the render), else a "No image" placeholder. The image
+ * itself fades in (Coil crossfade); the card is not gated on it. [modifier] (e.g. `clickable`) is
+ * applied after the clip so ripples stay rounded. [onState]/[onResolvedUrl] report the TERMINAL load
+ * result (a mid-chain failure that still has a fallback is not forwarded) — the detail hero uses
+ * [onResolvedUrl] to know which image actually loaded when building its gallery.
  */
 @Composable
 fun SetThumb(

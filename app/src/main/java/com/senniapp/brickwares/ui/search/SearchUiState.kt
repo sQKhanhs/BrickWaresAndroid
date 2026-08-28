@@ -52,6 +52,8 @@ data class SearchUiState(
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
     val favoriteThemes: Set<String> = emptySet(),
     val wishlistedNumbers: Set<String> = emptySet(),
+    /** Set numbers already in the collection — result cards show "See Detail" instead of Add/Wishlist. */
+    val ownedNumbers: Set<String> = emptySet(),
     // Theme-detail view (non-null theme = open, overrides the search/browse views).
     val themeDetail: String? = null,
     val themeDetailSub: String = ALL_SUBTHEMES,

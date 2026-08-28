@@ -66,9 +66,8 @@ import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.SetThumb
-import com.senniapp.brickwares.ui.components.rememberCardImageReveal
-import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -138,6 +137,7 @@ private fun SearchContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    var showSearchModal by remember { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (state.showThemeDetail) {
             ThemeDetailView(
@@ -147,6 +147,7 @@ private fun SearchContent(
                 subOptions = state.themeDetailSubOptions,
                 sort = state.themeDetailSort,
                 wishlistedNumbers = state.wishlistedNumbers,
+                ownedNumbers = state.ownedNumbers,
                 totalCount = state.themeDetailResults.size,
                 currentPage = state.themeDetailCurrentPage,
                 pageCount = state.themeDetailPageCount,
@@ -158,18 +159,7 @@ private fun SearchContent(
                 onAddCollection = onAddToCollectionClick,
                 onAddWishlist = onAddToWishlist,
             )
-            state.addTarget?.let { target ->
-                AddToCollectionSheet(
-                    initialSet = target,
-                    initialCopy = null,
-                    onDismiss = onDismissAdd,
-                    onSearch = onSearchCatalog,
-                    onAdd = onAddToCollectionSubmit,
-                )
-            }
-            BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
-            return@Box
-        }
+        } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
@@ -231,6 +221,7 @@ private fun SearchContent(
                         ResultCard(
                             set = set,
                             wishlisted = set.setNumber in state.wishlistedNumbers,
+                            owned = set.setNumber in state.ownedNumbers,
                             onOpenDetail = { onOpenSetDetail(set.id) },
                             onAddCollection = { onAddToCollectionClick(set) },
                             onAddWishlist = { onAddToWishlist(set) },
@@ -240,7 +231,9 @@ private fun SearchContent(
                 }
             }
         }
+        }
 
+        // Add-to-collection sheet (shared by both modes).
         state.addTarget?.let { target ->
             AddToCollectionSheet(
                 initialSet = target,
@@ -248,6 +241,36 @@ private fun SearchContent(
                 onDismiss = onDismissAdd,
                 onSearch = onSearchCatalog,
                 onAdd = onAddToCollectionSubmit,
+            )
+        }
+
+        // Quick-search FAB — opens a search modal so the user can start a new search without going
+        // back. Hidden on the search home (browse), where the search bar is already at the top;
+        // shown when deeper in (a submitted search's results, or a theme-detail list with no bar).
+        if (state.showThemeDetail || !state.showBrowse) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable { showSearchModal = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_search),
+                    contentDescription = stringResource(R.string.nav_search),
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+        if (showSearchModal) {
+            SearchModal(
+                onSearch = onSearchCatalog,
+                onOpenSetDetail = { id -> showSearchModal = false; onOpenSetDetail(id) },
+                onDismiss = { showSearchModal = false },
             )
         }
 
@@ -384,6 +407,7 @@ private fun ThemeDetailView(
     subOptions: List<SubthemeCount>,
     sort: ThemeDetailSort,
     wishlistedNumbers: Set<String>,
+    ownedNumbers: Set<String>,
     totalCount: Int,
     currentPage: Int,
     pageCount: Int,
@@ -454,6 +478,7 @@ private fun ThemeDetailView(
             ResultCard(
                 set = set,
                 wishlisted = set.setNumber in wishlistedNumbers,
+                owned = set.setNumber in ownedNumbers,
                 onOpenDetail = { onOpenSetDetail(set.id) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },
@@ -579,6 +604,7 @@ private fun SuggestionList(suggestions: List<CatalogSet>, onClick: (CatalogSet) 
 private fun ResultCard(
     set: CatalogSet,
     wishlisted: Boolean,
+    owned: Boolean,
     onOpenDetail: () -> Unit,
     onAddCollection: () -> Unit,
     onAddWishlist: () -> Unit,
@@ -588,14 +614,13 @@ private fun ResultCard(
     val isLoggedIn = rememberIsLoggedIn()
     val add = { if (isLoggedIn) onAddCollection() else SignInController.request() }
     val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
-    // Prefer the box shot; fall back to the render. Reveal once the final image resolves.
+    // Prefer the box shot; fall back to the render. The card shows immediately; the thumbnail fills
+    // in with a crossfade (no whole-card gating, so a list scrolls smoothly and in order).
     val boxUrl = set.boxImageUrl
     val renderUrl = set.thumbnailUrl ?: set.imageUrl
-    val reveal = rememberCardImageReveal(boxUrl ?: renderUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -608,7 +633,6 @@ private fun ResultCard(
             size = 72.dp,
             iconSize = 30.dp,
             modifier = Modifier.clickable(onClick = onOpenDetail),
-            onState = reveal.onState,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -625,42 +649,61 @@ private fun ResultCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
-            // Add to collection.
-            Row(
-                modifier = Modifier
+            if (owned) {
+                // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                        .clickable(onClick = onOpenDetail)
+                        .padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painter = painterResource(R.drawable.ic_bw_check), contentDescription = null, tint = colors.text, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.action_see_detail), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                }
+            } else {
+                // Add to collection.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.brandYellow)
+                        .clickable(onClick = add)
+                        .padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
+                }
+                // Wishlist / Wishlisted.
+                val wishlistModifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 2.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(colors.brandYellow)
-                    .clickable(onClick = add)
-                    .padding(vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
-            }
-            // Wishlist / Wishlisted.
-            val wishlistModifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(999.dp))
-                .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
-                .then(if (wishlisted) Modifier else Modifier.clickable(onClick = wish))
-                .padding(vertical = 7.dp)
-            Row(
-                modifier = wishlistModifier,
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bw_heart),
-                    contentDescription = null,
-                    tint = if (wishlisted) WishlistHeart else colors.textMuted,
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(if (wishlisted) R.string.action_wishlisted else R.string.action_wishlist), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                    .then(if (wishlisted) Modifier else Modifier.clickable(onClick = wish))
+                    .padding(vertical = 7.dp)
+                Row(
+                    modifier = wishlistModifier,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_bw_heart),
+                        contentDescription = null,
+                        tint = if (wishlisted) WishlistHeart else colors.textMuted,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(if (wishlisted) R.string.action_wishlisted else R.string.action_wishlist), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                }
             }
         }
     }
@@ -741,3 +784,4 @@ private fun ThemeDetailSort.text(): String = stringResource(
         ThemeDetailSort.NAME -> R.string.sort_name
     },
 )
+

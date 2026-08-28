@@ -22,15 +22,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,13 +40,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
-import com.senniapp.brickwares.data.model.Condition
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SalesSummary
@@ -68,9 +63,8 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.SeeDetailsDialog
 import com.senniapp.brickwares.ui.components.SetThumb
-import com.senniapp.brickwares.ui.components.rememberCardImageReveal
-import com.senniapp.brickwares.ui.components.revealWhenReady
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.animatedNumber
@@ -409,21 +403,17 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 @Composable
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
-    // Reveal the whole card only once its image has resolved, so a freshly added item never flashes
-    // a blank thumbnail before the photo streams in. A failed load (e.g. a set not on the CDN) still
-    // reveals the card (with a "No image" placeholder), and items without a URL reveal immediately.
+    // The card shows immediately; the thumbnail fills in with a crossfade. Box shot first, falling
+    // back to the stored render, whole-image fit so nothing is cropped.
     val boxUrl = CatalogImages.boxUrl(item.setNumber)
-    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        // Box shot first (fall back to the stored render), whole-image fit so nothing is cropped.
         SetThumb(
             imageUrl = boxUrl,
             fallbackUrl = item.imageUrl,
@@ -431,7 +421,6 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             size = 72.dp,
             iconSize = 30.dp,
             modifier = Modifier.clickable(onClick = onOpenDetail),
-            onState = reveal.onState,
         )
 
         Spacer(Modifier.width(12.dp))
@@ -581,11 +570,9 @@ private fun ProfitBar(summary: SalesSummary) {
 private fun SoldCard(sold: SoldItem) {
     val colors = BwTheme.colors
     val boxUrl = CatalogImages.boxUrl(sold.setNumber)
-    val reveal = rememberCardImageReveal(boxUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .revealWhenReady(reveal)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
@@ -597,7 +584,6 @@ private fun SoldCard(sold: SoldItem) {
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            onState = reveal.onState,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -616,129 +602,6 @@ private fun SoldCard(sold: SoldItem) {
                 Text(signedMoney(sold.profit), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
             }
             GrowthPill(sold.profitPercent)
-        }
-    }
-}
-
-// ---- See Details ----
-
-@Composable
-private fun SeeDetailsDialog(
-    item: CollectionItem,
-    onDismiss: () -> Unit,
-    onDeleteCopy: (String, String) -> Unit,
-    onEditCopy: (Copy) -> Unit,
-    onAddItem: () -> Unit,
-) {
-    val colors = BwTheme.colors
-    val expanded = remember { mutableStateListOf<String>() }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = colors.card,
-            modifier = Modifier.fillMaxWidth(0.92f),
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(item.name, style = BwType.cardTitle, color = colors.text)
-                        Text(item.setNumber, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
-                    }
-                    Text(
-                        "✕",
-                        color = colors.textMuted,
-                        modifier = Modifier.clip(CircleShape).clickable(onClick = onDismiss).padding(6.dp),
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-
-                // Column header
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                    Text(stringResource(R.string.sd_cond), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1f))
-                    Text(stringResource(R.string.sd_date), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.3f))
-                    Text(stringResource(R.string.sd_qty), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(0.5f))
-                    Text(stringResource(R.string.price_paid), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.5f))
-                    Spacer(Modifier.width(84.dp))
-                }
-                HorizontalDivider(color = colors.borderSoft)
-
-                item.copies.forEachIndexed { index, copy ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(if (copy.condition == Condition.NEW) R.string.sheet_condition_new else R.string.sheet_condition_used), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
-                        Text(copy.dateAdded, style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
-                        Text(copy.qty.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
-                        Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
-                        Row(modifier = Modifier.width(84.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_bw_note),
-                                contentDescription = stringResource(R.string.sd_toggle_note_cd),
-                                tint = if (copy.note != null) colors.linkAccent else colors.borderStrong,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        if (copy.id in expanded) expanded.remove(copy.id) else expanded.add(copy.id)
-                                    },
-                            )
-                            Icon(
-                                painter = painterResource(R.drawable.ic_bw_edit),
-                                contentDescription = stringResource(R.string.sd_edit_copy_cd),
-                                tint = colors.textMuted2,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onEditCopy(copy) },
-                            )
-                            Icon(
-                                painter = painterResource(R.drawable.ic_bw_delete),
-                                contentDescription = stringResource(R.string.sd_delete_copy_cd),
-                                tint = colors.error,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onDeleteCopy(item.setNumber, copy.id) },
-                            )
-                        }
-                    }
-                    if (copy.id in expanded && copy.note != null) {
-                        Text(
-                            copy.note,
-                            style = BwType.body.copy(fontSize = 11.sp),
-                            color = colors.textSecondary,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                    }
-                    if (index < item.copies.lastIndex) HorizontalDivider(color = colors.borderSoft)
-                }
-
-                HorizontalDivider(color = colors.borderStrong)
-                // Avg row
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.sd_avg), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.weight(1.3f))
-                    Text(item.totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
-                    Text(formatMoney(item.avgPaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
-                    Spacer(Modifier.width(84.dp))
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = onAddItem,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.brandYellow, contentColor = colors.onYellow),
-                ) {
-                    Text(stringResource(R.string.sheet_add_item), style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
-                }
-            }
         }
     }
 }
