@@ -23,6 +23,8 @@ const {
   BRICKSET_PAGESIZE = "20",
   // Optional Brickset year filter, comma-separated (e.g. "2024,2025,2026"). Empty = all years.
   BRICKSET_YEAR = "",
+  // Optional subtheme filter (e.g. "Batman" within the "DC Comics Super Heroes" theme). Empty = all.
+  BRICKSET_SUBTHEME = "",
   // "1"/"true" = merge onto the existing seed.sql (dedupe by set_id, newly fetched rows win)
   // instead of overwriting it, so a fetch adds to the current catalog rather than replacing it.
   BRICKSET_APPEND = "",
@@ -116,6 +118,7 @@ async function main() {
     // get default (set-number) order. "YearFromDESC" gives genuinely newest-first.
     const p = { theme, pageSize, orderBy: "YearFromDESC" };
     if (BRICKSET_YEAR) p.year = BRICKSET_YEAR;
+    if (BRICKSET_SUBTHEME) p.subtheme = BRICKSET_SUBTHEME;
     const params = JSON.stringify(p);
     const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
     if (j.status !== "success") {
