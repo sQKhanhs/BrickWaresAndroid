@@ -52,9 +52,15 @@ import com.senniapp.brickwares.ui.theme.BwType
 import java.time.LocalDate
 
 /**
- * The Add-to-Collection bottom sheet. Shared by the Collection tab (add/edit a copy) and the
- * Wishlist tab (move a wishlisted set into the collection). When [initialSet] is provided the
- * set is preselected; when [initialCopy] is provided the sheet is in edit mode.
+ * The Add-to-Collection bottom sheet. Shared by the Collection tab (add/edit a copy), the Wishlist
+ * tab (move a wishlisted set into the collection), Search and Set Detail. When [initialSet] is
+ * provided the set is preselected; when [initialCopy] is provided the sheet is in edit mode.
+ *
+ * When [allowSalesMode] is true (and not editing), a Collection/Sales toggle lets the user record
+ * the item as a **sale** instead — an extra Sale price field appears and submit routes to [onAddSale]
+ * (a standalone Sales entry; it does not add to the collection). [initialSalesMode] opens the sheet
+ * already on the Sales side (used by the Sales-mode Add FAB). When [initialSalePrice] is provided
+ * alongside [initialCopy] the sheet edits an existing sale (Sales fields locked on, submit → [onEditSale]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,14 +70,22 @@ fun AddToCollectionSheet(
     onDismiss: () -> Unit,
     onSearch: (String) -> List<CatalogSet>,
     onAdd: (CollectionItem) -> Unit,
+    allowSalesMode: Boolean = false,
+    onAddSale: (CollectionItem, Long) -> Unit = { _, _ -> },
+    initialSalesMode: Boolean = false,
+    initialSalePrice: Long? = null,
+    onEditSale: (CollectionItem, Long) -> Unit = { _, _ -> },
 ) {
     val colors = BwTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isEdit = initialCopy != null
+    val isSaleEdit = isEdit && initialSalePrice != null
 
+    var salesMode by remember { mutableStateOf(isSaleEdit || (initialSalesMode && !isEdit)) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(initialSet) }
     var paid by remember { mutableStateOf(initialCopy?.pricePaid?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
+    var salePrice by remember { mutableStateOf(initialSalePrice?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
     var qty by remember { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
     var condition by remember { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
     var note by remember { mutableStateOf(initialCopy?.note ?: "") }
@@ -94,7 +108,21 @@ fun AddToCollectionSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(if (isEdit) R.string.sheet_edit_item else R.string.action_add_to_collection), style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
+            val title = when {
+                isSaleEdit -> R.string.sheet_edit_sale
+                isEdit -> R.string.sheet_edit_item
+                salesMode -> R.string.action_add_to_sales
+                else -> R.string.action_add_to_collection
+            }
+            Text(stringResource(title), style = BwType.cardTitle.copy(fontSize = 18.sp), color = colors.text)
+
+            // Collection / Sales destination toggle (fresh adds only — not when editing a copy).
+            if (allowSalesMode && !isEdit) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ConditionChip(stringResource(R.string.sheet_mode_collection), !salesMode, { salesMode = false }, Modifier.weight(1f))
+                    ConditionChip(stringResource(R.string.sheet_mode_sales), salesMode, { salesMode = true }, Modifier.weight(1f))
+                }
+            }
 
             val currentSelection = selected
             if (currentSelection == null) {
@@ -114,6 +142,7 @@ fun AddToCollectionSheet(
                                 selected = set
                                 query = ""
                                 if (paid.isBlank()) paid = set.retailPrice?.toString() ?: ""
+                                if (salePrice.isBlank()) salePrice = set.retailPrice?.toString() ?: ""
                             }
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                     ) {
@@ -158,6 +187,19 @@ fun AddToCollectionSheet(
                 placeholder = { Text("0") },
             )
 
+            if (salesMode) {
+                FieldLabel(stringResource(R.string.sheet_field_sale_price))
+                OutlinedTextField(
+                    value = salePrice,
+                    onValueChange = { input -> salePrice = input.filter { it.isDigit() } },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    suffix = { Text("₫", color = colors.textMuted) },
+                    placeholder = { Text("0") },
+                )
+            }
+
             FieldLabel(stringResource(R.string.sheet_field_qty))
             OutlinedTextField(
                 value = qty,
@@ -173,7 +215,7 @@ fun AddToCollectionSheet(
                 ConditionChip(stringResource(R.string.sheet_condition_used), condition == Condition.USED, { condition = Condition.USED }, Modifier.weight(1f))
             }
 
-            FieldLabel(stringResource(R.string.sheet_field_date_added))
+            FieldLabel(stringResource(if (salesMode) R.string.sheet_field_date_sold else R.string.sheet_field_date_added))
             Box {
                 OutlinedTextField(
                     value = dateAdded,
@@ -222,30 +264,34 @@ fun AddToCollectionSheet(
             )
 
             Spacer(Modifier.height(4.dp))
-            val canAdd = currentSelection != null && paid.isNotBlank()
+            val canAdd = currentSelection != null && paid.isNotBlank() && (!salesMode || salePrice.isNotBlank())
             Button(
                 onClick = {
                     val set = selected ?: return@Button
-                    onAdd(
-                        CollectionItem(
-                            setNumber = set.setNumber, name = set.name, itemType = set.itemType,
-                            theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                            pieces = set.pieces, minifigs = set.minifigs,
-                            retailPrice = set.retailPrice ?: 0L,
-                            currentValue = null, growthPercent = null, status = set.status,
-                            copies = listOf(
-                                Copy(
-                                    id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
-                                    condition = condition,
-                                    qty = qty.toIntOrNull() ?: 1,
-                                    // Blank/invalid paid → fall back to the set's retail price.
-                                    pricePaid = paid.toLongOrNull() ?: (set.retailPrice ?: 0L),
-                                    dateAdded = dateAdded,
-                                    note = note.ifBlank { null },
-                                ),
+                    val item = CollectionItem(
+                        setNumber = set.setNumber, name = set.name, itemType = set.itemType,
+                        theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
+                        pieces = set.pieces, minifigs = set.minifigs,
+                        retailPrice = set.retailPrice ?: 0L,
+                        currentValue = null, growthPercent = null, status = set.status,
+                        copies = listOf(
+                            Copy(
+                                id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
+                                condition = condition,
+                                qty = qty.toIntOrNull() ?: 1,
+                                // Blank/invalid paid → fall back to the set's retail price.
+                                pricePaid = paid.toLongOrNull() ?: (set.retailPrice ?: 0L),
+                                dateAdded = dateAdded,
+                                note = note.ifBlank { null },
                             ),
                         ),
                     )
+                    val salePriceLong = salePrice.toLongOrNull() ?: (set.retailPrice ?: 0L)
+                    when {
+                        isSaleEdit -> onEditSale(item, salePriceLong)
+                        salesMode -> onAddSale(item, salePriceLong)
+                        else -> onAdd(item)
+                    }
                 },
                 enabled = canAdd,
                 modifier = Modifier.fillMaxWidth(),
@@ -257,7 +303,12 @@ fun AddToCollectionSheet(
                     disabledContentColor = colors.textMuted,
                 ),
             ) {
-                Text(stringResource(if (isEdit) R.string.sheet_save else R.string.sheet_add_item), style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
+                val buttonLabel = when {
+                    isEdit -> R.string.sheet_save
+                    salesMode -> R.string.sheet_add_sale
+                    else -> R.string.sheet_add_item
+                }
+                Text(stringResource(buttonLabel), style = BwType.pill.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }

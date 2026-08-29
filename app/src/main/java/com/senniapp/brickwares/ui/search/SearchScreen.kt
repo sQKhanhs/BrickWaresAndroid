@@ -108,6 +108,7 @@ fun SearchScreen(
         onDismissAdd = viewModel::onDismissAdd,
         onSearchCatalog = viewModel::searchCatalog,
         onAddToCollectionSubmit = viewModel::onAddToCollectionSubmit,
+        onAddToSalesSubmit = viewModel::onAddToSalesSubmit,
         onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
@@ -133,6 +134,7 @@ private fun SearchContent(
     onDismissAdd: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddToCollectionSubmit: (CollectionItem) -> Unit,
+    onAddToSalesSubmit: (CollectionItem, Long) -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -241,6 +243,8 @@ private fun SearchContent(
                 onDismiss = onDismissAdd,
                 onSearch = onSearchCatalog,
                 onAdd = onAddToCollectionSubmit,
+                allowSalesMode = true,
+                onAddSale = onAddToSalesSubmit,
             )
         }
 

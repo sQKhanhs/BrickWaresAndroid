@@ -3,8 +3,8 @@ package com.senniapp.brickwares.data.repository
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
+import com.senniapp.brickwares.data.model.Condition
 import com.senniapp.brickwares.data.model.Copy
-import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.WishlistItem
@@ -46,9 +46,36 @@ interface CollectionRepository {
     /** Replaces an existing copy (matched by id) with an edited version. */
     fun updateCopy(setNumber: String, copy: Copy)
 
-    suspend fun getSoldItems(): List<SoldItem>
+    /** Sold items (Sales sub-view), exposed as a [Flow] so the list updates as sales are recorded. */
+    fun getSoldItems(): Flow<List<SoldItem>>
 
-    suspend fun getSalesSummary(): SalesSummary
+    /**
+     * Records a standalone sale (from the Add sheet's Sales mode). The item's single [Copy] carries
+     * the quantity/condition/cost-basis/date/note; [salePrice] is what it sold for. Does not touch
+     * the collection — this is for logging a sale of something not necessarily tracked as owned.
+     */
+    fun addSale(item: CollectionItem, salePrice: Long)
+
+    /**
+     * Sells [quantity] units of an owned [copyId], moving them from the collection into Sales. The
+     * copy's quantity (and prorated cost basis) is reduced by [quantity]; when nothing remains the
+     * copy is removed. [salePrice] is the total the units sold for.
+     */
+    fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, soldOn: String?)
+
+    /** Edits an existing sale row (matched by [saleId]). */
+    fun updateSale(
+        saleId: String,
+        quantity: Int,
+        condition: Condition,
+        pricePaid: Long,
+        salePrice: Long,
+        soldOn: String?,
+        note: String?,
+    )
+
+    /** Removes a sale (soft-delete tombstone). */
+    fun removeSale(saleId: String)
 
     // ---- Wishlist ----
 

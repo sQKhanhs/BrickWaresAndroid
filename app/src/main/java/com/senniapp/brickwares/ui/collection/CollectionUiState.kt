@@ -34,7 +34,15 @@ data class CollectionUiState(
     /** When non-null the Add sheet is in edit mode for this copy. */
     val editingCopy: Copy? = null,
     val editingSetNumber: String? = null,
+    /** When non-null the Add sheet is editing this sale (Sales fields, prefilled [editingSalePrice]). */
+    val editingSaleId: String? = null,
+    val editingSalePrice: Long? = null,
+    /** When non-null, the sold-item See Details dialog is open for this sale. */
+    val saleDetailId: String? = null,
     val detailSetNumber: String? = null,
+    /** When both are non-null, the Sell dialog is open for this owned copy. */
+    val sellSetNumber: String? = null,
+    val sellCopyId: String? = null,
     /** 1-based current page for the collection list's numbered pagination. */
     val page: Int = 1,
     /** 1-based current page for the Sales (sold items) list — independent of [page]. */
@@ -75,4 +83,19 @@ data class CollectionUiState(
     /** The set whose See Details modal is open, resolved from the live list (null closes it). */
     val detailItem: CollectionItem?
         get() = detailSetNumber?.let { sn -> items.find { it.setNumber == sn } }
+
+    /** The sold item whose See Details dialog is open, resolved from the live sales list. */
+    val saleDetailItem: SoldItem?
+        get() = saleDetailId?.let { id -> soldItems.find { it.id == id } }
+
+    /**
+     * The (item, copy) the Sell dialog targets, resolved from the live list — so the dialog closes
+     * on its own once the copy is sold out and removed.
+     */
+    val sellTarget: Pair<CollectionItem, Copy>?
+        get() {
+            val item = sellSetNumber?.let { sn -> items.find { it.setNumber == sn } } ?: return null
+            val copy = sellCopyId?.let { cid -> item.copies.find { it.id == cid } } ?: return null
+            return item to copy
+        }
 }

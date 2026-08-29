@@ -3,6 +3,8 @@ package com.senniapp.brickwares.data.repository
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.SalesSummary
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 
 /**
@@ -37,6 +39,18 @@ fun collectionSummaryOf(
         growthPercent = growth,
         bannerImageUrl = bannerImageUrl,
     )
+}
+
+/**
+ * Aggregates the Sales stat tiles + profit bar from the live sold-item list, so the Sales sub-view
+ * reads 0 when empty and updates as sales are recorded (mirrors [collectionSummaryOf]).
+ */
+fun salesSummaryOf(sold: List<SoldItem>): SalesSummary {
+    val totalPaid = sold.sumOf { it.pricePaid }
+    val totalProfit = sold.sumOf { it.profit }
+    val avg = if (sold.isEmpty()) 0.0 else sold.map { it.profitPercent }.average()
+    val overall = if (totalPaid == 0L) 0.0 else totalProfit.toDouble() / totalPaid * 100.0
+    return SalesSummary(sold.size, sold.sumOf { it.saleValue }, totalProfit, avg, overall)
 }
 
 /** Per-theme counts + value for the Home "Collection by Theme" card, highest value first. */

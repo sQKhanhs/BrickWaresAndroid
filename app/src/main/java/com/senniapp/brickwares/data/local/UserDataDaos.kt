@@ -88,6 +88,12 @@ interface SalesDao {
     @Query("SELECT * FROM sales WHERE dirty = 1")
     suspend fun getDirty(): List<SalesEntity>
 
+    @Query("SELECT * FROM sales WHERE id = :id")
+    suspend fun getById(id: String): SalesEntity?
+
+    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
+    suspend fun markDeleted(id: String, ts: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: SalesEntity)
 

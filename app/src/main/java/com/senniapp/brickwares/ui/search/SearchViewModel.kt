@@ -208,6 +208,12 @@ class SearchViewModel(
         _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name))) }
     }
 
+    /** Add sheet in Sales mode: records a standalone sale (does not add to the collection). */
+    fun onAddToSalesSubmit(item: CollectionItem, salePrice: Long) {
+        repository.addSale(item, salePrice)
+        _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name))) }
+    }
+
     fun onToastShown() {
         _uiState.update { it.copy(toastMessage = null) }
     }

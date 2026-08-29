@@ -4,14 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.collectionSummaryOf
+import com.senniapp.brickwares.data.repository.salesSummaryOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,12 +45,12 @@ class CollectionViewModel(
                 }
             }
         }
-        // Sales data isn't needed for the first frame — load it in the background so it doesn't
-        // hold up the initial Collection view.
+        // Sales data is observed as a Flow so newly recorded sales appear live (and the summary
+        // tiles recompute), mirroring the collection list.
         viewModelScope.launch {
-            val sold = repository.getSoldItems()
-            val salesSummary = repository.getSalesSummary()
-            _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummary) }
+            repository.getSoldItems().collect { sold ->
+                _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummaryOf(sold)) }
+            }
         }
     }
 
@@ -78,7 +81,10 @@ class CollectionViewModel(
 
     fun onDismissAddSheet() {
         _uiState.update {
-            it.copy(showAddSheet = false, addSheetPreselect = null, editingCopy = null, editingSetNumber = null)
+            it.copy(
+                showAddSheet = false, addSheetPreselect = null, editingCopy = null,
+                editingSetNumber = null, editingSaleId = null, editingSalePrice = null,
+            )
         }
     }
 
@@ -102,6 +108,94 @@ class CollectionViewModel(
         } else {
             repository.addItem(item)
             _uiState.update { it.copy(showAddSheet = false, addSheetPreselect = null) }
+        }
+    }
+
+    /** Submits the Add sheet in Sales mode: records a standalone sale (does not touch the collection). */
+    fun submitAddSheetSale(item: CollectionItem, salePrice: Long) {
+        repository.addSale(item, salePrice)
+        _uiState.update {
+            it.copy(
+                showAddSheet = false, addSheetPreselect = null,
+                toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name)),
+            )
+        }
+    }
+
+    // ---- Sold-item See Details (view / edit / delete a sale) ----
+
+    fun onSaleDetail(sold: SoldItem) {
+        _uiState.update { it.copy(saleDetailId = sold.id) }
+    }
+
+    fun onDismissSaleDetail() {
+        _uiState.update { it.copy(saleDetailId = null) }
+    }
+
+    fun onDeleteSale(saleId: String) {
+        val name = _uiState.value.soldItems.find { it.id == saleId }?.name
+        repository.removeSale(saleId)
+        _uiState.update {
+            it.copy(
+                saleDetailId = null,
+                toastMessage = name?.let { n -> UiText.Res(R.string.toast_removed_sale, listOf(n)) } ?: it.toastMessage,
+            )
+        }
+    }
+
+    /** Open the Add sheet in Sale-edit mode, prefilled from this sale. */
+    fun onEditSale(sold: SoldItem) {
+        _uiState.update {
+            it.copy(
+                saleDetailId = null, showAddSheet = true, addSheetPreselect = catalogFrom(sold),
+                editingCopy = Copy(
+                    id = sold.id, condition = sold.condition, qty = sold.quantity,
+                    pricePaid = sold.pricePaid, dateAdded = sold.soldOn ?: "", note = sold.note,
+                ),
+                editingSetNumber = null, editingSaleId = sold.id, editingSalePrice = sold.saleValue,
+            )
+        }
+    }
+
+    /** Saves the Sale-edit sheet, updating the sale row. */
+    fun submitEditSale(item: CollectionItem, salePrice: Long) {
+        val saleId = _uiState.value.editingSaleId
+        val copy = item.copies.firstOrNull()
+        if (saleId != null && copy != null) {
+            repository.updateSale(saleId, copy.qty, copy.condition, copy.pricePaid, salePrice, copy.dateAdded, copy.note)
+        }
+        _uiState.update {
+            it.copy(
+                showAddSheet = false, addSheetPreselect = null, editingCopy = null,
+                editingSetNumber = null, editingSaleId = null, editingSalePrice = null,
+            )
+        }
+    }
+
+    // ---- Sell an owned copy → Sales ----
+
+    /** From See Details' per-copy Sell button: open the Sell dialog for this copy. */
+    fun onSellCopyRequest(setNumber: String, copy: Copy) {
+        _uiState.update { it.copy(detailSetNumber = null, sellSetNumber = setNumber, sellCopyId = copy.id) }
+    }
+
+    fun onDismissSell() {
+        _uiState.update { it.copy(sellSetNumber = null, sellCopyId = null) }
+    }
+
+    fun onConfirmSell(quantity: Int, salePrice: Long, soldOn: String) {
+        val state = _uiState.value
+        val sn = state.sellSetNumber
+        val cid = state.sellCopyId
+        val name = state.sellTarget?.first?.name
+        if (sn != null && cid != null) {
+            repository.sellCopy(sn, cid, quantity, salePrice, soldOn)
+        }
+        _uiState.update {
+            it.copy(
+                sellSetNumber = null, sellCopyId = null,
+                toastMessage = name?.let { n -> UiText.Res(R.string.toast_sold, listOf(n)) } ?: it.toastMessage,
+            )
         }
     }
 
@@ -167,4 +261,14 @@ class CollectionViewModel(
         pieces = item.pieces, minifigs = item.minifigs,
         retailPrice = item.retailPrice, status = item.status,
     )
+
+    /** Resolve the full catalog record for a sale (for the edit sheet), falling back to sale data. */
+    private fun catalogFrom(sold: SoldItem): CatalogSet =
+        catalogRepo.all().firstOrNull { it.setNumber == sold.setNumber }
+            ?: CatalogSet(
+                setNumber = sold.setNumber, name = sold.name, itemType = sold.itemType,
+                theme = sold.theme, releaseYear = sold.releaseYear, releaseMonth = sold.releaseMonth,
+                pieces = 0, minifigs = 0,
+                retailPrice = sold.retailPrice.takeIf { it > 0L }, status = Availability.AVAILABLE,
+            )
 }

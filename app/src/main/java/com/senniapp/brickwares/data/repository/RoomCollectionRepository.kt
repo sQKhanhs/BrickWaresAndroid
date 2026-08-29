@@ -3,6 +3,7 @@ package com.senniapp.brickwares.data.repository
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
+import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.WishlistEntity
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
@@ -11,7 +12,6 @@ import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.Condition
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
-import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.WishlistItem
@@ -70,25 +70,22 @@ class RoomCollectionRepository(
     override suspend fun getThemeSummaries(): List<ThemeSummary> =
         themeSummariesOf(getCollectionItems().first())
 
-    override suspend fun getSoldItems(): List<SoldItem> =
-        salesDao.observeActive().first().map { entity ->
-            SoldItem(
-                setNumber = entity.setNumber, name = entity.name,
-                itemType = entity.itemKind.toItemType(), theme = entity.theme,
-                releaseYear = entity.releaseYear, releaseMonth = entity.releaseMonth,
-                imageUrl = entity.imageUrl, retailPrice = entity.retailPrice ?: 0L,
-                pricePaid = entity.pricePaid, saleValue = entity.salePrice,
-            )
+    override fun getSoldItems(): Flow<List<SoldItem>> =
+        combine(salesDao.observeActive(), catalog.revision) { rows, _ ->
+            rows.map { entity ->
+                SoldItem(
+                    id = entity.id,
+                    setNumber = entity.setNumber, name = entity.name,
+                    itemType = entity.itemKind.toItemType(), theme = entity.theme,
+                    releaseYear = entity.releaseYear, releaseMonth = entity.releaseMonth,
+                    imageUrl = entity.imageUrl, retailPrice = entity.retailPrice ?: 0L,
+                    pricePaid = entity.pricePaid, saleValue = entity.salePrice,
+                    quantity = entity.quantity,
+                    condition = if (entity.condition == "used") Condition.USED else Condition.NEW,
+                    soldOn = entity.soldOn, note = entity.notes,
+                )
+            }
         }
-
-    override suspend fun getSalesSummary(): SalesSummary {
-        val sold = getSoldItems()
-        val totalPaid = sold.sumOf { it.pricePaid }
-        val totalProfit = sold.sumOf { it.profit }
-        val avg = if (sold.isEmpty()) 0.0 else sold.map { it.profitPercent }.average()
-        val overall = if (totalPaid == 0L) 0.0 else totalProfit.toDouble() / totalPaid * 100.0
-        return SalesSummary(sold.size, sold.sumOf { it.saleValue }, totalProfit, avg, overall)
-    }
 
     override fun searchCatalog(query: String): List<CatalogSet> = catalog.search(query)
 
@@ -136,6 +133,85 @@ class RoomCollectionRepository(
                 notes = copy.note, updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
+    }
+
+    override fun addSale(item: CollectionItem, salePrice: Long) = write {
+        val set = resolveCatalog(item.setNumber)
+        val copy = item.copies.firstOrNull()
+        salesDao.upsert(
+            SalesEntity(
+                id = UUID.randomUUID().toString(),
+                setId = set?.setId, figNum = null, itemKind = item.itemType.dbKind(),
+                setNumber = item.setNumber, name = item.name, theme = item.theme,
+                releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
+                imageUrl = set?.imageUrl ?: item.imageUrl,
+                retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
+                quantity = copy?.qty ?: 1,
+                condition = copy?.condition?.dbName() ?: "new",
+                pricePaid = copy?.pricePaid ?: 0L, salePrice = salePrice,
+                soldOn = copy?.dateAdded?.ifBlank { null },
+                notes = copy?.note, deleted = false,
+                updatedAt = System.currentTimeMillis(), dirty = true,
+            ),
+        )
+    }
+
+    override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, soldOn: String?) = write {
+        val copy = collectionDao.getById(copyId) ?: return@write
+        val available = copy.quantity
+        val sellQty = quantity.coerceIn(1, available)
+        // Prorate the copy's paid cost so profit is a fair basis and paid stays conserved between
+        // the remaining copy and the sale (whole-copy sale → full cost basis).
+        val soldPaid = if (available <= 0) 0L else copy.pricePaid * sellQty / available
+        val now = System.currentTimeMillis()
+        salesDao.upsert(
+            SalesEntity(
+                id = UUID.randomUUID().toString(),
+                setId = copy.setId, figNum = copy.figNum, itemKind = copy.itemKind,
+                setNumber = copy.setNumber, name = copy.name, theme = copy.theme,
+                releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
+                imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
+                quantity = sellQty, condition = copy.condition,
+                pricePaid = soldPaid, salePrice = salePrice,
+                soldOn = soldOn?.ifBlank { null }, notes = copy.notes,
+                deleted = false, updatedAt = now, dirty = true,
+            ),
+        )
+        if (sellQty >= available) {
+            collectionDao.markDeleted(copyId, now)
+        } else {
+            collectionDao.upsert(
+                copy.copy(
+                    quantity = available - sellQty,
+                    pricePaid = copy.pricePaid - soldPaid,
+                    updatedAt = now, dirty = true,
+                ),
+            )
+        }
+    }
+
+    override fun updateSale(
+        saleId: String,
+        quantity: Int,
+        condition: Condition,
+        pricePaid: Long,
+        salePrice: Long,
+        soldOn: String?,
+        note: String?,
+    ) = write {
+        val existing = salesDao.getById(saleId) ?: return@write
+        salesDao.upsert(
+            existing.copy(
+                quantity = quantity, condition = condition.dbName(),
+                pricePaid = pricePaid, salePrice = salePrice,
+                soldOn = soldOn?.ifBlank { null }, notes = note,
+                updatedAt = System.currentTimeMillis(), dirty = true,
+            ),
+        )
+    }
+
+    override fun removeSale(saleId: String) = write {
+        salesDao.markDeleted(saleId, System.currentTimeMillis())
     }
 
     override fun addToWishlist(item: WishlistItem) = write {

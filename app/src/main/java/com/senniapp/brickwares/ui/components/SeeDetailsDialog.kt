@@ -2,6 +2,7 @@ package com.senniapp.brickwares.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,10 +41,13 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
 
+/** Width of the per-copy action column — fits the note / edit / sell / delete icons. */
+private val ACTION_COL_WIDTH = 112.dp
+
 /**
- * Owned-item "See Details": the copies table for a [CollectionItem] with per-copy note toggle, edit
- * and delete, an average row, and an add-another-copy button. Shared by the Collection tab and the
- * Set Detail page (for a set the user already owns).
+ * Owned-item "See Details": the copies table for a [CollectionItem] with per-copy note toggle, edit,
+ * sell and delete, an average row, and an add-another-copy button. Shared by the Collection tab and
+ * the Set Detail page (for a set the user already owns).
  */
 @Composable
 fun SeeDetailsDialog(
@@ -52,6 +56,7 @@ fun SeeDetailsDialog(
     onDeleteCopy: (String, String) -> Unit,
     onEditCopy: (Copy) -> Unit,
     onAddItem: () -> Unit,
+    onSellCopy: (Copy) -> Unit = {},
 ) {
     val colors = BwTheme.colors
     val expanded = remember { mutableStateListOf<String>() }
@@ -86,7 +91,7 @@ fun SeeDetailsDialog(
                     Text(stringResource(R.string.sd_date), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.3f))
                     Text(stringResource(R.string.sd_qty), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(0.5f))
                     Text(stringResource(R.string.price_paid), style = BwType.micro, color = colors.textMuted, modifier = Modifier.weight(1.5f))
-                    Spacer(Modifier.width(84.dp))
+                    Spacer(Modifier.width(ACTION_COL_WIDTH))
                 }
                 HorizontalDivider(color = colors.borderSoft)
 
@@ -99,7 +104,7 @@ fun SeeDetailsDialog(
                         Text(copy.dateAdded, style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
                         Text(copy.qty.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
                         Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
-                        Row(modifier = Modifier.width(84.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.width(ACTION_COL_WIDTH), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_note),
                                 contentDescription = stringResource(R.string.sd_toggle_note_cd),
@@ -120,6 +125,19 @@ fun SeeDetailsDialog(
                                     .clip(CircleShape)
                                     .clickable { onEditCopy(copy) },
                             )
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onSellCopy(copy) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "$",
+                                    style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.linkAccent2,
+                                )
+                            }
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_delete),
                                 contentDescription = stringResource(R.string.sd_delete_copy_cd),
@@ -149,7 +167,7 @@ fun SeeDetailsDialog(
                     Spacer(Modifier.weight(1.3f))
                     Text(item.totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
                     Text(formatMoney(item.avgPaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
-                    Spacer(Modifier.width(84.dp))
+                    Spacer(Modifier.width(ACTION_COL_WIDTH))
                 }
 
                 Spacer(Modifier.height(16.dp))

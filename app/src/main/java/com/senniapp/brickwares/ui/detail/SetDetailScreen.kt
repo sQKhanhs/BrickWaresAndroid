@@ -63,6 +63,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.SeeDetailsDialog
+import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -99,11 +100,15 @@ fun SetDetailScreen(
         onDismissAdd = viewModel::onDismissAdd,
         onSearchCatalog = viewModel::searchCatalog,
         onAddCollectionSubmit = viewModel::onAddToCollectionSubmit,
+        onAddSaleSubmit = viewModel::onAddToSalesSubmit,
         onSeeCopies = viewModel::onSeeCopies,
         onDismissCopies = viewModel::onDismissCopies,
         onDeleteCopy = viewModel::onDeleteCopy,
         onEditCopy = viewModel::onEditCopy,
         onAddCopyForSet = viewModel::onAddCopyForSet,
+        onSellCopy = viewModel::onSellCopyRequest,
+        onDismissSell = viewModel::onDismissSell,
+        onConfirmSell = viewModel::onConfirmSell,
         onToastShown = viewModel::onToastShown,
         showSearchFab = showSearchFab,
         modifier = modifier,
@@ -121,11 +126,15 @@ private fun SetDetailContent(
     onDismissAdd: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddCollectionSubmit: (CollectionItem) -> Unit,
+    onAddSaleSubmit: (CollectionItem, Long) -> Unit,
     onSeeCopies: () -> Unit,
     onDismissCopies: () -> Unit,
     onDeleteCopy: (String, String) -> Unit,
     onEditCopy: (Copy) -> Unit,
     onAddCopyForSet: () -> Unit,
+    onSellCopy: (Copy) -> Unit,
+    onDismissSell: () -> Unit,
+    onConfirmSell: (Int, Long, String) -> Unit,
     onToastShown: () -> Unit,
     showSearchFab: Boolean = false,
     modifier: Modifier = Modifier,
@@ -284,10 +293,12 @@ private fun SetDetailContent(
                 onDismiss = onDismissAdd,
                 onSearch = onSearchCatalog,
                 onAdd = onAddCollectionSubmit,
+                allowSalesMode = true,
+                onAddSale = onAddSaleSubmit,
             )
         }
 
-        // Owned set → the copies "See Details" dialog (view/edit/delete/add-copy).
+        // Owned set → the copies "See Details" dialog (view/edit/sell/delete/add-copy).
         if (state.showCopies) {
             state.ownedItem?.let { owned ->
                 SeeDetailsDialog(
@@ -296,8 +307,21 @@ private fun SetDetailContent(
                     onDeleteCopy = onDeleteCopy,
                     onEditCopy = onEditCopy,
                     onAddItem = onAddCopyForSet,
+                    onSellCopy = onSellCopy,
                 )
             }
+        }
+
+        // Sell an owned copy → Sales.
+        val sellCopy = state.sellCopy
+        val ownedForSell = state.ownedItem
+        if (sellCopy != null && ownedForSell != null) {
+            SellCopyDialog(
+                item = ownedForSell,
+                copy = sellCopy,
+                onDismiss = onDismissSell,
+                onConfirm = onConfirmSell,
+            )
         }
 
         // Full-screen image gallery: swipe between the images that actually loaded, tap a thumbnail

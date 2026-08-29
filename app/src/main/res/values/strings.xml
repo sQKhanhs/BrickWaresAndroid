@@ -132,7 +132,14 @@
     <string name="sd_avg">Avg</string>
     <string name="sd_toggle_note_cd">Toggle note</string>
     <string name="sd_edit_copy_cd">Edit copy</string>
+    <string name="sd_sell_copy_cd">Sell copy</string>
     <string name="sd_delete_copy_cd">Delete copy</string>
+    <string name="sell_title">Sell Item</string>
+    <string name="sell_qty">Quantity to sell (%1$d available)</string>
+    <string name="sell_confirm">Sell</string>
+    <string name="toast_added_sales">%1$s added to Sales</string>
+    <string name="toast_sold">%1$s moved to Sales</string>
+    <string name="toast_removed_sale">%1$s removed from Sales</string>
 
     <!-- ============ Wishlist ============ -->
     <string name="wishlist_title">My Wishlist</string>
@@ -197,16 +204,23 @@
 
     <!-- ============ Add-to-collection sheet ============ -->
     <string name="sheet_edit_item">Edit Item</string>
+    <string name="sheet_edit_sale">Edit Sale</string>
     <string name="sheet_enter_set_number">Enter set number, e.g. 75192</string>
     <string name="sheet_theme_pcs">%1$s · %2$d pcs</string>
+    <string name="sheet_mode_collection">Collection</string>
+    <string name="sheet_mode_sales">Sales</string>
+    <string name="action_add_to_sales">Add to Sales</string>
     <string name="sheet_field_paid">Paid</string>
+    <string name="sheet_field_sale_price">Sale price</string>
     <string name="sheet_field_qty">Qty</string>
     <string name="sheet_field_condition">Condition</string>
     <string name="sheet_condition_new">New</string>
     <string name="sheet_condition_used">Used</string>
     <string name="sheet_field_date_added">Date Added</string>
+    <string name="sheet_field_date_sold">Date Sold</string>
     <string name="sheet_field_note">Note</string>
     <string name="sheet_note_optional">Optional</string>
     <string name="sheet_save">Save</string>
     <string name="sheet_add_item">Add Item</string>
+    <string name="sheet_add_sale">Add Sale</string>
 </resources>

@@ -131,7 +131,14 @@
     <string name="sd_avg">TB</string>
     <string name="sd_toggle_note_cd">Bật/tắt ghi chú</string>
     <string name="sd_edit_copy_cd">Sửa bản sao</string>
+    <string name="sd_sell_copy_cd">Bán bản sao</string>
     <string name="sd_delete_copy_cd">Xóa bản sao</string>
+    <string name="sell_title">Bán món đồ</string>
+    <string name="sell_qty">Số lượng bán (còn %1$d)</string>
+    <string name="sell_confirm">Bán</string>
+    <string name="toast_added_sales">Đã thêm %1$s vào mục đã bán</string>
+    <string name="toast_sold">Đã chuyển %1$s sang mục đã bán</string>
+    <string name="toast_removed_sale">Đã xóa %1$s khỏi mục đã bán</string>
 
     <!-- ============ Wishlist ============ -->
     <string name="wishlist_title">Danh sách mong muốn</string>
@@ -196,16 +203,23 @@
 
     <!-- ============ Add-to-collection sheet ============ -->
     <string name="sheet_edit_item">Chỉnh sửa</string>
+    <string name="sheet_edit_sale">Sửa giao dịch bán</string>
     <string name="sheet_enter_set_number">Nhập mã bộ, ví dụ 75192</string>
     <string name="sheet_theme_pcs">%1$s · %2$d mảnh</string>
+    <string name="sheet_mode_collection">Bộ sưu tập</string>
+    <string name="sheet_mode_sales">Đã bán</string>
+    <string name="action_add_to_sales">Thêm vào mục đã bán</string>
     <string name="sheet_field_paid">Đã trả</string>
+    <string name="sheet_field_sale_price">Giá bán</string>
     <string name="sheet_field_qty">Số lượng</string>
     <string name="sheet_field_condition">Tình trạng</string>
     <string name="sheet_condition_new">Mới</string>
     <string name="sheet_condition_used">Đã qua sử dụng</string>
     <string name="sheet_field_date_added">Ngày thêm</string>
+    <string name="sheet_field_date_sold">Ngày bán</string>
     <string name="sheet_field_note">Ghi chú</string>
     <string name="sheet_note_optional">Không bắt buộc</string>
     <string name="sheet_save">Lưu</string>
     <string name="sheet_add_item">Thêm</string>
+    <string name="sheet_add_sale">Thêm giao dịch</string>
 </resources>

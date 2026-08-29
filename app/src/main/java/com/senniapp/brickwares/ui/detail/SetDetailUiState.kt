@@ -26,6 +26,8 @@ data class SetDetailUiState(
     val related: List<CatalogSet> = emptyList(),
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
+    /** When non-null, the Sell dialog is open for this owned copy. */
+    val sellCopy: Copy? = null,
     /** The catalog isn't available (offline / not yet loaded) so the detail can't be shown. */
     val offline: Boolean = false,
     val toastMessage: UiText? = null,

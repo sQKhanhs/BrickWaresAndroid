@@ -116,6 +116,32 @@ class SetDetailViewModel(
         }
     }
 
+    /** Add sheet in Sales mode: records a standalone sale (does not add to the collection). */
+    fun onAddToSalesSubmit(item: CollectionItem, salePrice: Long) {
+        repository.addSale(item, salePrice)
+        _uiState.update {
+            it.copy(addTarget = null, editingCopy = null, toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name)))
+        }
+    }
+
+    // ---- Sell an owned copy → Sales ----
+
+    fun onSellCopyRequest(copy: Copy) = _uiState.update { it.copy(showCopies = false, sellCopy = copy) }
+
+    fun onDismissSell() = _uiState.update { it.copy(sellCopy = null) }
+
+    fun onConfirmSell(quantity: Int, salePrice: Long, soldOn: String) {
+        val state = _uiState.value
+        val copy = state.sellCopy
+        val sn = state.set?.setNumber ?: state.ownedItem?.setNumber
+        if (copy != null && sn != null) {
+            repository.sellCopy(sn, copy.id, quantity, salePrice, soldOn)
+        }
+        _uiState.update {
+            it.copy(sellCopy = null, toastMessage = it.set?.let { s -> UiText.Res(R.string.toast_sold, listOf(s.name)) } ?: it.toastMessage)
+        }
+    }
+
     // ---- Owned-item copies (the See-Details dialog, shown for a set already in the collection) ----
 
     fun onSeeCopies() = _uiState.update { it.copy(showCopies = true) }

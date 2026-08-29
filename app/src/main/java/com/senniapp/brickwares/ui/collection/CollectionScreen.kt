@@ -63,7 +63,9 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.SaleDetailsDialog
 import com.senniapp.brickwares.ui.components.SeeDetailsDialog
+import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
@@ -102,10 +104,19 @@ fun CollectionScreen(
         onDismissAddSheet = viewModel::onDismissAddSheet,
         onSearchCatalog = viewModel::searchCatalog,
         onAddItem = viewModel::submitAddSheet,
+        onAddSale = viewModel::submitAddSheetSale,
+        onEditSaleSubmit = viewModel::submitEditSale,
         onDismissDetail = viewModel::onDismissDetail,
         onDeleteCopy = viewModel::onDeleteCopy,
         onAddCopyForSet = viewModel::onAddCopyForSet,
         onEditCopy = viewModel::onEditCopy,
+        onSellCopyRequest = viewModel::onSellCopyRequest,
+        onDismissSell = viewModel::onDismissSell,
+        onConfirmSell = viewModel::onConfirmSell,
+        onSaleDetail = viewModel::onSaleDetail,
+        onDismissSaleDetail = viewModel::onDismissSaleDetail,
+        onEditSale = viewModel::onEditSale,
+        onDeleteSale = viewModel::onDeleteSale,
         onRequestDeleteItem = viewModel::onRequestDeleteItem,
         onConfirmDeleteItem = viewModel::onConfirmDeleteItem,
         onCancelDeleteItem = viewModel::onCancelDeleteItem,
@@ -129,10 +140,19 @@ private fun CollectionContent(
     onDismissAddSheet: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddItem: (CollectionItem) -> Unit,
+    onAddSale: (CollectionItem, Long) -> Unit,
+    onEditSaleSubmit: (CollectionItem, Long) -> Unit,
     onDismissDetail: () -> Unit,
     onDeleteCopy: (String, String) -> Unit,
     onAddCopyForSet: (CollectionItem) -> Unit,
     onEditCopy: (CollectionItem, Copy) -> Unit,
+    onSellCopyRequest: (String, Copy) -> Unit,
+    onDismissSell: () -> Unit,
+    onConfirmSell: (Int, Long, String) -> Unit,
+    onSaleDetail: (SoldItem) -> Unit,
+    onDismissSaleDetail: () -> Unit,
+    onEditSale: (SoldItem) -> Unit,
+    onDeleteSale: (String) -> Unit,
     onRequestDeleteItem: (CollectionItem) -> Unit,
     onConfirmDeleteItem: () -> Unit,
     onCancelDeleteItem: () -> Unit,
@@ -248,8 +268,8 @@ private fun CollectionContent(
                 if (state.soldItems.isEmpty()) {
                     item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
-                    items(state.salesPageItems, key = { it.setNumber }) { sold ->
-                        SoldCard(sold)
+                    items(state.salesPageItems, key = { it.id }) { sold ->
+                        SoldCard(sold, onDetail = { onSaleDetail(sold) })
                         Spacer(Modifier.height(12.dp))
                     }
                     item {
@@ -316,6 +336,12 @@ private fun CollectionContent(
                 onDismiss = onDismissAddSheet,
                 onSearch = onSearchCatalog,
                 onAdd = onAddItem,
+                allowSalesMode = true,
+                onAddSale = onAddSale,
+                // Tapping + while in Sales mode opens the sheet already on the Sales side.
+                initialSalesMode = state.mode == CollectionMode.SALES,
+                initialSalePrice = state.editingSalePrice,
+                onEditSale = onEditSaleSubmit,
             )
         }
 
@@ -326,6 +352,25 @@ private fun CollectionContent(
                 onDeleteCopy = onDeleteCopy,
                 onEditCopy = { copy -> onEditCopy(detail, copy) },
                 onAddItem = { onAddCopyForSet(detail) },
+                onSellCopy = { copy -> onSellCopyRequest(detail.setNumber, copy) },
+            )
+        }
+
+        state.sellTarget?.let { (item, copy) ->
+            SellCopyDialog(
+                item = item,
+                copy = copy,
+                onDismiss = onDismissSell,
+                onConfirm = onConfirmSell,
+            )
+        }
+
+        state.saleDetailItem?.let { sold ->
+            SaleDetailsDialog(
+                sold = sold,
+                onDismiss = onDismissSaleDetail,
+                onEdit = onEditSale,
+                onDelete = onDeleteSale,
             )
         }
 
@@ -567,7 +612,7 @@ private fun ProfitBar(summary: SalesSummary) {
 }
 
 @Composable
-private fun SoldCard(sold: SoldItem) {
+private fun SoldCard(sold: SoldItem, onDetail: () -> Unit) {
     val colors = BwTheme.colors
     val boxUrl = CatalogImages.boxUrl(sold.setNumber)
     Row(
@@ -594,6 +639,7 @@ private fun SoldCard(sold: SoldItem) {
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
             PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_paid), formatMoney(sold.pricePaid, AppCurrency.VND))
             PriceLine(stringResource(R.string.price_sale), formatMoney(sold.saleValue, AppCurrency.VND))
             val profitColor = if (sold.profit >= 0) colors.success else colors.error
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -602,6 +648,19 @@ private fun SoldCard(sold: SoldItem) {
                 Text(signedMoney(sold.profit), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
             }
             GrowthPill(sold.profitPercent)
+            Row(
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                    .clickable(onClick = onDetail)
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(painter = painterResource(R.drawable.ic_bw_check), contentDescription = null, tint = colors.text, modifier = Modifier.size(13.dp))
+                Text(stringResource(R.string.action_see_detail), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+            }
         }
     }
 }
