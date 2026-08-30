@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 /**
  * ViewModel for the Set Detail page. [load] points it at a set number; it then resolves the set
@@ -64,7 +65,18 @@ class SetDetailViewModel(
         val set = all.find { it.id == key } ?: all.find { it.setNumber == key }
         val sn = set?.setNumber ?: key
         val owned = collectionItems.find { it.setNumber == sn }
-        val related = all.filter { it.theme == set?.theme && it.id != set?.id }.take(4)
+        // Recommend up to 5 RANDOM same-theme sets the user neither owns nor wishlists. Seed the
+        // shuffle by the set id so the picks stay stable across rebuilds (they only change as the
+        // user's owned/wishlist sets change), instead of reshuffling on every flow emission.
+        val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
+        val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
+        val related = if (set == null) emptyList() else all
+            .filter {
+                it.theme == set.theme && it.id != set.id &&
+                    it.setNumber !in ownedNumbers && it.setNumber !in wishlistedNumbers
+            }
+            .shuffled(Random(set.id.hashCode()))
+            .take(5)
         _uiState.update {
             it.copy(
                 loaded = true,

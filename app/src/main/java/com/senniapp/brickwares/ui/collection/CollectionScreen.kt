@@ -80,7 +80,7 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
-import com.senniapp.brickwares.util.formatRelease
+import com.senniapp.brickwares.ui.components.releaseLabel
 import kotlin.math.roundToInt
 
 @Composable
@@ -482,7 +482,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 modifier = Modifier.clickable(onClick = onOpenDetail),
             )
             MetaLine(stringResource(R.string.meta_theme), item.theme)
-            MetaLine(stringResource(R.string.meta_release), formatRelease(item.releaseMonth, item.releaseYear))
+            MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
             MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
             StatusBadge(item.status)
         }
@@ -634,7 +634,7 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
             MetaLine(stringResource(R.string.meta_theme), sold.theme)
-            MetaLine(stringResource(R.string.meta_release), formatRelease(sold.releaseMonth, sold.releaseYear))
+            MetaLine(stringResource(R.string.meta_release), releaseLabel(sold.releaseMonth, sold.releaseYear))
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {

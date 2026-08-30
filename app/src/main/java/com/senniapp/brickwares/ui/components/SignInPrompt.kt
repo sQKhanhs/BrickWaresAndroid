@@ -79,7 +79,9 @@ fun SignInPromptCard(
             model = SIGN_IN_ART,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.width(160.dp).aspectRatio(450f / 601f),
+            // Tight-cropped standing figure; sized so its height roughly matches the empty-state and
+            // Home "no value" minifig (~200dp tall) so the two illustrations read at the same scale.
+            modifier = Modifier.width(130.dp).aspectRatio(416f / 640f),
         )
     }
 }

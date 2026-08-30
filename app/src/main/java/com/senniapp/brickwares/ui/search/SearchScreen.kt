@@ -74,7 +74,7 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRetail
-import com.senniapp.brickwares.util.formatRelease
+import com.senniapp.brickwares.ui.components.releaseLabel
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)
@@ -642,7 +642,7 @@ private fun ResultCard(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
             MetaLine(stringResource(R.string.meta_theme), set.theme)
-            MetaLine(stringResource(R.string.meta_release), formatRelease(set.releaseMonth, set.releaseYear))
+            MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
             MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
             StatusBadge(set.status)
         }

@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -181,6 +182,19 @@ fun Banner(imageAsset: String, title: String) {
                 .padding(horizontal = 20.dp),
         )
     }
+}
+
+/**
+ * Localized release label for a set's month + year. English uses the short month name
+ * ("Jan 2026", "Oct 2026"); Vietnamese uses the "T{n}" form ("T1 2026") — both driven by the
+ * `release_months` string-array, so the in-app language switcher applies automatically. When the
+ * month is unknown (0, as many catalog sets store year only), just the year is shown ("2026").
+ */
+@Composable
+fun releaseLabel(month: Int, year: Int): String {
+    if (month !in 1..12) return year.toString()
+    val label = stringArrayResource(R.array.release_months)[month - 1]
+    return stringResource(R.string.release_format, label, year)
 }
 
 /**

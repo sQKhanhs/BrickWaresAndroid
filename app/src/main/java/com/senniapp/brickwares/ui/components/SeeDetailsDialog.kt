@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -125,17 +126,19 @@ fun SeeDetailsDialog(
                                     .clip(CircleShape)
                                     .clickable { onEditCopy(copy) },
                             )
+                            // "Sell" action rendered as a coin: filled yellow disc with a $ sign.
                             Box(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .clip(CircleShape)
+                                    .background(colors.brandYellow)
                                     .clickable { onSellCopy(copy) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     "$",
-                                    style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                    color = colors.linkAccent2,
+                                    style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.onYellow,
                                 )
                             }
                             Icon(

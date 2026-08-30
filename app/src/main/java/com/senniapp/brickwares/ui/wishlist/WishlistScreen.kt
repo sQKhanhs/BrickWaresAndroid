@@ -68,7 +68,7 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
-import com.senniapp.brickwares.util.formatRelease
+import com.senniapp.brickwares.ui.components.releaseLabel
 
 @Composable
 fun WishlistScreen(
@@ -279,7 +279,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 modifier = Modifier.clickable(onClick = onOpenDetail),
             )
             MetaLine(stringResource(R.string.meta_theme), item.theme)
-            MetaLine(stringResource(R.string.meta_release), formatRelease(item.releaseMonth, item.releaseYear))
+            MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
             MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
             StatusBadge(item.status)
         }

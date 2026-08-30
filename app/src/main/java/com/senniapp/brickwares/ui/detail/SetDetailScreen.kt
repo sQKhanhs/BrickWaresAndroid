@@ -72,7 +72,7 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
 import kotlinx.coroutines.launch
 import com.senniapp.brickwares.util.formatRetail
-import com.senniapp.brickwares.util.formatRelease
+import com.senniapp.brickwares.ui.components.releaseLabel
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)
@@ -251,7 +251,7 @@ private fun SetDetailContent(
                 DetailRow(stringResource(R.string.detail_name), set.name)
                 DetailLinkRow(stringResource(R.string.meta_theme), set.theme, onNavigateToSearch)
                 DetailLinkRow(stringResource(R.string.meta_subtheme), set.subtheme, onNavigateToSearch)
-                DetailRow(stringResource(R.string.detail_released), formatRelease(set.releaseMonth, set.releaseYear))
+                DetailRow(stringResource(R.string.detail_released), releaseLabel(set.releaseMonth, set.releaseYear))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.detail_availability), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                     StatusBadge(set.status)
@@ -443,11 +443,10 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
     }
 }
 
+/** Recommended-set card, laid out to match the Collection tab's item card (minus owner-only fields). */
 @Composable
 private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
     val colors = BwTheme.colors
-    val boxUrl = set.boxImageUrl
-    val renderUrl = set.thumbnailUrl ?: set.imageUrl
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -458,16 +457,30 @@ private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = boxUrl,
-            fallbackUrl = renderUrl,
+            imageUrl = set.boxImageUrl,
+            fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
             itemType = set.itemType,
-            size = 60.dp,
-            iconSize = 26.dp,
+            size = 72.dp,
+            iconSize = 30.dp,
         )
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, maxLines = 1)
-            MetaLine(stringResource(R.string.meta_release), formatRelease(set.releaseMonth, set.releaseYear))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                "${set.setNumber} ${set.name}",
+                style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                color = colors.linkAccent,
+            )
+            MetaLine(stringResource(R.string.meta_theme), set.theme)
+            MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
+            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
+            StatusBadge(set.status)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(
+            modifier = Modifier.width(130.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
             PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
         }
     }

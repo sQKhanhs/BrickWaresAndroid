@@ -73,11 +73,13 @@ class RoomCollectionRepository(
     override fun getSoldItems(): Flow<List<SoldItem>> =
         combine(salesDao.observeActive(), catalog.revision) { rows, _ ->
             rows.map { entity ->
+                val cat = catalogFor(entity.setId, entity.setNumber)
                 SoldItem(
                     id = entity.id,
                     setNumber = entity.setNumber, name = entity.name,
                     itemType = entity.itemKind.toItemType(), theme = entity.theme,
-                    releaseYear = entity.releaseYear, releaseMonth = entity.releaseMonth,
+                    releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: entity.releaseYear,
+                    releaseMonth = cat?.releaseMonth ?: entity.releaseMonth,
                     imageUrl = entity.imageUrl, retailPrice = entity.retailPrice ?: 0L,
                     pricePaid = entity.pricePaid, saleValue = entity.salePrice,
                     quantity = entity.quantity,
@@ -256,23 +258,27 @@ class RoomCollectionRepository(
     private fun Condition.dbName() = if (this == Condition.USED) "used" else "new"
 
     /**
-     * Current catalog status for a user row (matched by set_id, else set number), or null when the
+     * The live catalog record for a user row (matched by set_id, else set number), or null when the
      * catalog isn't loaded (offline / not yet fetched) — callers then keep the stored denormalized
-     * status. This reconciles items added before the status logic (or before a set retired).
+     * values. Lets reference fields (status, and the release month/year — which older rows saved as
+     * month 0 before ingestion derived it) refresh to the current catalog value.
      */
-    private fun catalogStatusFor(setId: Long?, setNumber: String): Availability? =
+    private fun catalogFor(setId: Long?, setNumber: String): CatalogSet? =
         catalog.all().firstOrNull { c ->
             (setId != null && c.setId == setId) || c.setNumber == setNumber
-        }?.status
+        }
 
     private fun List<CollectionCopyEntity>.toCollectionItem(): CollectionItem {
         val head = first()
+        val cat = catalogFor(head.setId, head.setNumber)
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
-            theme = head.theme, releaseYear = head.releaseYear, releaseMonth = head.releaseMonth,
+            theme = head.theme,
+            releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: head.releaseYear,
+            releaseMonth = cat?.releaseMonth ?: head.releaseMonth,
             pieces = head.pieces, minifigs = head.minifigs, retailPrice = head.retailPrice ?: 0L,
             currentValue = null, growthPercent = null,
-            status = catalogStatusFor(head.setId, head.setNumber) ?: head.status.toAvailability(),
+            status = cat?.status ?: head.status.toAvailability(),
             imageUrl = head.imageUrl,
             copies = map { e ->
                 Copy(
@@ -285,12 +291,17 @@ class RoomCollectionRepository(
         )
     }
 
-    private fun WishlistEntity.toWishlistItem() = WishlistItem(
-        setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
-        releaseYear = releaseYear, releaseMonth = releaseMonth, pieces = pieces, minifigs = minifigs,
-        retailPrice = retailPrice ?: 0L, currentValue = null, growthPercent = null,
-        status = catalogStatusFor(setId, setNumber) ?: status.toAvailability(), imageUrl = imageUrl,
-    )
+    private fun WishlistEntity.toWishlistItem(): WishlistItem {
+        val cat = catalogFor(setId, setNumber)
+        return WishlistItem(
+            setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
+            releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
+            releaseMonth = cat?.releaseMonth ?: releaseMonth,
+            pieces = pieces, minifigs = minifigs,
+            retailPrice = retailPrice ?: 0L, currentValue = null, growthPercent = null,
+            status = cat?.status ?: status.toAvailability(), imageUrl = imageUrl,
+        )
+    }
 
     private fun String.toAvailability(): Availability =
         runCatching { Availability.valueOf(this) }.getOrDefault(Availability.AVAILABLE)

@@ -43,7 +43,7 @@ class SupabaseCatalogRepository(
                     .select(
                         Columns.raw(
                             "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
-                                "minifigs,availability,set_prices(region,retail_price,date_last_available)",
+                                "minifigs,availability,set_prices(region,retail_price,date_first_available,date_last_available)",
                         ),
                     )
                     .decodeList<SetRow>()
@@ -121,14 +121,20 @@ class SupabaseCatalogRepository(
             }
         }
 
+        /** Earliest first-available date across regions — the set's real release date, if known. */
+        private fun firstAvailable(): LocalDate? = prices
+            .mapNotNull { it.dateFirstAvailable?.take(10) }
+            .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+            .minOrNull()
+
         fun toCatalogSet(): CatalogSet = CatalogSet(
             setNumber = setNumber,
             name = name ?: "",
             itemType = if (itemType == "minifig") ItemType.MINIFIG else ItemType.SET,
             theme = theme ?: "",
-            releaseYear = year ?: 0,
-            // Our `sets` table stores year only (no month); month awaits a richer ingest.
-            releaseMonth = 0,
+            releaseYear = year ?: firstAvailable()?.year ?: 0,
+            // `sets` stores year only; the month comes from set_prices.date_first_available (0 = unknown).
+            releaseMonth = firstAvailable()?.monthValue ?: 0,
             pieces = pieces ?: 0,
             minifigs = minifigs ?: 0,
             // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
@@ -151,6 +157,8 @@ class SupabaseCatalogRepository(
     private data class PriceRow(
         val region: String? = null,
         @SerialName("retail_price") val retailPrice: Double? = null,
+        /** LEGO.com first-available date (YYYY-MM-DD) for this region; source of the release month. */
+        @SerialName("date_first_available") val dateFirstAvailable: String? = null,
         /** LEGO.com exit date (YYYY-MM-DD) for this region; past = retired. Null while still sold. */
         @SerialName("date_last_available") val dateLastAvailable: String? = null,
     )

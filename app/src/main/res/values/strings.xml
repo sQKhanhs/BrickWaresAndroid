@@ -11,6 +11,23 @@
     <string name="meta_release">Release</string>
     <string name="meta_pieces_minifigs">Pieces / Minifigs</string>
 
+    <!-- Release month + year label, e.g. "Jan 2026". %1$s = month label from release_months. -->
+    <string name="release_format">%1$s %2$d</string>
+    <string-array name="release_months">
+        <item>Jan</item>
+        <item>Feb</item>
+        <item>Mar</item>
+        <item>Apr</item>
+        <item>May</item>
+        <item>Jun</item>
+        <item>Jul</item>
+        <item>Aug</item>
+        <item>Sep</item>
+        <item>Oct</item>
+        <item>Nov</item>
+        <item>Dec</item>
+    </string-array>
+
     <string name="price_retail">Retail</string>
     <string name="price_paid">Paid</string>
     <string name="price_value">Value</string>
