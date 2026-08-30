@@ -43,7 +43,7 @@ class SupabaseCatalogRepository(
                     .select(
                         Columns.raw(
                             "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
-                                "minifigs,availability,set_prices(region,retail_price,date_first_available,date_last_available)",
+                                "minifigs,availability,notes,set_prices(region,retail_price,date_first_available,date_last_available)",
                         ),
                     )
                     .decodeList<SetRow>()
@@ -85,6 +85,7 @@ class SupabaseCatalogRepository(
         val minifigs: Int? = null,
         /** Brickset sales channel: "Retail", "LEGO exclusive", "Retail - limited", GWP, etc. */
         val availability: String? = null,
+        val notes: String? = null,
         @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
         /**
@@ -107,11 +108,14 @@ class SupabaseCatalogRepository(
          * PROMO (promotional); anything else is AVAILABLE. Sets with no exit date are treated as still
          * available (unknown, not retired).
          */
+        /** Latest known LEGO.com exit date across regions (null if none) — the retirement date. */
+        private fun lastAvailable(): LocalDate? = prices
+            .mapNotNull { it.dateLastAvailable?.take(10) }
+            .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+            .maxOrNull()
+
         private fun deriveStatus(): Availability {
-            val lastAvailable = prices
-                .mapNotNull { it.dateLastAvailable?.take(10) }
-                .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-                .maxOrNull()
+            val lastAvailable = lastAvailable()
             if (lastAvailable != null && lastAvailable.isBefore(LocalDate.now())) return Availability.RETIRED
             return when {
                 availability.equals("LEGO exclusive", ignoreCase = true) -> Availability.EXCLUSIVE
@@ -140,6 +144,9 @@ class SupabaseCatalogRepository(
             // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
             retailPrice = retailVnd(),
             status = deriveStatus(),
+            // Retirement date shown on the detail page — only when the exit date is actually in the past.
+            retiredYear = lastAvailable()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,
+            retiredMonth = lastAvailable()?.takeIf { it.isBefore(LocalDate.now()) }?.monthValue ?: 0,
             subtheme = subtheme ?: "General",
             // Brickset's image host is Cloudflare-blocked for non-browser clients, so images come from
             // hosts that load over plain HTTP: the built-set render from Rebrickable's CDN, and the
@@ -148,6 +155,7 @@ class SupabaseCatalogRepository(
             boxImageUrl = CatalogImages.boxUrl(setNumber, numberVariant ?: 1),
             thumbnailUrl = null,
             numberVariant = numberVariant ?: 1,
+            notes = notes?.takeIf { it.isNotBlank() },
             setId = setId,
         )
     }

@@ -75,7 +75,7 @@ function setRow(s) {
   return `(${num(s.setID)}, ${q(s.number)}, ${num(s.numberVariant) || 1}, ${q(s.name)}, ${num(s.year)}, ` +
     `${q(s.theme)}, ${q(s.themeGroup)}, ${q(s.subtheme)}, ${q(s.category)}, 'set', ${num(s.pieces)}, ` +
     `${num(s.minifigs)}, ${num(s.ageRange?.min)}, ${bool(s.released)}, ${q(s.availability)}, ${q(s.image?.imageURL)}, ` +
-    `${q(s.image?.thumbnailURL)}, ${q(s.bricksetURL)}, ${num(s.rating)}, ${num(s.reviewCount)})`;
+    `${q(s.image?.thumbnailURL)}, ${q(s.bricksetURL)}, ${num(s.rating)}, ${num(s.reviewCount)}, ${q(s.extendedData?.notes)})`;
 }
 
 function priceRows(s) {
@@ -86,6 +86,13 @@ function priceRows(s) {
     if (r && (r.retailPrice != null || r.dateFirstAvailable || r.dateLastAvailable)) {
       rows.push(`(${num(s.setID)}, '${region}', ${num(r.retailPrice)}, ${date(r.dateFirstAvailable)}, ${date(r.dateLastAvailable)})`);
     }
+  }
+  // Fallback for sets with no per-region LEGO.com pricing (e.g. Target/Kohl's promos not sold on
+  // LEGO.com): Brickset still exposes set-level launchDate/exitDate. Carry those (price stays null —
+  // genuinely unavailable) under a synthetic 'GLOBAL' region so the app still derives a release
+  // month + retirement date from date_first_available/date_last_available. Only when LEGOCom is empty.
+  if (rows.length === 0 && (s.launchDate || s.exitDate)) {
+    rows.push(`(${num(s.setID)}, 'GLOBAL', null, ${date(s.launchDate)}, ${date(s.exitDate)})`);
   }
   return rows;
 }
@@ -116,7 +123,9 @@ async function main() {
   for (const theme of themes) {
     // Brickset's orderBy field is "YearFrom" (not "Year"); "YearDESC" is silently ignored and you
     // get default (set-number) order. "YearFromDESC" gives genuinely newest-first.
-    const p = { theme, pageSize, orderBy: "YearFromDESC" };
+    // extendedData:true is REQUIRED for Brickset to return extendedData.notes (the availability note
+    // shown on the detail page). Without it the field is absent even for sets that have a note.
+    const p = { theme, pageSize, orderBy: "YearFromDESC", extendedData: true };
     if (BRICKSET_YEAR) p.year = BRICKSET_YEAR;
     if (BRICKSET_SUBTHEME) p.subtheme = BRICKSET_SUBTHEME;
     const params = JSON.stringify(p);
@@ -164,7 +173,7 @@ async function main() {
 insert into public.sets
   (set_id, set_number, number_variant, name, year, theme, theme_group, subtheme, category,
    item_type, pieces, minifigs, age_min, released, availability, image_url, thumbnail_url,
-   brickset_url, rating, review_count)
+   brickset_url, rating, review_count, notes)
 values
   ${setValues}
 on conflict (set_id) do update set
@@ -173,7 +182,7 @@ on conflict (set_id) do update set
   category = excluded.category, pieces = excluded.pieces, minifigs = excluded.minifigs,
   released = excluded.released, image_url = excluded.image_url,
   thumbnail_url = excluded.thumbnail_url, brickset_url = excluded.brickset_url,
-  rating = excluded.rating, review_count = excluded.review_count,
+  rating = excluded.rating, review_count = excluded.review_count, notes = excluded.notes,
   last_synced_at = now();
 
 ${priceValues ? `insert into public.set_prices

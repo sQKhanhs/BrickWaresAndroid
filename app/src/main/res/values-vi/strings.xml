@@ -173,6 +173,7 @@
     <string name="detail_name">Tên</string>
     <string name="detail_released">Phát hành</string>
     <string name="detail_availability">Tình trạng</string>
+    <string name="detail_retired">Ngừng bán</string>
     <string name="detail_my_collection">Bộ sưu tập của tôi</string>
     <string name="detail_total_paid">Tổng đã trả</string>
     <string name="detail_more_in">Xem thêm trong %1$s</string>

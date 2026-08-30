@@ -20,6 +20,12 @@ data class CatalogSet(
     /** Retail in the display currency (VND), or null when no source price is available. */
     val retailPrice: Long?,
     val status: Availability,
+    /**
+     * Retirement date (from the latest past `date_last_available`), split into year/month; both 0
+     * when the set isn't retired or the date is unknown. Shown on the detail page for RETIRED sets.
+     */
+    val retiredYear: Int = 0,
+    val retiredMonth: Int = 0,
     /** Sub-grouping within a theme (e.g. "Landmarks"). Defaults for catalog rows built from owned items. */
     val subtheme: String = "General",
     /** Rebrickable render of the built set. Null for rows built from owned items without one. */
@@ -33,6 +39,8 @@ data class CatalogSet(
     val thumbnailUrl: String? = null,
     /** Brickset number variant (e.g. 1 for "10282-1"); disambiguates same-number sets in lists. */
     val numberVariant: Int = 1,
+    /** Brickset availability/sourcing note (e.g. "[NA] Available from Target and Kohl's"); usually null. */
+    val notes: String? = null,
     /**
      * Catalog primary key (`sets.set_id`, the Brickset setID). Present for rows read from Supabase;
      * null for mock/owned-item-built rows. Used to write user-data rows (which FK to `sets`).

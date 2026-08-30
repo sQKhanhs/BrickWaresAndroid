@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,21 +50,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
-import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.EmptyStateArt
-import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
-import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.SeeDetailsDialog
 import com.senniapp.brickwares.ui.components.SellCopyDialog
+import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -97,6 +97,10 @@ fun SetDetailScreen(
         onNavigateToSearch = onNavigateToSearch,
         onAddWishlist = viewModel::onAddToWishlist,
         onAddCollectionClick = viewModel::onAddToCollectionClick,
+        onRecommendAddCollection = viewModel::onAddRecommendToCollection,
+        onRecommendAddWishlist = viewModel::onAddRecommendToWishlist,
+        onRecommendRemoveWishlist = viewModel::onRemoveRecommendFromWishlist,
+        onRecommendSeeDetail = viewModel::onRecommendSeeCopies,
         onDismissAdd = viewModel::onDismissAdd,
         onSearchCatalog = viewModel::searchCatalog,
         onAddCollectionSubmit = viewModel::onAddToCollectionSubmit,
@@ -123,6 +127,10 @@ private fun SetDetailContent(
     onNavigateToSearch: () -> Unit,
     onAddWishlist: () -> Unit,
     onAddCollectionClick: () -> Unit,
+    onRecommendAddCollection: (CatalogSet) -> Unit,
+    onRecommendAddWishlist: (CatalogSet) -> Unit,
+    onRecommendRemoveWishlist: (CatalogSet) -> Unit,
+    onRecommendSeeDetail: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
     onSearchCatalog: (String) -> List<CatalogSet>,
     onAddCollectionSubmit: (CollectionItem) -> Unit,
@@ -256,6 +264,9 @@ private fun SetDetailContent(
                     Text(stringResource(R.string.detail_availability), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                     StatusBadge(set.status)
                 }
+                if (set.status == Availability.RETIRED && set.retiredYear > 0) {
+                    DetailRow(stringResource(R.string.detail_retired), releaseLabel(set.retiredMonth, set.retiredYear))
+                }
                 DetailRow(stringResource(R.string.stat_pieces), set.pieces.toString())
                 if (set.minifigs > 0) DetailRow(stringResource(R.string.stat_minifigs), set.minifigs.toString())
             }
@@ -263,6 +274,14 @@ private fun SetDetailContent(
             // Pricing card.
             SectionCard(title = stringResource(R.string.detail_pricing)) {
                 DetailRow(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND), strong = true)
+                // Brickset availability/sourcing note (only ~11% of sets have one), italic under retail.
+                set.notes?.let { note ->
+                    Text(
+                        note,
+                        style = BwType.body.copy(fontSize = 12.sp, fontStyle = FontStyle.Italic),
+                        color = colors.textMuted,
+                    )
+                }
                 if (state.isOwned) {
                     HorizontalDivider(color = colors.borderSoft)
                     Text(stringResource(R.string.detail_my_collection), style = BwType.micro, color = colors.textMuted)
@@ -277,11 +296,20 @@ private fun SetDetailContent(
                 }
             }
 
-            // Related.
+            // Recommended sets — full collection-style cards with Add / Wishlist actions.
             if (state.related.isNotEmpty()) {
                 Text(stringResource(R.string.detail_more_in, set.theme), style = BwType.cardTitle.copy(fontSize = 15.sp), color = colors.text)
                 state.related.forEach { rel ->
-                    RelatedCard(set = rel, onClick = { onOpenSetDetail(rel.id) })
+                    SetResultCard(
+                        set = rel,
+                        wishlisted = rel.setNumber in state.wishlistedNumbers,
+                        owned = rel.setNumber in state.ownedNumbers,
+                        onOpenDetail = { onOpenSetDetail(rel.id) },
+                        onAddCollection = { onRecommendAddCollection(rel) },
+                        onAddWishlist = { onRecommendAddWishlist(rel) },
+                        onSeeDetail = { onRecommendSeeDetail(rel) },
+                        onRemoveWishlist = { onRecommendRemoveWishlist(rel) },
+                    )
                 }
             }
         }
@@ -298,11 +326,21 @@ private fun SetDetailContent(
             )
         }
 
-        // Owned set → the copies "See Details" dialog (view/edit/sell/delete/add-copy).
-        if (state.showCopies) {
-            state.ownedItem?.let { owned ->
+        // Owned set (hero OR a recommended owned set) → the copies "See Details" dialog. When the
+        // Sell dialog is open it renders on top instead (cancelling Sell returns here).
+        val copiesItem = state.copiesItem
+        val sellCopy = state.sellCopy
+        if (copiesItem != null) {
+            if (sellCopy != null) {
+                SellCopyDialog(
+                    item = copiesItem,
+                    copy = sellCopy,
+                    onDismiss = onDismissSell,
+                    onConfirm = onConfirmSell,
+                )
+            } else {
                 SeeDetailsDialog(
-                    item = owned,
+                    item = copiesItem,
                     onDismiss = onDismissCopies,
                     onDeleteCopy = onDeleteCopy,
                     onEditCopy = onEditCopy,
@@ -310,18 +348,6 @@ private fun SetDetailContent(
                     onSellCopy = onSellCopy,
                 )
             }
-        }
-
-        // Sell an owned copy → Sales.
-        val sellCopy = state.sellCopy
-        val ownedForSell = state.ownedItem
-        if (sellCopy != null && ownedForSell != null) {
-            SellCopyDialog(
-                item = ownedForSell,
-                copy = sellCopy,
-                onDismiss = onDismissSell,
-                onConfirm = onConfirmSell,
-            )
         }
 
         // Full-screen image gallery: swipe between the images that actually loaded, tap a thumbnail
@@ -440,49 +466,6 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
             color = colors.linkAccent2,
             modifier = Modifier.clickable(onClick = onClick),
         )
-    }
-}
-
-/** Recommended-set card, laid out to match the Collection tab's item card (minus owner-only fields). */
-@Composable
-private fun RelatedCard(set: CatalogSet, onClick: () -> Unit) {
-    val colors = BwTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.card)
-            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-    ) {
-        SetThumb(
-            imageUrl = set.boxImageUrl,
-            fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
-            itemType = set.itemType,
-            size = 72.dp,
-            iconSize = 30.dp,
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(
-                "${set.setNumber} ${set.name}",
-                style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                color = colors.linkAccent,
-            )
-            MetaLine(stringResource(R.string.meta_theme), set.theme)
-            MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
-            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
-            StatusBadge(set.status)
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(
-            modifier = Modifier.width(130.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
-        }
     }
 }
 
