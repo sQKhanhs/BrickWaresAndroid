@@ -41,6 +41,8 @@
     <string name="action_cancel">Hủy</string>
     <string name="action_delete">Xóa</string>
     <string name="action_ok">OK</string>
+    <string name="action_retry">Thử lại</string>
+    <string name="error_connection">Đã xảy ra lỗi. Vui lòng kiểm tra kết nối internet và thử lại.</string>
 
     <!-- Availability badges -->
     <string name="status_available">Đang bán</string>

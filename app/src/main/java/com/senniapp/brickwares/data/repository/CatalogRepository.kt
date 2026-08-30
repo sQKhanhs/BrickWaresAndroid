@@ -23,6 +23,13 @@ interface CatalogRepository {
      */
     val revision: StateFlow<Int>
 
+    /**
+     * True when the last [refresh] attempt failed (network/permission) and the cache is still empty —
+     * so catalog-backed screens (Search, Set Detail) can show an error/offline fallback + a retry.
+     * Flips back to false once a refresh succeeds.
+     */
+    val loadError: StateFlow<Boolean>
+
     /** Snapshot of the cached catalog (empty until [refresh] has completed at least once). */
     fun all(): List<CatalogSet>
 

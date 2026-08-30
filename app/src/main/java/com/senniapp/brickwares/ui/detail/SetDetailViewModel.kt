@@ -56,6 +56,14 @@ class SetDetailViewModel(
         }
     }
 
+    /** Retry after an offline/error state (the error fallback's Retry button): re-fetch + rebuild. */
+    fun retry() {
+        viewModelScope.launch {
+            catalogRepo.refresh()
+            rebuild()
+        }
+    }
+
     fun load(catalogId: String) {
         this.catalogKey = catalogId
         // Force a fresh recommendation batch for this open (even when returning to a set seen before).

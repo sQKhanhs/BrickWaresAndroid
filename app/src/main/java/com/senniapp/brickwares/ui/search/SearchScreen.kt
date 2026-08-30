@@ -67,6 +67,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
+import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -110,6 +111,7 @@ fun SearchScreen(
         onAddToCollectionSubmit = viewModel::onAddToCollectionSubmit,
         onAddToSalesSubmit = viewModel::onAddToSalesSubmit,
         onToastShown = viewModel::onToastShown,
+        onRetry = viewModel::retry,
         modifier = modifier,
     )
 }
@@ -136,11 +138,17 @@ private fun SearchContent(
     onAddToCollectionSubmit: (CollectionItem) -> Unit,
     onAddToSalesSubmit: (CollectionItem, Long) -> Unit,
     onToastShown: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
     var showSearchModal by remember { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        // Catalog unavailable (no connection / error) → the error fallback replaces the whole tab.
+        if (state.loadError) {
+            ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+            return@Box
+        }
         if (state.showThemeDetail) {
             ThemeDetailView(
                 theme = state.themeDetail.orEmpty(),

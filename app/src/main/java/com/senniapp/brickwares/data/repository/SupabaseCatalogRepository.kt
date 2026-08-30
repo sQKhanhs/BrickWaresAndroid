@@ -10,11 +10,14 @@ import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -32,27 +35,44 @@ class SupabaseCatalogRepository(
     private val loadMutex = Mutex()
     private val _revision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = _revision.asStateFlow()
+    private val _loadError = MutableStateFlow(false)
+    override val loadError: StateFlow<Boolean> = _loadError.asStateFlow()
+
+    private companion object {
+        const val LOAD_TIMEOUT_MS = 15_000L
+    }
 
     override suspend fun refresh() {
         if (cache.isNotEmpty()) return
         loadMutex.withLock {
             if (cache.isNotEmpty()) return
             try {
-                CurrencyConverter.ensureRatesLoaded()
-                val rows = client.from("sets")
-                    .select(
-                        Columns.raw(
-                            "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
-                                "minifigs,availability,notes,set_prices(region,retail_price,date_first_available,date_last_available)",
-                        ),
-                    )
-                    .decodeList<SetRow>()
-                cache = rows.map { it.toCatalogSet() }
+                // Bound the fetch so a dropped connection fails fast (instead of the UI hanging on
+                // "loading") and releases the mutex promptly so a retry isn't blocked.
+                withTimeout(LOAD_TIMEOUT_MS) {
+                    CurrencyConverter.ensureRatesLoaded()
+                    val rows = client.from("sets")
+                        .select(
+                            Columns.raw(
+                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
+                                    "minifigs,availability,notes,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
+                            ),
+                        )
+                        .decodeList<SetRow>()
+                    cache = rows.map { it.toCatalogSet() }
+                }
+                _loadError.value = false
                 // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
                 _revision.value += 1
+            } catch (e: TimeoutCancellationException) {
+                _loadError.value = true
+                Log.e("CatalogRepository", "Catalog load timed out", e)
+            } catch (e: CancellationException) {
+                throw e // genuine coroutine cancellation — never swallow it
             } catch (e: Exception) {
-                // Don't crash the app on a network/permission failure — leave the cache empty so
-                // callers show an empty state and a later call can retry. (TODO: surface an error state.)
+                // Don't crash the app on a network/permission failure — flag the error so catalog-backed
+                // screens show the error/offline fallback, leave the cache empty, and allow a retry.
+                _loadError.value = true
                 Log.e("CatalogRepository", "Failed to load catalog from Supabase", e)
             }
         }
@@ -86,6 +106,9 @@ class SupabaseCatalogRepository(
         /** Brickset sales channel: "Retail", "LEGO exclusive", "Retail - limited", GWP, etc. */
         val availability: String? = null,
         val notes: String? = null,
+        /** Brickset set-level "Launch"/"Exit" dates — the canonical release + retirement dates. */
+        @SerialName("launch_date") val launchDate: String? = null,
+        @SerialName("exit_date") val exitDate: String? = null,
         @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
         /**
@@ -100,23 +123,32 @@ class SupabaseCatalogRepository(
             return CurrencyConverter.toVnd(chosen.retailPrice!!, currency)
         }
 
+        private fun parseDate(s: String?): LocalDate? =
+            s?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
         /**
-         * Availability badge (Arch Decision: only mark RETIRED when actually retired — no forward
-         * estimate). Retirement wins over the sales-channel badge: a set is RETIRED once the latest
-         * known `date_last_available` (LEGO.com exit date) is in the past. Otherwise the Brickset
-         * `availability` channel maps to EXCLUSIVE (LEGO exclusive), GWP (gift with purchase), or
-         * PROMO (promotional); anything else is AVAILABLE. Sets with no exit date are treated as still
-         * available (unknown, not retired).
+         * The set's release date: prefer the Brickset set-level `launch_date` (the official launch),
+         * falling back to the earliest LEGO.com `date_first_available`. These differ when LEGO.com
+         * availability starts before the official launch (VIP early access) — the launch is correct.
          */
-        /** Latest known LEGO.com exit date across regions (null if none) — the retirement date. */
-        private fun lastAvailable(): LocalDate? = prices
-            .mapNotNull { it.dateLastAvailable?.take(10) }
-            .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-            .maxOrNull()
+        private fun releaseDate(): LocalDate? =
+            parseDate(launchDate) ?: prices
+                .mapNotNull { parseDate(it.dateFirstAvailable) }
+                .minOrNull()
+
+        /**
+         * The set's retirement date: prefer the Brickset set-level `exit_date`, falling back to the
+         * latest LEGO.com `date_last_available`. Null = still available. (Arch Decision: only mark
+         * RETIRED when the exit date is actually in the past — no forward estimate.)
+         */
+        private fun retirementDate(): LocalDate? =
+            parseDate(exitDate) ?: prices
+                .mapNotNull { parseDate(it.dateLastAvailable) }
+                .maxOrNull()
 
         private fun deriveStatus(): Availability {
-            val lastAvailable = lastAvailable()
-            if (lastAvailable != null && lastAvailable.isBefore(LocalDate.now())) return Availability.RETIRED
+            val retire = retirementDate()
+            if (retire != null && retire.isBefore(LocalDate.now())) return Availability.RETIRED
             return when {
                 availability.equals("LEGO exclusive", ignoreCase = true) -> Availability.EXCLUSIVE
                 availability.equals("LEGO Gift with Purchase", ignoreCase = true) -> Availability.GWP
@@ -125,28 +157,22 @@ class SupabaseCatalogRepository(
             }
         }
 
-        /** Earliest first-available date across regions — the set's real release date, if known. */
-        private fun firstAvailable(): LocalDate? = prices
-            .mapNotNull { it.dateFirstAvailable?.take(10) }
-            .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-            .minOrNull()
-
         fun toCatalogSet(): CatalogSet = CatalogSet(
             setNumber = setNumber,
             name = name ?: "",
             itemType = if (itemType == "minifig") ItemType.MINIFIG else ItemType.SET,
             theme = theme ?: "",
-            releaseYear = year ?: firstAvailable()?.year ?: 0,
-            // `sets` stores year only; the month comes from set_prices.date_first_available (0 = unknown).
-            releaseMonth = firstAvailable()?.monthValue ?: 0,
+            releaseYear = releaseDate()?.year ?: year ?: 0,
+            // Month from the launch date (0 = unknown, e.g. a set with only a year on Brickset).
+            releaseMonth = releaseDate()?.monthValue ?: 0,
             pieces = pieces ?: 0,
             minifigs = minifigs ?: 0,
             // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
             retailPrice = retailVnd(),
             status = deriveStatus(),
             // Retirement date shown on the detail page — only when the exit date is actually in the past.
-            retiredYear = lastAvailable()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,
-            retiredMonth = lastAvailable()?.takeIf { it.isBefore(LocalDate.now()) }?.monthValue ?: 0,
+            retiredYear = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,
+            retiredMonth = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.monthValue ?: 0,
             subtheme = subtheme ?: "General",
             // Brickset's image host is Cloudflare-blocked for non-browser clients, so images come from
             // hosts that load over plain HTTP: the built-set render from Rebrickable's CDN, and the

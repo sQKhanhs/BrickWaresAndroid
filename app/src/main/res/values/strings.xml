@@ -41,6 +41,8 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
     <string name="action_ok">OK</string>
+    <string name="action_retry">Retry</string>
+    <string name="error_connection">Something went wrong. Check your internet connection and try again.</string>
 
     <!-- Availability badges -->
     <string name="status_available">Available</string>

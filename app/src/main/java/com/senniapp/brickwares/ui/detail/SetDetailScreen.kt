@@ -57,7 +57,7 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
-import com.senniapp.brickwares.ui.components.EmptyStateArt
+import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.SearchModal
@@ -114,6 +114,7 @@ fun SetDetailScreen(
         onDismissSell = viewModel::onDismissSell,
         onConfirmSell = viewModel::onConfirmSell,
         onToastShown = viewModel::onToastShown,
+        onRetry = viewModel::retry,
         showSearchFab = showSearchFab,
         modifier = modifier,
     )
@@ -144,6 +145,7 @@ private fun SetDetailContent(
     onDismissSell: () -> Unit,
     onConfirmSell: (Int, Long, String) -> Unit,
     onToastShown: () -> Unit,
+    onRetry: () -> Unit,
     showSearchFab: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -153,6 +155,11 @@ private fun SetDetailContent(
     // Tapping the hero opens a full-screen image gallery (box shot + set render, swipeable).
     var showGallery by remember { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        // Catalog unavailable (no connection / error) → the error fallback replaces the page.
+        if (state.offline) {
+            ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+            return@Box
+        }
         val set = state.set
         // The URL the hero actually loaded (box, or its render fallback for a boxless set) — the
         // gallery lists only images that exist, so a boxless set shows just the render (no dead page).
@@ -193,9 +200,8 @@ private fun SetDetailContent(
             }
 
             if (set == null) {
-                if (state.offline) {
-                    EmptyStateArt(stringResource(R.string.detail_no_internet))
-                } else if (state.loaded) {
+                // Offline is handled full-screen above; here the catalog loaded but this set isn't in it.
+                if (state.loaded) {
                     Text(stringResource(R.string.detail_set_not_found), style = BwType.body, color = colors.textMuted)
                 }
                 return@Column

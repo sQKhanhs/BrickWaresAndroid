@@ -43,6 +43,8 @@ const val ALL_SUBTHEMES = "__all"
 data class SearchUiState(
     /** True until the catalog has loaded from Supabase for the first time. */
     val isLoading: Boolean = false,
+    /** The catalog failed to load (no connection / error) — show the error fallback with a retry. */
+    val loadError: Boolean = false,
     val query: String = "",
     /** The query that produced [results]; null while the user hasn't submitted a search yet. */
     val submittedQuery: String? = null,

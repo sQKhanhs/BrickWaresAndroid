@@ -33,11 +33,21 @@ class SearchViewModel(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
-        // Load the real catalog from Supabase, then build the theme browser.
+        // Rebuild the browser whenever the catalog (re)loads (revision bumps on every successful load)
+        // — covers the first load, the error-fallback Retry, and a reconnect satisfied by any
+        // component's refresh, so the themes always repopulate.
         viewModelScope.launch {
-            catalogRepo.refresh()
-            catalog = catalogRepo.all()
-            _uiState.update { it.copy(themes = buildThemes(), isLoading = false) }
+            catalogRepo.revision.collect {
+                catalog = catalogRepo.all()
+                if (catalog.isNotEmpty()) {
+                    _uiState.update { it.copy(themes = buildThemes(), isLoading = false) }
+                }
+            }
+        }
+        viewModelScope.launch { catalogRepo.refresh() }
+        // Surface catalog load failures (no connection / error) so the UI can show the error fallback.
+        viewModelScope.launch {
+            catalogRepo.loadError.collect { failed -> _uiState.update { it.copy(loadError = failed) } }
         }
         // Observe the wishlist so result cards can show a "Wishlisted" state.
         viewModelScope.launch {
@@ -50,6 +60,17 @@ class SearchViewModel(
             repository.getCollectionItems().collect { items ->
                 _uiState.update { it.copy(ownedNumbers = items.map { c -> c.setNumber }.toSet()) }
             }
+        }
+    }
+
+    /** Retry after a catalog load failure (the error fallback's Retry button). */
+    fun retry() {
+        _uiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch {
+            // On success the catalog `revision` bumps and the observer rebuilds the themes; on failure
+            // `loadError` stays set (observed) so the error fallback remains.
+            catalogRepo.refresh()
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
