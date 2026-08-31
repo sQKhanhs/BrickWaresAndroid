@@ -4,6 +4,7 @@ import android.util.Log
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.CurrencyConverter
@@ -11,8 +12,12 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -32,11 +37,23 @@ class SupabaseCatalogRepository(
 
     @Volatile
     private var cache: List<CatalogSet> = emptyList()
+
+    @Volatile
+    private var minifigCache: List<Minifig> = emptyList()
+    private val minifigMutex = Mutex()
     private val loadMutex = Mutex()
     private val _revision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = _revision.asStateFlow()
     private val _loadError = MutableStateFlow(false)
     override val loadError: StateFlow<Boolean> = _loadError.asStateFlow()
+
+    init {
+        // Warm the FX rates in the background (best-effort) so they don't block the catalog load —
+        // catalog price mapping falls back to the USD constant until these arrive.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { CurrencyConverter.ensureRatesLoaded() }
+        }
+    }
 
     private companion object {
         const val LOAD_TIMEOUT_MS = 15_000L
@@ -50,7 +67,6 @@ class SupabaseCatalogRepository(
                 // Bound the fetch so a dropped connection fails fast (instead of the UI hanging on
                 // "loading") and releases the mutex promptly so a retry isn't blocked.
                 withTimeout(LOAD_TIMEOUT_MS) {
-                    CurrencyConverter.ensureRatesLoaded()
                     val rows = client.from("sets")
                         .select(
                             Columns.raw(
@@ -87,6 +103,42 @@ class SupabaseCatalogRepository(
             it.setNumber.lowercase().contains(q) ||
                 it.name.lowercase().contains(q) ||
                 it.theme.lowercase().contains(q)
+        }
+    }
+
+    override suspend fun refreshMinifigs() {
+        if (minifigCache.isNotEmpty()) return
+        minifigMutex.withLock {
+            if (minifigCache.isNotEmpty()) return
+            try {
+                withTimeout(LOAD_TIMEOUT_MS) {
+                    // Each fig + the sets it's in (for the set-count + theme browse) via the join.
+                    val rows = client.from("minifigs")
+                        .select(Columns.raw("fig_num,name,num_parts,image_url,set_minifigs(sets(theme,subtheme))"))
+                        .decodeList<MinifigRow>()
+                    minifigCache = rows.map { it.toMinifig() }
+                }
+                _loadError.value = false
+                _revision.value += 1
+            } catch (e: TimeoutCancellationException) {
+                _loadError.value = true
+                Log.e("CatalogRepository", "Minifig load timed out", e)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _loadError.value = true
+                Log.e("CatalogRepository", "Failed to load minifigs from Supabase", e)
+            }
+        }
+    }
+
+    override fun allMinifigs(): List<Minifig> = minifigCache
+
+    override fun searchMinifigs(query: String): List<Minifig> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return minifigCache.filter {
+            it.figNum.lowercase().contains(q) || it.name.lowercase().contains(q)
         }
     }
 
@@ -196,6 +248,32 @@ class SupabaseCatalogRepository(
         /** LEGO.com exit date (YYYY-MM-DD) for this region; past = retired. Null while still sold. */
         @SerialName("date_last_available") val dateLastAvailable: String? = null,
     )
+
+    /** Row shape for `minifigs` + the embedded `set_minifigs → sets` join (for set-count + themes). */
+    @Serializable
+    private data class MinifigRow(
+        @SerialName("fig_num") val figNum: String,
+        val name: String? = null,
+        @SerialName("num_parts") val numParts: Int? = null,
+        @SerialName("image_url") val imageUrl: String? = null,
+        @SerialName("set_minifigs") val setMinifigs: List<SetMinifigRow> = emptyList(),
+    ) {
+        fun toMinifig(): Minifig {
+            val pairs = setMinifigs.mapNotNull { sm ->
+                sm.sets?.theme?.takeIf(String::isNotBlank)?.let { it to (sm.sets.subtheme?.takeIf(String::isNotBlank) ?: "General") }
+            }.distinct()
+            return Minifig(
+                figNum = figNum, name = name ?: figNum, imageUrl = imageUrl,
+                numParts = numParts ?: 0, setCount = setMinifigs.size, themeSubthemes = pairs,
+            )
+        }
+
+        @Serializable
+        data class SetMinifigRow(val sets: SetThemeRow? = null)
+
+        @Serializable
+        data class SetThemeRow(val theme: String? = null, val subtheme: String? = null)
+    }
 }
 
 /** App-wide singleton so every ViewModel shares one cached catalog (one network load). */

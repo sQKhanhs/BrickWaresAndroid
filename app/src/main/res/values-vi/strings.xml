@@ -10,6 +10,7 @@
     <string name="meta_subtheme">Chủ đề phụ</string>
     <string name="meta_release">Phát hành</string>
     <string name="meta_pieces_minifigs">Mảnh ghép / Minifig</string>
+    <string name="meta_parts_count">%1$d mảnh</string>
 
     <!-- Nhãn tháng + năm phát hành, ví dụ "T1 2026". %1$s = nhãn tháng từ release_months. -->
     <string name="release_format">%1$s %2$d</string>
@@ -37,6 +38,7 @@
     <string name="action_wishlisted">Đã lưu</string>
     <string name="action_add_to_collection">Thêm vào bộ sưu tập</string>
     <string name="action_see_detail">Xem chi tiết</string>
+    <string name="action_owned">Đã sở hữu</string>
     <string name="action_sign_in">Đăng nhập</string>
     <string name="action_cancel">Hủy</string>
     <string name="action_delete">Xóa</string>
@@ -181,12 +183,19 @@
     <string name="detail_more_in">Xem thêm trong %1$s</string>
 
     <!-- ============ Search ============ -->
-    <string name="search_title">Tìm kiếm</string>
+    <string name="search_title">Tìm bộ</string>
+    <string name="search_title_minifigs">Tìm minifig</string>
     <string name="search_placeholder">Tìm theo tên hoặc mã bộ</string>
     <string name="search_no_matches">Không có kết quả cho \"%1$s\"</string>
     <string name="search_results_for">Kết quả cho \"%1$s\" (%2$d)</string>
+    <string name="search_results_sets">Bộ (%1$d)</string>
+    <string name="search_results_minifigs">Minifig (%1$d)</string>
     <string name="search_no_results">Không tìm thấy bộ nào cho \"%1$s\"</string>
     <string name="search_unmark_favorite_cd">Bỏ yêu thích</string>
+    <string name="search_toggle_minifigs_cd">Chuyển tìm bộ / minifig</string>
+    <string name="search_minifig_count">%1$d minifig</string>
+    <string name="search_minifig_sets">Có trong %1$d bộ</string>
+    <string name="search_minifig_empty">Chưa có minifig trong danh mục</string>
     <string name="search_mark_favorite_cd">Đánh dấu yêu thích</string>
     <string name="search_all_subthemes">Tất cả chủ đề phụ</string>
     <string name="search_sort_label">Sắp xếp</string>

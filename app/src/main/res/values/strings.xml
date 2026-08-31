@@ -10,6 +10,7 @@
     <string name="meta_subtheme">Subtheme</string>
     <string name="meta_release">Release</string>
     <string name="meta_pieces_minifigs">Pieces / Minifigs</string>
+    <string name="meta_parts_count">%1$d parts</string>
 
     <!-- Release month + year label, e.g. "Jan 2026". %1$s = month label from release_months. -->
     <string name="release_format">%1$s %2$d</string>
@@ -37,6 +38,7 @@
     <string name="action_wishlisted">Wishlisted</string>
     <string name="action_add_to_collection">Add to Collection</string>
     <string name="action_see_detail">See Detail</string>
+    <string name="action_owned">Owned</string>
     <string name="action_sign_in">Sign In</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
@@ -183,11 +185,18 @@
 
     <!-- ============ Search ============ -->
     <string name="search_title">Search Sets</string>
+    <string name="search_title_minifigs">Search Minifigs</string>
     <string name="search_placeholder">Search by name or set number</string>
     <string name="search_no_matches">No matches for \"%1$s\"</string>
     <string name="search_results_for">Results for \"%1$s\" (%2$d)</string>
+    <string name="search_results_sets">Sets (%1$d)</string>
+    <string name="search_results_minifigs">Minifigs (%1$d)</string>
     <string name="search_no_results">No sets found for \"%1$s\"</string>
     <string name="search_unmark_favorite_cd">Unmark favorite</string>
+    <string name="search_toggle_minifigs_cd">Toggle set / minifig search</string>
+    <string name="search_minifig_count">%1$d minifigs</string>
+    <string name="search_minifig_sets">In %1$d sets</string>
+    <string name="search_minifig_empty">No minifigs in the catalog yet</string>
     <string name="search_mark_favorite_cd">Mark favorite</string>
     <string name="search_all_subthemes">All Subthemes</string>
     <string name="search_sort_label">Sort</string>

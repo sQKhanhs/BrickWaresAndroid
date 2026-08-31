@@ -4,6 +4,7 @@ import android.util.Log
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.SyncStateStore
 import com.senniapp.brickwares.data.local.WishlistEntity
@@ -128,14 +129,20 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = collectionDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins
-        val set = r.setId?.let { catalogById()[it] } ?: return
+        // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
+        val set = r.setId?.let { catalogById()[it] }
+        val fig = if (set == null) r.figNum?.let { minifigByNum()[it] } else null
+        val setNumber = set?.setNumber ?: fig?.figNum ?: return
         collectionDao.upsert(
             CollectionCopyEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
-                setNumber = set.setNumber, name = set.name, theme = set.theme, subtheme = set.subtheme,
-                releaseYear = set.releaseYear, releaseMonth = set.releaseMonth, pieces = set.pieces,
-                minifigs = set.minifigs, retailPrice = set.retailPrice, status = set.status.name,
-                imageUrl = set.imageUrl, quantity = r.quantity,
+                setNumber = setNumber, name = set?.name ?: fig?.name ?: setNumber,
+                theme = set?.theme ?: fig?.themes?.firstOrNull() ?: "",
+                subtheme = set?.subtheme ?: "General",
+                releaseYear = set?.releaseYear ?: 0, releaseMonth = set?.releaseMonth ?: 0,
+                pieces = set?.pieces ?: fig?.numParts ?: 0, minifigs = set?.minifigs ?: 0,
+                retailPrice = set?.retailPrice, status = (set?.status ?: Availability.AVAILABLE).name,
+                imageUrl = set?.imageUrl ?: fig?.imageUrl, quantity = r.quantity,
                 condition = r.condition ?: "new", pricePaid = (r.pricePaid ?: 0.0).toLong(),
                 acquiredOn = r.acquiredOn, notes = r.notes,
                 deleted = r.deleted, updatedAt = remoteAt, dirty = false,
@@ -147,14 +154,19 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return
-        val set = r.setId?.let { catalogById()[it] } ?: return
+        val set = r.setId?.let { catalogById()[it] }
+        val fig = if (set == null) r.figNum?.let { minifigByNum()[it] } else null
+        val setNumber = set?.setNumber ?: fig?.figNum ?: return
         wishlistDao.upsert(
             WishlistEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
-                setNumber = set.setNumber, name = set.name, theme = set.theme, subtheme = set.subtheme,
-                releaseYear = set.releaseYear, releaseMonth = set.releaseMonth, pieces = set.pieces,
-                minifigs = set.minifigs, retailPrice = set.retailPrice, status = set.status.name,
-                imageUrl = set.imageUrl, deleted = r.deleted, updatedAt = remoteAt, dirty = false,
+                setNumber = setNumber, name = set?.name ?: fig?.name ?: setNumber,
+                theme = set?.theme ?: fig?.themes?.firstOrNull() ?: "",
+                subtheme = set?.subtheme ?: "General",
+                releaseYear = set?.releaseYear ?: 0, releaseMonth = set?.releaseMonth ?: 0,
+                pieces = set?.pieces ?: fig?.numParts ?: 0, minifigs = set?.minifigs ?: 0,
+                retailPrice = set?.retailPrice, status = (set?.status ?: Availability.AVAILABLE).name,
+                imageUrl = set?.imageUrl ?: fig?.imageUrl, deleted = r.deleted, updatedAt = remoteAt, dirty = false,
             ),
         )
     }
@@ -181,21 +193,29 @@ class SyncCoordinator(
         return catalog.all().mapNotNull { s -> s.setId?.let { it to s } }.toMap()
     }
 
+    private suspend fun minifigByNum(): Map<String, com.senniapp.brickwares.data.model.Minifig> {
+        catalog.refreshMinifigs()
+        return catalog.allMinifigs().associateBy { it.figNum }
+    }
+
     private suspend fun clearLocal() {
         collectionDao.clearAll(); wishlistDao.clearAll(); salesDao.clearAll()
     }
 
-    private fun CollectionCopyEntity.toRemote(uid: String): RemoteCopy? = setId?.let {
-        RemoteCopy(
-            id = id, userId = uid, setId = it, itemKind = itemKind, quantity = quantity,
+    // set_id XOR fig_num (polymorphic) — push whichever this row carries; skip rows with neither.
+    private fun CollectionCopyEntity.toRemote(uid: String): RemoteCopy? {
+        if (setId == null && figNum == null) return null
+        return RemoteCopy(
+            id = id, userId = uid, setId = setId, figNum = figNum, itemKind = itemKind, quantity = quantity,
             condition = condition, pricePaid = pricePaid.toDouble(), acquiredOn = acquiredOn,
             notes = notes, deleted = deleted, updatedAt = toIso(updatedAt),
         )
     }
 
-    private fun WishlistEntity.toRemote(uid: String): RemoteWish? = setId?.let {
-        RemoteWish(
-            id = id, userId = uid, setId = it, itemKind = itemKind,
+    private fun WishlistEntity.toRemote(uid: String): RemoteWish? {
+        if (setId == null && figNum == null) return null
+        return RemoteWish(
+            id = id, userId = uid, setId = setId, figNum = figNum, itemKind = itemKind,
             deleted = deleted, updatedAt = toIso(updatedAt),
         )
     }

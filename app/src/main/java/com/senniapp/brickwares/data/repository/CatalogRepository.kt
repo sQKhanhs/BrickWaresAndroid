@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.data.repository
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.Minifig
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -35,4 +36,13 @@ interface CatalogRepository {
 
     /** Substring (LIKE-style) match over the cache on set number, name, or theme. */
     fun search(query: String): List<CatalogSet>
+
+    /** Loads the minifig catalog (with each fig's set-count + themes) into memory, if not already. */
+    suspend fun refreshMinifigs()
+
+    /** Snapshot of the cached minifig catalog (empty until [refreshMinifigs] has completed once). */
+    fun allMinifigs(): List<Minifig>
+
+    /** Substring (LIKE-style) match over the minifig cache on fig number or name. */
+    fun searchMinifigs(query: String): List<Minifig>
 }

@@ -3,8 +3,11 @@ package com.senniapp.brickwares.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
@@ -29,6 +32,7 @@ class SearchViewModel(
 ) : ViewModel() {
 
     private var catalog: List<CatalogSet> = emptyList()
+    private var minifigs: List<Minifig> = emptyList()
     private val _uiState = MutableStateFlow(SearchUiState(isLoading = true))
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
@@ -45,6 +49,9 @@ class SearchViewModel(
             }
         }
         viewModelScope.launch { catalogRepo.refresh() }
+        // Load minifigs up front too — the search bar is GLOBAL (searches sets + minifigs regardless
+        // of the browse mode), so the minifig cache must be ready even before entering minifig mode.
+        loadMinifigs()
         // Surface catalog load failures (no connection / error) so the UI can show the error fallback.
         viewModelScope.launch {
             catalogRepo.loadError.collect { failed -> _uiState.update { it.copy(loadError = failed) } }
@@ -79,16 +86,112 @@ class SearchViewModel(
             it.copy(
                 query = query,
                 submittedQuery = null,
+                // Live set suggestions (the dropdown); minifigs fold into the submitted global results.
                 suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query).take(6),
             )
         }
     }
 
+    /** Global search — returns matching sets AND minifigs, independent of the browse mode. */
     fun onSubmit() {
         val q = _uiState.value.query.trim()
         if (q.isBlank()) return
         _uiState.update {
-            it.copy(submittedQuery = q, results = catalogRepo.search(q), suggestions = emptyList())
+            it.copy(
+                submittedQuery = q, suggestions = emptyList(),
+                results = catalogRepo.search(q),
+                minifigItems = catalogRepo.searchMinifigs(q), minifigThemeDetail = null, minifigPage = 1,
+            )
+        }
+    }
+
+    // ---- Minifig mode (toggled by the FAB) ----
+
+    /** Flip the Search tab between browsing sets and minifigs. */
+    fun onToggleMode() {
+        val next = if (_uiState.value.mode == SearchMode.SETS) SearchMode.MINIFIGS else SearchMode.SETS
+        _uiState.update {
+            it.copy(mode = next, query = "", submittedQuery = null, suggestions = emptyList(), minifigThemeDetail = null)
+        }
+        if (next == SearchMode.MINIFIGS && minifigs.isEmpty()) loadMinifigs()
+    }
+
+    private fun loadMinifigs() {
+        _uiState.update { it.copy(minifigsLoading = true) }
+        viewModelScope.launch {
+            catalogRepo.refreshMinifigs()
+            minifigs = catalogRepo.allMinifigs()
+            _uiState.update { it.copy(minifigThemes = buildMinifigThemes(), minifigsLoading = false) }
+        }
+    }
+
+    /** Tapping a minifig theme card → that theme's figs. */
+    fun onMinifigThemeClick(theme: String) {
+        _uiState.update {
+            it.copy(
+                minifigThemeDetail = theme,
+                minifigItems = minifigs.filter { m -> theme in m.themes }.sortedBy { m -> m.name },
+                minifigPage = 1,
+            )
+        }
+    }
+
+    fun onMinifigThemeBack() {
+        _uiState.update { it.copy(minifigThemeDetail = null, minifigItems = emptyList()) }
+    }
+
+    fun onMinifigPageChange(page: Int) {
+        _uiState.update { it.copy(minifigPage = page) }
+    }
+
+    // Same ThemeGroup shape as the set browser (so ThemeCard is reused). count = number of minifigs in
+    // the theme; subthemes left empty for now (minifigs don't carry subtheme data yet).
+    /** Open the shared Add sheet for a minifig (represented as a fig-num "CatalogSet"). */
+    fun onAddMinifigClick(fig: Minifig) {
+        _uiState.update { it.copy(addTarget = minifigAsCatalogSet(fig)) }
+    }
+
+    fun onAddMinifigToWishlist(fig: Minifig) {
+        repository.addToWishlist(
+            WishlistItem(
+                setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
+                theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+                pieces = fig.numParts, minifigs = 0, retailPrice = 0L,
+                status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
+            ),
+        )
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_added_wishlist, listOf(fig.name))) }
+    }
+
+    /** A minifig as a fig-num-keyed [CatalogSet] so it flows through the shared Add sheet + collection. */
+    private fun minifigAsCatalogSet(fig: Minifig) = CatalogSet(
+        setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
+        theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+        pieces = fig.numParts, minifigs = 0, retailPrice = null,
+        status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
+    )
+
+    /** Tapping a minifig subtheme link → that theme's figs filtered to the subtheme. */
+    fun onMinifigSubthemeClick(theme: String, subtheme: String) {
+        _uiState.update {
+            it.copy(
+                minifigThemeDetail = theme,
+                minifigItems = minifigs.filter { m -> (theme to subtheme) in m.themeSubthemes }.sortedBy { m -> m.name },
+                minifigPage = 1,
+            )
+        }
+    }
+
+    // Same ThemeGroup shape as the set browser (so ThemeCard + its subtheme links are reused).
+    // count = minifigs in the theme; subthemes = the sets' subthemes (with per-subtheme fig counts).
+    private fun buildMinifigThemes(): List<ThemeGroup> {
+        val byTheme = minifigs.flatMap { fig -> fig.themes.map { it to fig } }.groupBy({ it.first }, { it.second })
+        return byTheme.map { (theme, figs) ->
+            val subs = figs.flatMap { f -> f.themeSubthemes.filter { it.first == theme }.map { it.second } }
+                .groupingBy { it }.eachCount()
+                .map { (name, count) -> SubthemeCount(name, count) }
+                .sortedBy { it.name }
+            ThemeGroup(theme, figs.size, themeLogo(theme), subs)
         }
     }
 
@@ -163,7 +266,9 @@ class SearchViewModel(
             .sortedBy { it.name }
 
     fun onClearSearch() {
-        _uiState.update { it.copy(query = "", submittedQuery = null, results = emptyList(), suggestions = emptyList()) }
+        _uiState.update {
+            it.copy(query = "", submittedQuery = null, results = emptyList(), suggestions = emptyList(), minifigItems = emptyList())
+        }
     }
 
     /**
@@ -182,6 +287,9 @@ class SearchViewModel(
                 themeDetailSub = ALL_SUBTHEMES,
                 themeDetailResults = emptyList(),
                 themeDetailSubOptions = emptyList(),
+                // Minifig browse home too (keep the current mode).
+                minifigThemeDetail = null,
+                minifigItems = emptyList(),
             )
         }
     }
@@ -198,6 +306,8 @@ class SearchViewModel(
     }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+
+    fun searchMinifigs(query: String): List<Minifig> = catalogRepo.searchMinifigs(query)
 
     // ---- Add to wishlist ----
 

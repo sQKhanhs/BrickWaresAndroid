@@ -96,14 +96,16 @@ class RoomCollectionRepository(
     // ---- Writes (local Room first, then request a sync) ----
 
     override fun addItem(item: CollectionItem) = write {
-        val set = resolveCatalog(item.setNumber)
         val kind = item.itemType.dbKind()
+        // A minifig item is keyed by its fig_num (stored in setNumber) — no catalog set to resolve.
+        val isFig = kind == "minifig"
+        val set = if (isFig) null else resolveCatalog(item.setNumber)
         val now = System.currentTimeMillis()
         item.copies.forEach { copy ->
             collectionDao.upsert(
                 CollectionCopyEntity(
                     id = UUID.randomUUID().toString(),
-                    setId = set?.setId, figNum = null, itemKind = kind,
+                    setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                     setNumber = item.setNumber, name = item.name, theme = item.theme,
                     subtheme = set?.subtheme ?: "General",
                     releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
@@ -218,11 +220,13 @@ class RoomCollectionRepository(
 
     override fun addToWishlist(item: WishlistItem) = write {
         if (wishlistDao.findActiveBySetNumber(item.setNumber) != null) return@write
-        val set = resolveCatalog(item.setNumber)
+        val kind = item.itemType.dbKind()
+        val isFig = kind == "minifig"
+        val set = if (isFig) null else resolveCatalog(item.setNumber)
         wishlistDao.upsert(
             WishlistEntity(
                 id = UUID.randomUUID().toString(),
-                setId = set?.setId, figNum = null, itemKind = item.itemType.dbKind(),
+                setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                 setNumber = item.setNumber, name = item.name, theme = item.theme,
                 subtheme = set?.subtheme ?: "General",
                 releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,

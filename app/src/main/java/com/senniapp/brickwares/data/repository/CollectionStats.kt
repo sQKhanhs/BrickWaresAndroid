@@ -23,8 +23,13 @@ fun collectionSummaryOf(
     var paid = 0L
     for (item in items) {
         val qty = item.totalQty
-        if (item.itemType == ItemType.SET) setCount += qty
-        minifigCount += item.minifigs * qty
+        if (item.itemType == ItemType.SET) {
+            setCount += qty
+            minifigCount += item.minifigs * qty
+        } else {
+            // A standalone minifig counts as one minifig.
+            minifigCount += qty
+        }
         pieceCount += item.pieces * qty
         value += (item.currentValue ?: item.retailPrice) * qty
         paid += item.totalPaid

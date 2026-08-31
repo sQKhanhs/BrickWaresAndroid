@@ -448,9 +448,9 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 @Composable
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
-    // The card shows immediately; the thumbnail fills in with a crossfade. Box shot first, falling
-    // back to the stored render, whole-image fit so nothing is cropped.
-    val boxUrl = CatalogImages.boxUrl(item.setNumber)
+    val isFig = item.itemType == ItemType.MINIFIG
+    // Sets: box shot first, falling back to the render. Minifigs: their stored Rebrickable image.
+    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.boxUrl(item.setNumber)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,8 +460,8 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = boxUrl,
-            fallbackUrl = item.imageUrl,
+            imageUrl = thumbUrl,
+            fallbackUrl = if (isFig) null else item.imageUrl,
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
@@ -482,9 +482,14 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 modifier = Modifier.clickable(onClick = onOpenDetail),
             )
             MetaLine(stringResource(R.string.meta_theme), item.theme)
-            MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
-            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
-            StatusBadge(item.status)
+            if (isFig) {
+                // Minifigs have no release/availability; show a Minifig tag (+ parts if known).
+                MetaLine(stringResource(R.string.filter_minifig), if (item.pieces > 0) stringResource(R.string.meta_parts_count, item.pieces) else "—")
+            } else {
+                MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
+                MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
+                StatusBadge(item.status)
+            }
         }
 
         Spacer(Modifier.width(10.dp))
@@ -495,7 +500,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
+            if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
             PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
             if (item.currentValue != null) {
                 PriceLine(stringResource(R.string.price_value), formatMoney(item.currentValue, AppCurrency.VND))

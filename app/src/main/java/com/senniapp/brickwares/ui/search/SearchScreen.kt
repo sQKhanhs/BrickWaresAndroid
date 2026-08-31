@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -57,6 +58,7 @@ import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
@@ -112,6 +114,14 @@ fun SearchScreen(
         onAddToSalesSubmit = viewModel::onAddToSalesSubmit,
         onToastShown = viewModel::onToastShown,
         onRetry = viewModel::retry,
+        onToggleMode = viewModel::onToggleMode,
+        onMinifigThemeClick = viewModel::onMinifigThemeClick,
+        onMinifigSubthemeClick = viewModel::onMinifigSubthemeClick,
+        onMinifigThemeBack = viewModel::onMinifigThemeBack,
+        onMinifigPageChange = viewModel::onMinifigPageChange,
+        onAddMinifig = viewModel::onAddMinifigClick,
+        onWishlistMinifig = viewModel::onAddMinifigToWishlist,
+        onSearchMinifigsForModal = viewModel::searchMinifigs,
         modifier = modifier,
     )
 }
@@ -139,6 +149,14 @@ private fun SearchContent(
     onAddToSalesSubmit: (CollectionItem, Long) -> Unit,
     onToastShown: () -> Unit,
     onRetry: () -> Unit,
+    onToggleMode: () -> Unit,
+    onMinifigThemeClick: (String) -> Unit,
+    onMinifigSubthemeClick: (String, String) -> Unit,
+    onMinifigThemeBack: () -> Unit,
+    onMinifigPageChange: (Int) -> Unit,
+    onAddMinifig: (Minifig) -> Unit,
+    onWishlistMinifig: (Minifig) -> Unit,
+    onSearchMinifigsForModal: (String) -> List<Minifig>,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -175,7 +193,10 @@ private fun SearchContent(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
             item {
-                Banner(imageAsset = "file:///android_asset/search_banner.png", title = stringResource(R.string.search_title))
+                Banner(
+                    imageAsset = "file:///android_asset/search_banner.png",
+                    title = stringResource(if (state.isMinifigMode) R.string.search_title_minifigs else R.string.search_title),
+                )
                 Spacer(Modifier.height(16.dp))
             }
             item {
@@ -189,7 +210,122 @@ private fun SearchContent(
             }
 
             when {
-                state.showBrowse -> {
+                // Live set suggestions while typing (both browse modes).
+                state.showSuggestions -> {
+                    if (state.suggestions.isEmpty()) {
+                        item { SectionLabel(stringResource(R.string.search_no_matches, state.query)) }
+                    } else {
+                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.id) } }
+                    }
+                }
+
+                // Global search results — matching sets AND minifigs, independent of the browse mode.
+                state.submittedQuery != null -> {
+                    val q = state.submittedQuery.orEmpty()
+                    if (!state.tooMany && state.results.isEmpty() && state.minifigItems.isEmpty()) {
+                        item { NoResults(query = q) }
+                    }
+                    if (state.tooMany) {
+                        item { TooManyResults(query = q) }
+                    } else if (state.results.isNotEmpty()) {
+                        item {
+                            SectionLabel(stringResource(R.string.search_results_sets, state.results.size))
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        items(state.results, key = { it.id }) { set ->
+                            ResultCard(
+                                set = set,
+                                wishlisted = set.setNumber in state.wishlistedNumbers,
+                                owned = set.setNumber in state.ownedNumbers,
+                                onOpenDetail = { onOpenSetDetail(set.id) },
+                                onAddCollection = { onAddToCollectionClick(set) },
+                                onAddWishlist = { onAddToWishlist(set) },
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    }
+                    if (state.minifigItems.isNotEmpty()) {
+                        item {
+                            Spacer(Modifier.height(6.dp))
+                            SectionLabel(stringResource(R.string.search_results_minifigs, state.minifigItems.size))
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        items(state.minifigPageItems, key = { it.figNum }) { fig ->
+                            MinifigCard(
+                                fig = fig,
+                                owned = fig.figNum in state.ownedNumbers,
+                                wishlisted = fig.figNum in state.wishlistedNumbers,
+                                onAdd = { onAddMinifig(fig) },
+                                onWishlist = { onWishlistMinifig(fig) },
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        item {
+                            PaginationBar(
+                                currentPage = state.minifigCurrentPage,
+                                totalPages = state.minifigPageCount,
+                                onPageSelected = onMinifigPageChange,
+                            )
+                        }
+                    }
+                }
+
+                // Minifig browse home (mode = Minifigs): loading, theme browse, or a theme's figs.
+                state.isMinifigMode -> {
+                    if (state.minifigsLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = colors.brandYellow)
+                            }
+                        }
+                    } else if (state.minifigThemeDetail != null) {
+                        item {
+                            MinifigListHeader(title = state.minifigThemeDetail, showBack = true, onBack = onMinifigThemeBack)
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        if (state.minifigItems.isEmpty()) {
+                            item { SectionLabel(stringResource(R.string.search_minifig_empty)) }
+                        } else {
+                            items(state.minifigPageItems, key = { it.figNum }) { fig ->
+                                MinifigCard(
+                                    fig = fig,
+                                    owned = fig.figNum in state.ownedNumbers,
+                                    wishlisted = fig.figNum in state.wishlistedNumbers,
+                                    onAdd = { onAddMinifig(fig) },
+                                    onWishlist = { onWishlistMinifig(fig) },
+                                )
+                                Spacer(Modifier.height(12.dp))
+                            }
+                            item {
+                                PaginationBar(
+                                    currentPage = state.minifigCurrentPage,
+                                    totalPages = state.minifigPageCount,
+                                    onPageSelected = onMinifigPageChange,
+                                )
+                            }
+                        }
+                    } else if (state.minifigThemes.isEmpty()) {
+                        item { SectionLabel(stringResource(R.string.search_minifig_empty)) }
+                    } else {
+                        item {
+                            ThemeSortSelector(selected = state.themeSort, onSelect = onThemeSortChange)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        items(state.sortedMinifigThemes, key = { it.theme }) { group ->
+                            ThemeCard(
+                                group = group,
+                                isFavorite = group.theme in state.favoriteThemes,
+                                onClick = { onMinifigThemeClick(group.theme) },
+                                onToggleFavorite = { onToggleFavorite(group.theme) },
+                                onSubthemeClick = { sub -> onMinifigSubthemeClick(group.theme, sub) },
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    }
+                }
+
+                // Set theme browse home (mode = Sets).
+                else -> {
                     item {
                         ThemeSortSelector(selected = state.themeSort, onSelect = onThemeSortChange)
                         Spacer(Modifier.height(12.dp))
@@ -201,40 +337,6 @@ private fun SearchContent(
                             onClick = { onThemeClick(group.theme) },
                             onToggleFavorite = { onToggleFavorite(group.theme) },
                             onSubthemeClick = { sub -> onSubthemeClick(group.theme, sub) },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                    }
-                }
-
-                state.showSuggestions -> {
-                    if (state.suggestions.isEmpty()) {
-                        item { SectionLabel(stringResource(R.string.search_no_matches, state.query)) }
-                    } else {
-                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.id) } }
-                    }
-                }
-
-                state.tooMany -> {
-                    item { TooManyResults(query = state.submittedQuery.orEmpty()) }
-                }
-
-                state.results.isEmpty() -> {
-                    item { NoResults(query = state.submittedQuery.orEmpty()) }
-                }
-
-                else -> {
-                    item {
-                        SectionLabel(stringResource(R.string.search_results_for, state.submittedQuery.orEmpty(), state.results.size))
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    items(state.results, key = { it.id }) { set ->
-                        ResultCard(
-                            set = set,
-                            wishlisted = set.setNumber in state.wishlistedNumbers,
-                            owned = set.setNumber in state.ownedNumbers,
-                            onOpenDetail = { onOpenSetDetail(set.id) },
-                            onAddCollection = { onAddToCollectionClick(set) },
-                            onAddWishlist = { onAddToWishlist(set) },
                         )
                         Spacer(Modifier.height(12.dp))
                     }
@@ -256,33 +358,54 @@ private fun SearchContent(
             )
         }
 
-        // Quick-search FAB — opens a search modal so the user can start a new search without going
-        // back. Hidden on the search home (browse), where the search bar is already at the top;
-        // shown when deeper in (a submitted search's results, or a theme-detail list with no bar).
-        if (state.showThemeDetail || !state.showBrowse) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 24.dp)
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(colors.brandYellow)
-                    .clickable { showSearchModal = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bw_search),
-                    contentDescription = stringResource(R.string.nav_search),
-                    tint = colors.onYellow,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
+        // Mode-toggle FAB (bottom-start) — flips the tab between Sets and Minifigs (like the
+        // Collection tab's swap FAB). Yellow while browsing minifigs.
+        val minifigMode = state.isMinifigMode
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 20.dp, bottom = 24.dp)
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(if (minifigMode) colors.brandYellow else colors.card)
+                .border(BorderStroke(1.5.dp, if (minifigMode) colors.brandYellow else colors.borderStrong), CircleShape)
+                .clickable(onClick = onToggleMode),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_bw_minifig),
+                contentDescription = stringResource(R.string.search_toggle_minifigs_cd),
+                tint = if (minifigMode) colors.onYellow else colors.text,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+
+        // Quick-search FAB — opens the global search modal (sets + minifigs). Always available in the
+        // Search tab, in both browse modes.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 24.dp)
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(colors.brandYellow)
+                .clickable { showSearchModal = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_bw_search),
+                contentDescription = stringResource(R.string.nav_search),
+                tint = colors.onYellow,
+                modifier = Modifier.size(26.dp),
+            )
         }
         if (showSearchModal) {
             SearchModal(
                 onSearch = onSearchCatalog,
                 onOpenSetDetail = { id -> showSearchModal = false; onOpenSetDetail(id) },
                 onDismiss = { showSearchModal = false },
+                onSearchMinifigs = onSearchMinifigsForModal,
+                onSelectMinifig = { fig -> showSearchModal = false; onAddMinifig(fig) },
             )
         }
 
@@ -571,6 +694,87 @@ private fun ThemeSortSelector(selected: ThemeSort, onSelect: (ThemeSort) -> Unit
                             expanded = false
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+// ---- Minifig mode ----
+
+@Composable
+private fun MinifigListHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
+    val colors = BwTheme.colors
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (showBack) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface)
+                    .border(BorderStroke(1.dp, colors.borderStrong), CircleShape)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) { Text("‹", style = BwType.cardTitle.copy(fontSize = 20.sp), color = colors.text) }
+        }
+        Text(title, style = BwType.cardTitle.copy(fontSize = 16.sp), color = colors.text)
+    }
+}
+
+@Composable
+private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onAdd: () -> Unit, onWishlist: () -> Unit) {
+    val colors = BwTheme.colors
+    val isLoggedIn = rememberIsLoggedIn()
+    val add = { if (isLoggedIn) onAdd() else SignInController.request() }
+    val wish = { if (isLoggedIn) onWishlist() else SignInController.request() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.card)
+            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
+            .padding(14.dp),
+    ) {
+        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 64.dp, iconSize = 28.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(fig.figNum, style = BwType.micro, color = colors.textMuted)
+            Text(fig.name, style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
+            if (fig.setCount > 0) {
+                Text(stringResource(R.string.search_minifig_sets, fig.setCount), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.width(118.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            if (owned) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
+                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp)).padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_bw_check), null, tint = colors.text, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.action_owned), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).background(colors.brandYellow)
+                        .clickable(onClick = add).padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_bw_pieces), null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
+                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                        .then(if (wishlisted) Modifier else Modifier.clickable(onClick = wish)).padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_bw_heart), null, tint = if (wishlisted) WishlistHeart else colors.textMuted, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(if (wishlisted) R.string.action_wishlisted else R.string.action_wishlist), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
                 }
             }
         }

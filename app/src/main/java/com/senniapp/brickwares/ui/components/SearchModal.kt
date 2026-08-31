@@ -39,6 +39,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 
@@ -46,19 +48,23 @@ import com.senniapp.brickwares.ui.theme.BwType
 private const val SEARCH_MODAL_MAX = 20
 
 /**
- * Quick-search overlay: type to filter the catalog live, tap a result to open its detail. Opened by
- * the Search tab's FAB and — when a set detail is viewed from the Search tab — by the detail's FAB,
- * so the user can start a new search from anywhere without navigating back to the search home.
+ * Quick-search overlay: type to filter the catalog live, tap a result to act on it. Sets open their
+ * detail. When [onSearchMinifigs] is supplied (the Search tab), the search is **global** — matching
+ * minifigs are listed too and tapping one calls [onSelectMinifig]. Opened by the Search tab's FAB and
+ * (set-only) by the Set Detail FAB, so a new search can start from anywhere without navigating back.
  */
 @Composable
 fun SearchModal(
     onSearch: (String) -> List<CatalogSet>,
     onOpenSetDetail: (String) -> Unit,
     onDismiss: () -> Unit,
+    onSearchMinifigs: ((String) -> List<Minifig>)? = null,
+    onSelectMinifig: ((Minifig) -> Unit)? = null,
 ) {
     val colors = BwTheme.colors
     var query by remember { mutableStateOf("") }
     val results = if (query.isBlank()) emptyList() else onSearch(query).take(SEARCH_MODAL_MAX)
+    val figResults = if (query.isBlank() || onSearchMinifigs == null) emptyList() else onSearchMinifigs(query).take(SEARCH_MODAL_MAX)
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -82,7 +88,7 @@ fun SearchModal(
                     },
                 )
                 Spacer(Modifier.height(10.dp))
-                if (query.isNotBlank() && results.isEmpty()) {
+                if (query.isNotBlank() && results.isEmpty() && figResults.isEmpty()) {
                     Text(
                         stringResource(R.string.search_no_matches, query),
                         style = BwType.body.copy(fontSize = 13.sp),
@@ -104,6 +110,23 @@ fun SearchModal(
                             Column(Modifier.weight(1f)) {
                                 Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
                                 Text(set.theme, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted, maxLines = 1)
+                            }
+                        }
+                        HorizontalDivider(color = colors.borderSoft)
+                    }
+                    items(figResults, key = { it.figNum }) { fig ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectMinifig?.invoke(fig) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 44.dp, iconSize = 20.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(fig.name, style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
+                                Text("${fig.figNum} · ${stringResource(R.string.filter_minifig)}", style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted, maxLines = 1)
                             }
                         }
                         HorizontalDivider(color = colors.borderSoft)
