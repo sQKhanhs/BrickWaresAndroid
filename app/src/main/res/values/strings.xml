@@ -183,6 +183,16 @@
     <string name="detail_total_paid">Total paid</string>
     <string name="detail_more_in">More in %1$s</string>
 
+    <!-- Community current value (Arch Decision 17) -->
+    <string name="current_value">Current value</string>
+    <string name="value_contribute">Contribute your value</string>
+    <string name="value_note_fresh">Based on %1$d price contribution(s).</string>
+    <string name="value_note_stale">Old price data — last updated %1$s ago.</string>
+    <string name="value_note_none">No current value for this set yet.</string>
+    <string name="value_age_days">%1$d days</string>
+    <string name="value_age_months">%1$d months</string>
+    <string name="value_age_years">%1$d years</string>
+
     <!-- ============ Search ============ -->
     <string name="search_title">Search Sets</string>
     <string name="search_title_minifigs">Search Minifigs</string>

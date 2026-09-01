@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.detail
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.ui.components.UiText
 
 /**
@@ -38,5 +39,8 @@ data class SetDetailUiState(
     val sellCopy: Copy? = null,
     /** The catalog isn't available (offline / not yet loaded) so the detail can't be shown. */
     val offline: Boolean = false,
+    /** Community "current value" for the hero set (Decision 17); NONE until [valueLoading] finishes. */
+    val currentValue: CurrentValue = CurrentValue.NONE,
+    val valueLoading: Boolean = true,
     val toastMessage: UiText? = null,
 )

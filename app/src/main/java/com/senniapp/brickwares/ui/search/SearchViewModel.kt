@@ -107,6 +107,16 @@ class SearchViewModel(
 
     // ---- Minifig mode (toggled by the FAB) ----
 
+    /**
+     * Enter the minifig browse home directly (used when switching to minifig search from outside the
+     * Search tab, e.g. a Set Detail): reset to the default browse view and force minifig mode.
+     */
+    fun showMinifigs() {
+        resetToDefault()
+        _uiState.update { it.copy(mode = SearchMode.MINIFIGS) }
+        if (minifigs.isEmpty()) loadMinifigs()
+    }
+
     /** Flip the Search tab between browsing sets and minifigs. */
     fun onToggleMode() {
         val next = if (_uiState.value.mode == SearchMode.SETS) SearchMode.MINIFIGS else SearchMode.SETS

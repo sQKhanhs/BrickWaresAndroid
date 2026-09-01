@@ -17,6 +17,8 @@ data class WishlistItem(
     val minifigs: Int,
     val retailPrice: Long,
     val currentValue: Long? = null,
+    /** Full community-value detail (freshness/count) for the card's "!" info bubble (Decision 17). */
+    val currentValueInfo: CurrentValue? = null,
     val growthPercent: Double? = null,
     val status: Availability = Availability.AVAILABLE,
     val imageUrl: String? = null,

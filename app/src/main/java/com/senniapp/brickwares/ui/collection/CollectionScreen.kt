@@ -69,6 +69,7 @@ import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.animatedNumber
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
@@ -502,8 +503,10 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
         ) {
             if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
             PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
-            if (item.currentValue != null) {
-                PriceLine(stringResource(R.string.price_value), formatMoney(item.currentValue, AppCurrency.VND))
+            // Community value (Decision 17) with the "!" info bubble. Shown for sets even when there's
+            // none yet ("----"); the growth pill only appears once a value exists. Hidden for minifigs.
+            if (!isFig) {
+                ValuePriceLine(item.currentValueInfo)
                 item.growthPercent?.let { GrowthPill(it) }
             }
             Row(

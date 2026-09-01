@@ -6,12 +6,16 @@ import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.data.repository.ValueContributionRepository
+import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +30,7 @@ import kotlinx.coroutines.launch
 class SetDetailViewModel(
     private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
     private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
+    private val valueRepo: ValueContributionRepository = ValueRepositoryProvider.instance,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SetDetailUiState())
@@ -41,6 +46,9 @@ class SetDetailViewModel(
     // stay put as the user adds/wishlists here; a fresh batch is drawn on the next open (see [load]).
     private var relatedKey: String? = null
     private var relatedSnapshot: List<CatalogSet> = emptyList()
+
+    // The set id we last fetched a current value for, so rebuild() refetches only on a set change.
+    private var valueKey: String? = null
 
     init {
         // Warm the catalog cache, then rebuild so the set resolves from real data.
@@ -114,6 +122,35 @@ class SetDetailViewModel(
                 copiesItem = copiesItem,
             )
         }
+        // Fetch the community current value once per resolved set (Decision 17).
+        if (set?.setId != null && valueKey != set.id) {
+            valueKey = set.id
+            fetchValue(set)
+        }
+    }
+
+    /** Load the community current value for [set], clearing any stale value while it's in flight. */
+    private fun fetchValue(set: CatalogSet) {
+        val id = set.setId ?: return
+        _uiState.update { it.copy(currentValue = CurrentValue.NONE, valueLoading = true) }
+        viewModelScope.launch {
+            val value = valueRepo.forSet(id, set.retailPrice)
+            // Ignore a late result if the user has since navigated to another set.
+            if (valueKey == set.id) _uiState.update { it.copy(currentValue = value, valueLoading = false) }
+        }
+    }
+
+    /**
+     * Re-read the current value after the user contributes a paid price. The contribution posts only
+     * *after* the collection row syncs (SyncCoordinator), so give that a short head start; if it's
+     * not visible yet (offline / slow), the next page open is authoritative.
+     */
+    private fun refreshValueSoon() {
+        val set = _uiState.value.set ?: return
+        viewModelScope.launch {
+            delay(2_500)
+            if (valueKey == set.id) fetchValue(set)
+        }
     }
 
     fun onAddToWishlist() {
@@ -175,6 +212,8 @@ class SetDetailViewModel(
                 it.copy(addTarget = null, editingCopy = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name)))
             }
         }
+        // A paid price just added/edited becomes a community value point — re-read it (Decision 17).
+        refreshValueSoon()
     }
 
     /** Add sheet in Sales mode: records a standalone sale (does not add to the collection). */

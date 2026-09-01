@@ -54,6 +54,8 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
+import com.senniapp.brickwares.data.model.CurrentValue
+import com.senniapp.brickwares.data.model.ValueFreshness
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
@@ -66,6 +68,8 @@ import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
+import com.senniapp.brickwares.ui.components.ValueInfoBubble
+import com.senniapp.brickwares.ui.components.currentValueNote
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -84,8 +88,10 @@ fun SetDetailScreen(
     onOpenSetDetail: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     modifier: Modifier = Modifier,
-    /** When true (the detail is viewed from the Search tab), a quick-search FAB is shown. */
+    /** When true (the detail is viewed from the Search tab), the search FABs are shown. */
     showSearchFab: Boolean = false,
+    /** Switch to minifig search: navigate back to the Search tab's minifig browse home. */
+    onSwitchToMinifigSearch: () -> Unit = {},
     viewModel: SetDetailViewModel = viewModel(),
 ) {
     LaunchedEffect(setNumber) { viewModel.load(setNumber) }
@@ -116,6 +122,7 @@ fun SetDetailScreen(
         onToastShown = viewModel::onToastShown,
         onRetry = viewModel::retry,
         showSearchFab = showSearchFab,
+        onSwitchToMinifigSearch = onSwitchToMinifigSearch,
         modifier = modifier,
     )
 }
@@ -147,6 +154,7 @@ private fun SetDetailContent(
     onToastShown: () -> Unit,
     onRetry: () -> Unit,
     showSearchFab: Boolean = false,
+    onSwitchToMinifigSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -288,6 +296,9 @@ private fun SetDetailContent(
                         color = colors.textMuted,
                     )
                 }
+                // Community current value (Decision 17) — median of users' paid prices, with the
+                // contribution count / staleness explained in the "!" info bubble.
+                CurrentValueRow(value = state.currentValue, loading = state.valueLoading)
                 if (state.isOwned) {
                     HorizontalDivider(color = colors.borderSoft)
                     Text(stringResource(R.string.detail_my_collection), style = BwType.micro, color = colors.textMuted)
@@ -362,9 +373,30 @@ private fun SetDetailContent(
             ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
         }
 
-        // Quick-search FAB — only when this detail is viewed from the Search tab, so the user can
-        // start a new search without backing out first. Tapping a result opens that set's detail.
+        // Search FABs — only when this detail is viewed from the Search tab, so the user can start a
+        // new search (or switch to minifig browse) without backing out first.
         if (showSearchFab) {
+            // Switch-to-minifig-search FAB (bottom-start) — mirrors the Search tab's mode toggle;
+            // since the detail has no in-place browse, it routes back to the Search tab's minifig home.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 20.dp, bottom = 24.dp)
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(colors.card)
+                    .border(BorderStroke(1.5.dp, colors.borderStrong), CircleShape)
+                    .clickable(onClick = onSwitchToMinifigSearch),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_minifig),
+                    contentDescription = stringResource(R.string.search_toggle_minifigs_cd),
+                    tint = colors.text,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            // Quick-search FAB (bottom-end) — opens the global search modal.
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -443,6 +475,34 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     ) {
         Text(title, style = BwType.cardTitle.copy(fontSize = 14.sp), color = colors.text)
         content()
+    }
+}
+
+/**
+ * The community "current value" row in the Pricing card (Arch Decision 17). Shows the median paid
+ * price (or `----` when there's none), a tappable ⓘ that reveals the contribution-count / staleness
+ * note, and — when no value exists yet — a "Contribute" link that opens Add-to-Collection.
+ */
+@Composable
+private fun CurrentValueRow(value: CurrentValue, loading: Boolean) {
+    val colors = BwTheme.colors
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.current_value), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+            Spacer(Modifier.width(6.dp))
+            if (!loading) ValueInfoBubble(note = currentValueNote(value))
+        }
+        Spacer(Modifier.width(10.dp))
+        val amountText = when {
+            loading -> "…"
+            value.amountVnd != null -> formatMoney(value.amountVnd, AppCurrency.VND)
+            else -> "----"
+        }
+        Text(
+            amountText,
+            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            color = if (value.freshness == ValueFreshness.STALE) colors.textMuted else colors.text,
+        )
     }
 }
 

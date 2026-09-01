@@ -16,6 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,10 +30,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRetail
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
@@ -92,6 +97,11 @@ fun SetResultCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
+            // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
+            val valueRepo = ValueRepositoryProvider.instance
+            val valueRev by valueRepo.revision.collectAsState()
+            val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
+            ValuePriceLine(currentValue)
             if (owned) {
                 // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
                 Row(

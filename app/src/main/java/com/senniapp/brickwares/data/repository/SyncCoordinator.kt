@@ -11,6 +11,9 @@ import com.senniapp.brickwares.data.local.WishlistEntity
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -84,6 +87,8 @@ class SyncCoordinator(
             push(uid)
             pull()
             syncState.setLastAccountId(uid)
+            // Refresh the community value cache so a just-contributed paid price shows on the cards.
+            ValueRepositoryProvider.instance.warm()
         }.onFailure { Log.e(TAG, "sync failed", it) }
     }
 
@@ -93,6 +98,7 @@ class SyncCoordinator(
         collectionDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             client.from("collection_copies").upsert(dirty.mapNotNull { it.toRemote(uid) })
             collectionDao.clearDirty(dirty.map { it.id })
+            contributeValues(dirty) // publish paid prices as community value points (Decision 17)
         }
         wishlistDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             client.from("wishlist_items").upsert(dirty.mapNotNull { it.toRemote(uid) })
@@ -101,6 +107,30 @@ class SyncCoordinator(
         salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             client.from("sales").upsert(dirty.mapNotNull { it.toRemote(uid) })
             salesDao.clearDirty(dirty.map { it.id })
+        }
+    }
+
+    /**
+     * Decision 17: publish each newly-synced paid price as a public community value point via the
+     * `contribute_value` RPC (one row per user per item — the RPC upserts). Runs *after* the
+     * collection rows are upserted so the server-side owner-gate can see them. Best-effort and
+     * per-row guarded — a contribution failure must never abort the sync (which is why it's not in
+     * the sync's outer runCatching alone).
+     */
+    private suspend fun contributeValues(rows: List<CollectionCopyEntity>) {
+        rows.forEach { row ->
+            if (row.deleted || row.pricePaid <= 0L) return@forEach
+            if ((row.setId == null) == (row.figNum == null)) return@forEach // need exactly one ref
+            runCatching {
+                client.postgrest.rpc(
+                    "contribute_value",
+                    buildJsonObject {
+                        row.setId?.let { put("p_set_id", it) }
+                        row.figNum?.let { put("p_fig_num", it) }
+                        put("p_value", row.pricePaid)
+                    },
+                )
+            }.onFailure { Log.w(TAG, "contribute_value failed for ${row.id}", it) }
         }
     }
 

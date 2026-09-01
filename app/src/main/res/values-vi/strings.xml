@@ -182,6 +182,16 @@
     <string name="detail_total_paid">Tổng đã trả</string>
     <string name="detail_more_in">Xem thêm trong %1$s</string>
 
+    <!-- Community current value (Arch Decision 17) -->
+    <string name="current_value">Giá trị hiện tại</string>
+    <string name="value_contribute">Đóng góp giá của bạn</string>
+    <string name="value_note_fresh">Dựa trên %1$d giá đóng góp.</string>
+    <string name="value_note_stale">Dữ liệu giá cũ — cập nhật gần nhất %1$s trước.</string>
+    <string name="value_note_none">Chưa có giá trị hiện tại cho bộ này.</string>
+    <string name="value_age_days">%1$d ngày</string>
+    <string name="value_age_months">%1$d tháng</string>
+    <string name="value_age_years">%1$d năm</string>
+
     <!-- ============ Search ============ -->
     <string name="search_title">Tìm bộ</string>
     <string name="search_title_minifigs">Tìm minifig</string>

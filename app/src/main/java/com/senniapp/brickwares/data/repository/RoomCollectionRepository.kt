@@ -35,6 +35,7 @@ class RoomCollectionRepository(
     private val catalog: CatalogRepository,
     private val sync: SyncCoordinator,
     db: BrickWaresDatabase = AppGraph.database,
+    private val values: ValueContributionRepository = ValueRepositoryProvider.instance,
 ) : CollectionRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,8 +44,9 @@ class RoomCollectionRepository(
     private val salesDao = db.salesDao()
 
     init {
-        // Warm the catalog so the status overlay below has data to reconcile against (idempotent).
-        scope.launch { catalog.refresh() }
+        // Warm the catalog so the status overlay below has data to reconcile against (idempotent),
+        // then warm the community value cache so cards can show the "Value" line (Decision 17).
+        scope.launch { catalog.refresh(); values.warm() }
     }
 
     // ---- Reads (Room is the source of truth) ----
@@ -55,12 +57,12 @@ class RoomCollectionRepository(
     // reference data, so the live catalog value wins when available, falling back to the stored one.
 
     override fun getCollectionItems(): Flow<List<CollectionItem>> =
-        combine(collectionDao.observeActive(), catalog.revision) { rows, _ ->
+        combine(collectionDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.groupBy { it.setNumber }.map { (_, group) -> group.toCollectionItem() }
         }
 
     override fun getWishlistItems(): Flow<List<WishlistItem>> =
-        combine(wishlistDao.observeActive(), catalog.revision) { rows, _ ->
+        combine(wishlistDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.map { it.toWishlistItem() }
         }
 
@@ -275,13 +277,14 @@ class RoomCollectionRepository(
     private fun List<CollectionCopyEntity>.toCollectionItem(): CollectionItem {
         val head = first()
         val cat = catalogFor(head.setId, head.setNumber)
+        val value = values.valueFor(head.setId)
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
             theme = head.theme,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: head.releaseYear,
             releaseMonth = cat?.releaseMonth ?: head.releaseMonth,
             pieces = head.pieces, minifigs = head.minifigs, retailPrice = head.retailPrice ?: 0L,
-            currentValue = null, growthPercent = null,
+            currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = null,
             status = cat?.status ?: head.status.toAvailability(),
             imageUrl = head.imageUrl,
             copies = map { e ->
@@ -297,12 +300,13 @@ class RoomCollectionRepository(
 
     private fun WishlistEntity.toWishlistItem(): WishlistItem {
         val cat = catalogFor(setId, setNumber)
+        val value = values.valueFor(setId)
         return WishlistItem(
             setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
             releaseMonth = cat?.releaseMonth ?: releaseMonth,
             pieces = pieces, minifigs = minifigs,
-            retailPrice = retailPrice ?: 0L, currentValue = null, growthPercent = null,
+            retailPrice = retailPrice ?: 0L, currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = null,
             status = cat?.status ?: status.toAvailability(), imageUrl = imageUrl,
         )
     }

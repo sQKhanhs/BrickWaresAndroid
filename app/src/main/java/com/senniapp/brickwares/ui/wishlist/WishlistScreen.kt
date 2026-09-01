@@ -54,6 +54,7 @@ import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -298,8 +299,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
-            if (item.currentValue != null) {
-                PriceLine(stringResource(R.string.price_value), formatMoney(item.currentValue, AppCurrency.VND))
+            // Community value (Decision 17) with the "!" info bubble — shown for sets even when none yet.
+            if (!isFig) {
+                ValuePriceLine(item.currentValueInfo)
                 item.growthPercent?.let { GrowthPill(it) }
             }
             // Move to collection — full-width yellow button (matches design).

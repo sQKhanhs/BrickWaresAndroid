@@ -68,6 +68,7 @@ import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.SetThumb
@@ -75,6 +76,7 @@ import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.formatRetail
 import com.senniapp.brickwares.ui.components.releaseLabel
@@ -865,6 +867,11 @@ private fun ResultCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
+            // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
+            val valueRepo = ValueRepositoryProvider.instance
+            val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
+            val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
+            ValuePriceLine(currentValue)
             if (owned) {
                 // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
                 Row(

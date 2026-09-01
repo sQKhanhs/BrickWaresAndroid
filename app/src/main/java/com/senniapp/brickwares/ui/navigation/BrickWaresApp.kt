@@ -127,8 +127,14 @@ fun BrickWaresApp(
                     onBack = { detailSetNumber = null },
                     onOpenSetDetail = { detailSetNumber = it },
                     onNavigateToSearch = { detailSetNumber = null; selectedTab = BwTab.Search },
-                    // Show the quick-search FAB on the detail only when it's opened from the Search tab.
+                    // Show the search FABs on the detail only when it's opened from the Search tab.
                     showSearchFab = selectedTab == BwTab.Search,
+                    // Switching to minifig search closes the detail and lands on the Search minifig home.
+                    onSwitchToMinifigSearch = {
+                        detailSetNumber = null
+                        selectedTab = BwTab.Search
+                        searchViewModel.showMinifigs()
+                    },
                 )
             } else {
                 when (selectedTab) {
