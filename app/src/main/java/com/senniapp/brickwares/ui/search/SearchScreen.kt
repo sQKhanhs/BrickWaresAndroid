@@ -388,24 +388,29 @@ private fun SearchContent(
             )
         }
 
-        // Quick-search FAB — opens the global search modal (sets + minifigs). Always available in the
-        // Search tab, in both browse modes.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp)
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(colors.brandYellow)
-                .clickable { showSearchModal = true },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_bw_search),
-                contentDescription = stringResource(R.string.nav_search),
-                tint = colors.onYellow,
-                modifier = Modifier.size(26.dp),
-            )
+        // Quick-search FAB — opens the global search modal (sets + minifigs). Hidden while the inline
+        // search field is the primary interface: the browse home (theme grid) and live-suggestions
+        // (typing) views, where a floating search button is redundant. Shown on results + theme-detail
+        // views, where the field may be scrolled away or absent.
+        val hideSearchFab = state.submittedQuery == null && !state.showThemeDetail && state.minifigThemeDetail == null
+        if (!hideSearchFab) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable { showSearchModal = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_search),
+                    contentDescription = stringResource(R.string.nav_search),
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
         }
         if (showSearchModal) {
             SearchModal(
