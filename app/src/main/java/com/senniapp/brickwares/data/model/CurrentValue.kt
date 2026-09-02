@@ -41,22 +41,27 @@ data class CurrentValue(
 object ValueAggregator {
     /** ~24 months. Decision 17's primary window. */
     private const val RECENT_WINDOW_DAYS = 730L
-    private const val OUTLIER_MIN_FACTOR = 0.10   // reject < 10% of retail
-    private const val OUTLIER_MAX_FACTOR = 50.0   // reject > 50× retail
+    private const val OUTLIER_MIN_FACTOR = 0.10          // reject < 10% of retail
+    /** Available sets stay near retail — a value above 10× is almost certainly bad data. */
+    private const val OUTLIER_MAX_FACTOR_AVAILABLE = 10.0
+    /** Retired sets can genuinely appreciate a lot, so allow a much wider ceiling before rejecting. */
+    private const val OUTLIER_MAX_FACTOR_RETIRED = 50.0
     private const val DAY_MS = 86_400_000L
 
     /**
      * @param points contributions as (valueVnd, submittedAtEpochMs).
      * @param retailVnd retail anchor for the outlier guard; null skips the guard.
+     * @param retired widens the guard's upper bound (retired sets appreciate; available ones don't).
      */
     fun aggregate(
         points: List<Pair<Double, Long>>,
         retailVnd: Long?,
+        retired: Boolean = false,
         nowMs: Long = System.currentTimeMillis(),
     ): CurrentValue {
         val guarded = if (retailVnd != null && retailVnd > 0) {
             val lo = retailVnd * OUTLIER_MIN_FACTOR
-            val hi = retailVnd * OUTLIER_MAX_FACTOR
+            val hi = retailVnd * (if (retired) OUTLIER_MAX_FACTOR_RETIRED else OUTLIER_MAX_FACTOR_AVAILABLE)
             points.filter { it.first in lo..hi }
         } else {
             points.filter { it.first > 0 }

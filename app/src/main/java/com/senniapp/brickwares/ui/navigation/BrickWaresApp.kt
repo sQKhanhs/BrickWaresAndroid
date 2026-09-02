@@ -41,6 +41,7 @@ import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.login.LoginScreen
 import com.senniapp.brickwares.ui.collection.CollectionScreen
+import com.senniapp.brickwares.ui.detail.MinifigDetailScreen
 import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
@@ -79,8 +80,9 @@ fun BrickWaresApp(
     onThemeModeChange: (ThemeMode) -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
-    // When non-null, the Set Detail page is shown over the current tab (nav bar stays visible).
+    // When non-null, the Set Detail / Minifig Detail page is shown over the current tab (nav bar stays).
     var detailSetNumber by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailFigNum by rememberSaveable { mutableStateOf<String?>(null) }
     val colors = BwTheme.colors
     // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
     // its default browse view — a lingering search shouldn't persist across tab switches.
@@ -94,6 +96,7 @@ fun BrickWaresApp(
         if (isLoggedIn && showLogin) {
             SignInController.dismiss()
             detailSetNumber = null
+            detailFigNum = null
             selectedTab = BwTab.Collection
         }
     }
@@ -111,6 +114,7 @@ fun BrickWaresApp(
                     if (tab == BwTab.Search) searchViewModel.resetToDefault()
                     selectedTab = tab
                     detailSetNumber = null
+                    detailFigNum = null
                 },
             )
         },
@@ -120,8 +124,16 @@ fun BrickWaresApp(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            val fig = detailFigNum
             val detail = detailSetNumber
-            if (detail != null) {
+            if (fig != null) {
+                MinifigDetailScreen(
+                    figNum = fig,
+                    onBack = { detailFigNum = null },
+                    // Tapping an "appears in" set closes the minifig detail and opens that set's detail.
+                    onOpenSetDetail = { detailFigNum = null; detailSetNumber = it },
+                )
+            } else if (detail != null) {
                 SetDetailScreen(
                     setNumber = detail,
                     onBack = { detailSetNumber = null },
@@ -139,13 +151,18 @@ fun BrickWaresApp(
             } else {
                 when (selectedTab) {
                     BwTab.Home -> HomeScreen()
-                    BwTab.Collection -> CollectionScreen(onOpenSetDetail = { detailSetNumber = it })
+                    BwTab.Collection -> CollectionScreen(
+                        onOpenSetDetail = { detailSetNumber = it },
+                        onOpenMinifigDetail = { detailFigNum = it },
+                    )
                     BwTab.Wishlist -> WishlistScreen(
                         onNavigateToSearch = { selectedTab = BwTab.Search },
                         onOpenSetDetail = { detailSetNumber = it },
+                        onOpenMinifigDetail = { detailFigNum = it },
                     )
                     BwTab.Search -> SearchScreen(
                         onOpenSetDetail = { detailSetNumber = it },
+                        onOpenMinifig = { detailFigNum = it },
                         viewModel = searchViewModel,
                     )
                     BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)

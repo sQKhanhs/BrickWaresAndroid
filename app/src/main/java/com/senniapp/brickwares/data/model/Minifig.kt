@@ -15,6 +15,8 @@ data class Minifig(
     val setCount: Int = 0,
     /** (theme, subtheme) pairs from the sets this fig appears in — drives the theme + subtheme browse. */
     val themeSubthemes: List<Pair<String, String>> = emptyList(),
+    /** set_ids of the sets this fig appears in — resolves the detail's "Appears in these sets" list. */
+    val setIds: List<Long> = emptyList(),
 ) {
     /** Distinct themes this fig belongs to. */
     val themes: List<String> get() = themeSubthemes.map { it.first }.distinct()

@@ -57,6 +57,7 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueFreshness
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
+import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ErrorScreen
@@ -186,17 +187,7 @@ private fun SetDetailContent(
         ) {
             // Back header.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(colors.surface)
-                        .border(BorderStroke(1.dp, colors.borderStrong), CircleShape)
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("‹", style = BwType.cardTitle.copy(fontSize = 20.sp), color = colors.text)
-                }
+                BackCircleButton(onBack = onBack)
                 if (set != null) {
                     Text(
                         "${set.setNumber} ${set.name}",
@@ -235,11 +226,14 @@ private fun SetDetailContent(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
                     if (state.isOwned) {
-                        // Already owned → a single "See Detail" opening the copies dialog (no add/wishlist).
+                        // Already owned → a single gray "See Detail" opening the copies dialog (matches
+                        // the gray See Detail pill on the item cards).
                         ActionButton(
                             iconRes = R.drawable.ic_bw_check,
                             label = stringResource(R.string.action_see_detail),
                             filled = true,
+                            fillColor = colors.track,
+                            contentColor = colors.text,
                             onClick = onSeeCopies,
                         )
                     } else {
@@ -433,14 +427,19 @@ private fun ActionButton(
     label: String,
     filled: Boolean,
     iconTint: Color? = null,
+    /** Override the filled background (defaults to brand yellow) — e.g. the gray "See Detail". */
+    fillColor: Color? = null,
+    /** Override the on-fill icon/text color (defaults to onYellow). */
+    contentColor: Color? = null,
     onClick: (() -> Unit)?,
 ) {
     val colors = BwTheme.colors
+    val onFill = contentColor ?: colors.onYellow
     val base = Modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(999.dp))
     val styled = if (filled) {
-        base.background(colors.brandYellow)
+        base.background(fillColor ?: colors.brandYellow)
     } else {
         base.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
     }
@@ -453,11 +452,11 @@ private fun ActionButton(
         Icon(
             painter = painterResource(iconRes),
             contentDescription = null,
-            tint = iconTint ?: if (filled) colors.onYellow else colors.text,
+            tint = iconTint ?: if (filled) onFill else colors.text,
             modifier = Modifier.size(15.dp),
         )
         Spacer(Modifier.width(7.dp))
-        Text(label, style = BwType.pill.copy(fontSize = 12.sp), color = if (filled) colors.onYellow else colors.text)
+        Text(label, style = BwType.pill.copy(fontSize = 12.sp), color = if (filled) onFill else colors.text)
     }
 }
 

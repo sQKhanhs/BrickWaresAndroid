@@ -63,6 +63,7 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
+import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
@@ -90,6 +91,7 @@ private val StarInactive = Color(0xFFC9C9C0)
 @Composable
 fun SearchScreen(
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifig: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
 ) {
@@ -97,6 +99,7 @@ fun SearchScreen(
     SearchContent(
         state = state,
         onOpenSetDetail = onOpenSetDetail,
+        onOpenMinifig = onOpenMinifig,
         onQueryChange = viewModel::onQueryChange,
         onSubmit = viewModel::onSubmit,
         onClearSearch = viewModel::onClearSearch,
@@ -132,6 +135,7 @@ fun SearchScreen(
 private fun SearchContent(
     state: SearchUiState,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifig: (String) -> Unit,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onClearSearch: () -> Unit,
@@ -257,6 +261,7 @@ private fun SearchContent(
                                 fig = fig,
                                 owned = fig.figNum in state.ownedNumbers,
                                 wishlisted = fig.figNum in state.wishlistedNumbers,
+                                onOpen = { onOpenMinifig(fig.figNum) },
                                 onAdd = { onAddMinifig(fig) },
                                 onWishlist = { onWishlistMinifig(fig) },
                             )
@@ -293,6 +298,7 @@ private fun SearchContent(
                                     fig = fig,
                                     owned = fig.figNum in state.ownedNumbers,
                                     wishlisted = fig.figNum in state.wishlistedNumbers,
+                                    onOpen = { onOpenMinifig(fig.figNum) },
                                     onAdd = { onAddMinifig(fig) },
                                     onWishlist = { onWishlistMinifig(fig) },
                                 )
@@ -567,17 +573,7 @@ private fun ThemeDetailView(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(colors.surface)
-                        .border(BorderStroke(1.dp, colors.borderStrong), CircleShape)
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("‹", style = BwType.cardTitle.copy(fontSize = 20.sp), color = colors.text)
-                }
+                BackCircleButton(onBack = onBack)
                 Text(theme, style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
             }
             Spacer(Modifier.height(12.dp))
@@ -708,27 +704,20 @@ private fun ThemeSortSelector(selected: ThemeSort, onSelect: (ThemeSort) -> Unit
 private fun MinifigListHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
     val colors = BwTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (showBack) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(colors.surface)
-                    .border(BorderStroke(1.dp, colors.borderStrong), CircleShape)
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center,
-            ) { Text("‹", style = BwType.cardTitle.copy(fontSize = 20.sp), color = colors.text) }
-        }
+        if (showBack) BackCircleButton(onBack = onBack)
         Text(title, style = BwType.cardTitle.copy(fontSize = 16.sp), color = colors.text)
     }
 }
 
 @Composable
-private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onAdd: () -> Unit, onWishlist: () -> Unit) {
+private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpen: () -> Unit, onAdd: () -> Unit, onWishlist: () -> Unit) {
     val colors = BwTheme.colors
     val isLoggedIn = rememberIsLoggedIn()
     val add = { if (isLoggedIn) onAdd() else SignInController.request() }
     val wish = { if (isLoggedIn) onWishlist() else SignInController.request() }
+    val valueRepo = ValueRepositoryProvider.instance
+    val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
+    val currentValue = remember(fig.figNum, valueRev) { valueRepo.valueForFig(fig.figNum) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -737,17 +726,18 @@ private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onAdd
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 64.dp, iconSize = 28.dp)
+        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 64.dp, iconSize = 28.dp, modifier = Modifier.clickable(onClick = onOpen))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(fig.figNum, style = BwType.micro, color = colors.textMuted)
-            Text(fig.name, style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
+            Text(fig.name, style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpen))
             if (fig.setCount > 0) {
                 Text(stringResource(R.string.search_minifig_sets, fig.setCount), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
             }
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(118.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            ValuePriceLine(currentValue)
             if (owned) {
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
@@ -879,7 +869,7 @@ private fun ResultCard(
                         .fillMaxWidth()
                         .padding(top = 2.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                        .background(colors.track)
                         .clickable(onClick = onOpenDetail)
                         .padding(vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,

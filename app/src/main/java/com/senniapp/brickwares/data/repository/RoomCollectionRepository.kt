@@ -46,7 +46,8 @@ class RoomCollectionRepository(
     init {
         // Warm the catalog so the status overlay below has data to reconcile against (idempotent),
         // then warm the community value cache so cards can show the "Value" line (Decision 17).
-        scope.launch { catalog.refresh(); values.warm() }
+        // Minifigs too, so minifig items can overlay the catalog image + set-count.
+        scope.launch { catalog.refresh(); catalog.refreshMinifigs(); values.warm() }
     }
 
     // ---- Reads (Room is the source of truth) ----
@@ -73,20 +74,27 @@ class RoomCollectionRepository(
         themeSummariesOf(getCollectionItems().first())
 
     override fun getSoldItems(): Flow<List<SoldItem>> =
-        combine(salesDao.observeActive(), catalog.revision) { rows, _ ->
+        combine(salesDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.map { entity ->
                 val cat = catalogFor(entity.setId, entity.setNumber)
+                val value = if (entity.figNum != null) values.valueForFig(entity.figNum) else values.valueFor(entity.setId)
                 SoldItem(
                     id = entity.id,
                     setNumber = entity.setNumber, name = entity.name,
                     itemType = entity.itemKind.toItemType(), theme = entity.theme,
                     releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: entity.releaseYear,
                     releaseMonth = cat?.releaseMonth ?: entity.releaseMonth,
-                    imageUrl = entity.imageUrl, retailPrice = entity.retailPrice ?: 0L,
+                    // Recover the minifig image from the catalog: prefer fig_num, else the setNumber
+                    // field (holds the fig_num for minifigs) so pre-fix sales without a fig_num recover.
+                    imageUrl = minifigFor(entity.figNum ?: entity.setNumber.takeIf { entity.itemKind == "minifig" })?.imageUrl
+                        ?: entity.imageUrl,
+                    retailPrice = entity.retailPrice ?: 0L,
                     pricePaid = entity.pricePaid, saleValue = entity.salePrice,
                     quantity = entity.quantity,
                     condition = if (entity.condition == "used") Condition.USED else Condition.NEW,
                     soldOn = entity.soldOn, note = entity.notes,
+                    status = cat?.status ?: Availability.AVAILABLE,
+                    currentValueInfo = value,
                 )
             }
         }
@@ -142,12 +150,15 @@ class RoomCollectionRepository(
     }
 
     override fun addSale(item: CollectionItem, salePrice: Long) = write {
-        val set = resolveCatalog(item.setNumber)
+        val kind = item.itemType.dbKind()
+        // A minifig sale is keyed by its fig_num (stored in setNumber) — no catalog set to resolve.
+        val isFig = kind == "minifig"
+        val set = if (isFig) null else resolveCatalog(item.setNumber)
         val copy = item.copies.firstOrNull()
         salesDao.upsert(
             SalesEntity(
                 id = UUID.randomUUID().toString(),
-                setId = set?.setId, figNum = null, itemKind = item.itemType.dbKind(),
+                setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                 setNumber = item.setNumber, name = item.name, theme = item.theme,
                 releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                 imageUrl = set?.imageUrl ?: item.imageUrl,
@@ -274,19 +285,38 @@ class RoomCollectionRepository(
             (setId != null && c.setId == setId) || c.setNumber == setNumber
         }
 
+    /** The catalog minifig for a fig_num (for the image + set-count overlay), or null. */
+    private fun minifigFor(figNum: String?) =
+        figNum?.let { fn -> catalog.allMinifigs().firstOrNull { it.figNum == fn } }
+
     private fun List<CollectionCopyEntity>.toCollectionItem(): CollectionItem {
         val head = first()
         val cat = catalogFor(head.setId, head.setNumber)
-        val value = values.valueFor(head.setId)
+        val fig = minifigFor(head.figNum)
+        val value = if (head.figNum != null) values.valueForFig(head.figNum) else values.valueFor(head.setId)
+        val status = cat?.status ?: head.status.toAvailability()
+        val isFig = head.figNum != null
+        // The current value is shown for minifigs + retired/promo/magazine sets.
+        val valueShown = isFig || status == Availability.RETIRED || status == Availability.PROMO || status == Availability.MAGAZINE
+        val retail = head.retailPrice ?: 0L
+        // Growth vs what was paid, per unit (pricePaid is the total for a copy's qty). The reference is
+        // the current value when it's shown, otherwise retail (so a non-retired set compares retail vs
+        // paid). Every card gets a growth as long as something was paid.
+        val totalQty = sumOf { it.quantity }
+        val unitPaid = if (totalQty > 0) sumOf { it.pricePaid }.toDouble() / totalQty else 0.0
+        val growthRef = (value?.amountVnd?.takeIf { valueShown }) ?: retail.takeIf { it > 0 }
+        val growth = growthRef?.takeIf { unitPaid > 0 }?.let { ((it - unitPaid) / unitPaid) * 100.0 }
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
             theme = head.theme,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: head.releaseYear,
             releaseMonth = cat?.releaseMonth ?: head.releaseMonth,
-            pieces = head.pieces, minifigs = head.minifigs, retailPrice = head.retailPrice ?: 0L,
-            currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = null,
-            status = cat?.status ?: head.status.toAvailability(),
-            imageUrl = head.imageUrl,
+            pieces = head.pieces, minifigs = head.minifigs, minifigSetCount = fig?.setCount ?: 0,
+            retailPrice = retail,
+            currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = growth,
+            status = status,
+            // Minifigs: overlay the catalog image (older rows were stored without it); sets keep theirs.
+            imageUrl = fig?.imageUrl ?: head.imageUrl,
             copies = map { e ->
                 Copy(
                     id = e.id,
@@ -300,14 +330,14 @@ class RoomCollectionRepository(
 
     private fun WishlistEntity.toWishlistItem(): WishlistItem {
         val cat = catalogFor(setId, setNumber)
-        val value = values.valueFor(setId)
+        val value = if (figNum != null) values.valueForFig(figNum) else values.valueFor(setId)
         return WishlistItem(
             setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
             releaseMonth = cat?.releaseMonth ?: releaseMonth,
             pieces = pieces, minifigs = minifigs,
             retailPrice = retailPrice ?: 0L, currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = null,
-            status = cat?.status ?: status.toAvailability(), imageUrl = imageUrl,
+            status = cat?.status ?: status.toAvailability(), imageUrl = minifigFor(figNum)?.imageUrl ?: imageUrl,
         )
     }
 

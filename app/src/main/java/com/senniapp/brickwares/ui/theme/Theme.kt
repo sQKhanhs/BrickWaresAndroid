@@ -41,6 +41,8 @@ data class BwColors(
     val error: Color,
     val gwp: Color,
     val promo: Color,
+    val magazine: Color,
+    val pending: Color,
     val isDark: Boolean,
 )
 
@@ -67,6 +69,8 @@ private val LightBwColors = BwColors(
     error = ErrorRed,
     gwp = LightGwp,
     promo = LightPromo,
+    magazine = LightMagazine,
+    pending = LightPending,
     isDark = false,
 )
 
@@ -93,6 +97,8 @@ private val DarkBwColors = BwColors(
     error = ErrorRed,
     gwp = DarkGwp,
     promo = DarkPromo,
+    magazine = DarkMagazine,
+    pending = DarkPending,
     isDark = true,
 )
 

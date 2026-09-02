@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
@@ -88,8 +89,10 @@ class SetDetailViewModel(
         val sn = set?.setNumber ?: key
         val owned = collectionItems.find { it.setNumber == sn }
         // Keep the open copies dialog live (hero OR a recommended set), so edits/deletes/sells reflect.
-        val copiesSn = _uiState.value.copiesSetNumber
-        val copiesItem = copiesSn?.let { cs -> collectionItems.find { it.setNumber == cs } }
+        // If its item is no longer owned (last copy deleted), close it — clearing copiesSetNumber too,
+        // so it doesn't silently re-open when that set is added again later.
+        val copiesItem = _uiState.value.copiesSetNumber?.let { cs -> collectionItems.find { it.setNumber == cs } }
+        val copiesSn = copiesItem?.setNumber
         val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
         val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
         // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — captured ONCE per
@@ -119,6 +122,7 @@ class SetDetailViewModel(
                 related = if (set == null) emptyList() else relatedSnapshot,
                 ownedNumbers = ownedNumbers,
                 wishlistedNumbers = wishlistedNumbers,
+                copiesSetNumber = copiesSn,
                 copiesItem = copiesItem,
             )
         }
@@ -134,7 +138,7 @@ class SetDetailViewModel(
         val id = set.setId ?: return
         _uiState.update { it.copy(currentValue = CurrentValue.NONE, valueLoading = true) }
         viewModelScope.launch {
-            val value = valueRepo.forSet(id, set.retailPrice)
+            val value = valueRepo.forSet(id, set.retailPrice, set.status == Availability.RETIRED)
             // Ignore a late result if the user has since navigated to another set.
             if (valueKey == set.id) _uiState.update { it.copy(currentValue = value, valueLoading = false) }
         }

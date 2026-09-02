@@ -21,6 +21,12 @@ val LightGwp = Color(0xFF7A3E9D)
 val DarkGwp = Color(0xFFC79BE6)
 val LightPromo = Color(0xFF1E7F7B)
 val DarkPromo = Color(0xFF57C4BF)
+// Magazine gift — blue, distinct from the teal promo / violet GWP badges.
+val LightMagazine = Color(0xFF2563A8)
+val DarkMagazine = Color(0xFF6FA6E6)
+// Pending release (launch date in the future) — orange, reads as "coming soon".
+val LightPending = Color(0xFFC2671C)
+val DarkPending = Color(0xFFE89A54)
 
 // ---- Light theme ----
 val LightBg = Color(0xFFFAF8F5)

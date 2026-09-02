@@ -120,9 +120,10 @@ class SearchViewModel(
     /** Flip the Search tab between browsing sets and minifigs. */
     fun onToggleMode() {
         val next = if (_uiState.value.mode == SearchMode.SETS) SearchMode.MINIFIGS else SearchMode.SETS
-        _uiState.update {
-            it.copy(mode = next, query = "", submittedQuery = null, suggestions = emptyList(), minifigThemeDetail = null)
-        }
+        // Return to the browse home of the target mode — clear any open theme-detail list / results /
+        // query — so toggling from inside a theme's item list lands on the main page, not a stale list.
+        resetToDefault()
+        _uiState.update { it.copy(mode = next) }
         if (next == SearchMode.MINIFIGS && minifigs.isEmpty()) loadMinifigs()
     }
 

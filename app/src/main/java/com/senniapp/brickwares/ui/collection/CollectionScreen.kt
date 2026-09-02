@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
@@ -87,6 +88,7 @@ import kotlin.math.roundToInt
 @Composable
 fun CollectionScreen(
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifigDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: CollectionViewModel = viewModel(),
 ) {
@@ -96,6 +98,7 @@ fun CollectionScreen(
         isOnline = rememberIsOnline(),
         isLoggedIn = rememberIsLoggedIn(),
         onOpenSetDetail = onOpenSetDetail,
+        onOpenMinifigDetail = onOpenMinifigDetail,
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
         onSalesPageChange = viewModel::onSalesPageChange,
@@ -132,6 +135,7 @@ private fun CollectionContent(
     isOnline: Boolean = true,
     isLoggedIn: Boolean = true,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifigDetail: (String) -> Unit = {},
     onFilterSelected: (CollectionFilter) -> Unit,
     onPageChange: (Int) -> Unit,
     onSalesPageChange: (Int) -> Unit,
@@ -242,7 +246,10 @@ private fun CollectionContent(
                             ItemCard(
                                 item = item,
                                 onDetail = { onItemDetail(item) },
-                                onOpenDetail = { onOpenSetDetail(item.setNumber) },
+                                onOpenDetail = {
+                                    if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
+                                    else onOpenSetDetail(item.setNumber)
+                                },
                             )
                         }
                         Spacer(Modifier.height(12.dp))
@@ -270,7 +277,16 @@ private fun CollectionContent(
                     item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
                     items(state.salesPageItems, key = { it.id }) { sold ->
-                        SoldCard(sold, onDetail = { onSaleDetail(sold) })
+                        SwipeToDelete(onSwiped = { onDeleteSale(sold.id) }, autoDismiss = true) {
+                            SoldCard(
+                                sold,
+                                onDetail = { onSaleDetail(sold) },
+                                onOpenDetail = {
+                                    if (sold.itemType == ItemType.MINIFIG) onOpenMinifigDetail(sold.setNumber)
+                                    else onOpenSetDetail(sold.setNumber)
+                                },
+                            )
+                        }
                         Spacer(Modifier.height(12.dp))
                     }
                     item {
@@ -471,22 +487,31 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
 
         Spacer(Modifier.width(12.dp))
 
-        // Title + meta (roomier vertical rhythm).
+        // Title + meta (roomier vertical rhythm). Minifigs mirror the Search minifig card
+        // (fig number, name, "in N sets"); sets show the theme/release/pieces meta + status badge.
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isFig) 4.dp else 5.dp),
         ) {
-            Text(
-                text = "${item.setNumber} ${item.name}",
-                style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                color = colors.linkAccent,
-                modifier = Modifier.clickable(onClick = onOpenDetail),
-            )
-            MetaLine(stringResource(R.string.meta_theme), item.theme)
             if (isFig) {
-                // Minifigs have no release/availability; show a Minifig tag (+ parts if known).
-                MetaLine(stringResource(R.string.filter_minifig), if (item.pieces > 0) stringResource(R.string.meta_parts_count, item.pieces) else "—")
+                Text(item.setNumber, style = BwType.micro, color = colors.textMuted)
+                Text(
+                    item.name,
+                    style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                    color = colors.linkAccent,
+                    modifier = Modifier.clickable(onClick = onOpenDetail),
+                )
+                if (item.minifigSetCount > 0) {
+                    Text(stringResource(R.string.search_minifig_sets, item.minifigSetCount), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                }
             } else {
+                Text(
+                    text = "${item.setNumber} ${item.name}",
+                    style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                    color = colors.linkAccent,
+                    modifier = Modifier.clickable(onClick = onOpenDetail),
+                )
+                MetaLine(stringResource(R.string.meta_theme), item.theme)
                 MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
                 MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
                 StatusBadge(item.status)
@@ -501,19 +526,27 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
-            PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
-            // Community value (Decision 17) with the "!" info bubble. Shown for sets even when there's
-            // none yet ("----"); the growth pill only appears once a value exists. Hidden for minifigs.
-            if (!isFig) {
+            if (isFig) {
+                // Minifig: Paid → community value → Growth (no retail; value always shown).
+                PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
                 ValuePriceLine(item.currentValueInfo)
+                item.growthPercent?.let { GrowthPill(it) }
+            } else {
+                // Set: the current value shows only for retired / promo / magazine sets — Retail, a
+                // divider, then Paid → Value → Growth. Otherwise just Retail → Paid → Growth (no value).
+                // Growth always shows (repo picks the reference: value when shown, else retail vs paid).
+                val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
+                PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
+                if (showValue) HorizontalDivider(color = colors.borderSoft)
+                PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
+                if (showValue) ValuePriceLine(item.currentValueInfo)
                 item.growthPercent?.let { GrowthPill(it) }
             }
             Row(
                 modifier = Modifier
                     .padding(top = 2.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                    .background(colors.track)
                     .clickable(onClick = onDetail)
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -531,7 +564,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
 private fun signedMoney(v: Long): String =
     (if (v > 0) "+" else "") + formatMoney(v, AppCurrency.VND)
 
-private fun signedPct(p: Double): String = "${if (p >= 0) "+" else ""}${p.roundToInt()}%"
+private fun signedPct(p: Double): String = "${if (p.roundToInt() > 0) "+" else ""}${p.roundToInt()}%"
 
 @Composable
 private fun SalesStatsRow(summary: SalesSummary) {
@@ -582,8 +615,13 @@ private fun SalesStatsRow(summary: SalesSummary) {
 @Composable
 private fun ProfitBar(summary: SalesSummary) {
     val colors = BwTheme.colors
-    val positive = summary.totalProfit >= 0
-    val color = if (positive) colors.success else colors.error
+    val profit = summary.totalProfit
+    // Zero profit reads neutral: gray, no +, no trend arrow.
+    val color = when {
+        profit > 0L -> colors.success
+        profit < 0L -> colors.error
+        else -> colors.textMuted
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -594,14 +632,16 @@ private fun ProfitBar(summary: SalesSummary) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(
-                painter = painterResource(
-                    if (positive) R.drawable.ic_bw_trending_up else R.drawable.ic_bw_trending_down,
-                ),
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(18.dp),
-            )
+            if (profit != 0L) {
+                Icon(
+                    painter = painterResource(
+                        if (profit > 0L) R.drawable.ic_bw_trending_up else R.drawable.ic_bw_trending_down,
+                    ),
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Text(
                 stringResource(R.string.sales_profit_prefix, signedMoney(animatedNumber(summary.totalProfit, "sales_profit"))),
                 style = BwType.body.copy(fontWeight = FontWeight.Bold),
@@ -620,9 +660,10 @@ private fun ProfitBar(summary: SalesSummary) {
 }
 
 @Composable
-private fun SoldCard(sold: SoldItem, onDetail: () -> Unit) {
+private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
-    val boxUrl = CatalogImages.boxUrl(sold.setNumber)
+    val isFig = sold.itemType == ItemType.MINIFIG
+    val thumbUrl = if (isFig) sold.imageUrl else CatalogImages.boxUrl(sold.setNumber)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -632,21 +673,35 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit) {
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = boxUrl,
-            fallbackUrl = sold.imageUrl,
+            imageUrl = thumbUrl,
+            fallbackUrl = if (isFig) null else sold.imageUrl,
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
+            modifier = Modifier.clickable(onClick = onOpenDetail),
         )
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent)
-            MetaLine(stringResource(R.string.meta_theme), sold.theme)
-            MetaLine(stringResource(R.string.meta_release), releaseLabel(sold.releaseMonth, sold.releaseYear))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (isFig) 4.dp else 5.dp)) {
+            if (isFig) {
+                Text(sold.setNumber, style = BwType.micro, color = colors.textMuted)
+                Text(sold.name, style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
+            } else {
+                Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
+                MetaLine(stringResource(R.string.meta_theme), sold.theme)
+                MetaLine(stringResource(R.string.meta_release), releaseLabel(sold.releaseMonth, sold.releaseYear))
+                StatusBadge(sold.status)
+            }
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, AppCurrency.VND))
+            // Set: Retail (+ current Value for retired/promo/magazine) then a divider, then the sale
+            // figures. Minifigs skip the retail/value/divider block.
+            if (!isFig) {
+                val showValue = sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE
+                PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, AppCurrency.VND))
+                if (showValue) ValuePriceLine(sold.currentValueInfo)
+                HorizontalDivider(color = colors.borderSoft)
+            }
             PriceLine(stringResource(R.string.price_paid), formatMoney(sold.pricePaid, AppCurrency.VND))
             PriceLine(stringResource(R.string.price_sale), formatMoney(sold.saleValue, AppCurrency.VND))
             val profitColor = if (sold.profit >= 0) colors.success else colors.error
@@ -660,7 +715,7 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit) {
                 modifier = Modifier
                     .padding(top = 2.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                    .background(colors.track)
                     .clickable(onClick = onDetail)
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,

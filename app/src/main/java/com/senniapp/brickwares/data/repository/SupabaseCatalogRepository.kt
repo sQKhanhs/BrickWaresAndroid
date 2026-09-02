@@ -112,9 +112,10 @@ class SupabaseCatalogRepository(
             if (minifigCache.isNotEmpty()) return
             try {
                 withTimeout(LOAD_TIMEOUT_MS) {
-                    // Each fig + the sets it's in (for the set-count + theme browse) via the join.
+                    // Each fig + the sets it's in (for the set-count, theme browse, and the detail's
+                    // "appears in" list) via the join — set_id from the link, theme/subtheme from sets.
                     val rows = client.from("minifigs")
-                        .select(Columns.raw("fig_num,name,num_parts,image_url,set_minifigs(sets(theme,subtheme))"))
+                        .select(Columns.raw("fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"))
                         .decodeList<MinifigRow>()
                     minifigCache = rows.map { it.toMinifig() }
                 }
@@ -140,6 +141,12 @@ class SupabaseCatalogRepository(
         return minifigCache.filter {
             it.figNum.lowercase().contains(q) || it.name.lowercase().contains(q)
         }
+    }
+
+    override fun setsForMinifig(figNum: String): List<CatalogSet> {
+        val fig = minifigCache.firstOrNull { it.figNum == figNum } ?: return emptyList()
+        val byId = cache.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        return fig.setIds.mapNotNull { byId[it] }.sortedByDescending { it.releaseYear }
     }
 
     /** Row shape for the `sets` table columns we read (unknown columns are ignored by the decoder). */
@@ -199,12 +206,20 @@ class SupabaseCatalogRepository(
                 .maxOrNull()
 
         private fun deriveStatus(): Availability {
+            // Not yet released (launch date in the future) → Pending Release, ahead of everything else
+            // (a set that isn't out yet is neither available nor retired).
+            releaseDate()?.let { if (it.isAfter(LocalDate.now())) return Availability.PENDING }
+            // Promotional items + magazine gifts are never sold at retail and Brickset gives them no
+            // exit date, so they keep their own badge and are NEVER marked RETIRED (checked first).
+            when {
+                availability.equals("Promotional", ignoreCase = true) -> return Availability.PROMO
+                availability.equals("Magazine gift", ignoreCase = true) -> return Availability.MAGAZINE
+            }
             val retire = retirementDate()
             if (retire != null && retire.isBefore(LocalDate.now())) return Availability.RETIRED
             return when {
                 availability.equals("LEGO exclusive", ignoreCase = true) -> Availability.EXCLUSIVE
                 availability.equals("LEGO Gift with Purchase", ignoreCase = true) -> Availability.GWP
-                availability.equals("Promotional", ignoreCase = true) -> Availability.PROMO
                 else -> Availability.AVAILABLE
             }
         }
@@ -265,11 +280,15 @@ class SupabaseCatalogRepository(
             return Minifig(
                 figNum = figNum, name = name ?: figNum, imageUrl = imageUrl,
                 numParts = numParts ?: 0, setCount = setMinifigs.size, themeSubthemes = pairs,
+                setIds = setMinifigs.mapNotNull { it.setId }.distinct(),
             )
         }
 
         @Serializable
-        data class SetMinifigRow(val sets: SetThemeRow? = null)
+        data class SetMinifigRow(
+            @SerialName("set_id") val setId: Long? = null,
+            val sets: SetThemeRow? = null,
+        )
 
         @Serializable
         data class SetThemeRow(val theme: String? = null, val subtheme: String? = null)

@@ -7,7 +7,7 @@ enum class ItemType { SET, MINIFIG }
  * Availability status — every item always has one. RETIRED is derived from
  * `date_last_available` in the real data; AVAILABLE/EXCLUSIVE describe currently-sold sets.
  */
-enum class Availability { AVAILABLE, EXCLUSIVE, GWP, PROMO, RETIRED }
+enum class Availability { AVAILABLE, PENDING, EXCLUSIVE, GWP, PROMO, MAGAZINE, RETIRED }
 
 /**
  * One owned copy of a set. A set can hold several copies bought at different times, conditions
@@ -36,6 +36,8 @@ data class CollectionItem(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
+    /** For a minifig item: how many catalog sets it appears in (the card's "in N sets"). */
+    val minifigSetCount: Int = 0,
     val retailPrice: Long,
     val currentValue: Long? = null,
     /** Full community-value detail (freshness/count) for the card's "!" info bubble (Decision 17). */

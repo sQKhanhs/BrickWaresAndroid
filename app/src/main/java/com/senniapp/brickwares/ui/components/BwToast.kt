@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -10,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -35,11 +37,15 @@ fun BoxScope.BwToast(message: String?, onDismiss: () -> Unit) {
         text = message,
         style = BwType.body.copy(fontSize = 12.sp),
         color = colors.bg,
+        textAlign = TextAlign.Center,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .padding(bottom = 100.dp)
-            .clip(RoundedCornerShape(999.dp))
+            // Outer margins so long text doesn't touch the screen edges, plus a width cap so it wraps
+            // into a neat rounded card instead of a full-width oval.
+            .padding(start = 24.dp, end = 24.dp, bottom = 100.dp)
+            .widthIn(max = 340.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(colors.text)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     )
 }

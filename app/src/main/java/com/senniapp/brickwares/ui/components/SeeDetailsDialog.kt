@@ -58,6 +58,8 @@ fun SeeDetailsDialog(
     onEditCopy: (Copy) -> Unit,
     onAddItem: () -> Unit,
     onSellCopy: (Copy) -> Unit = {},
+    /** Hide the per-copy Sell (coin) action — minifig sales aren't wired yet, so it's off there. */
+    allowSell: Boolean = true,
 ) {
     val colors = BwTheme.colors
     val expanded = remember { mutableStateListOf<String>() }
@@ -127,19 +129,21 @@ fun SeeDetailsDialog(
                                     .clickable { onEditCopy(copy) },
                             )
                             // "Sell" action rendered as a coin: filled yellow disc with a $ sign.
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.brandYellow)
-                                    .clickable { onSellCopy(copy) },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    "$",
-                                    style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                                    color = colors.onYellow,
-                                )
+                            if (allowSell) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.brandYellow)
+                                        .clickable { onSellCopy(copy) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "$",
+                                        style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                                        color = colors.onYellow,
+                                    )
+                                }
                             }
                             Icon(
                                 painter = painterResource(R.drawable.ic_bw_delete),

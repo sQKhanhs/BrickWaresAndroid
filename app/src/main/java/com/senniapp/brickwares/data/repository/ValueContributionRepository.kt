@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.data.repository
 
 import android.util.Log
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
@@ -29,6 +30,8 @@ class ValueContributionRepository(
     // synchronously (same pattern as the catalog status overlay). Decision 16 moves this server-side.
     @Volatile
     private var cache: Map<Long, CurrentValue> = emptyMap()
+    @Volatile
+    private var figCache: Map<String, CurrentValue> = emptyMap()
     private val _revision = MutableStateFlow(0)
     /** Bumps whenever [warm] refreshes the cache, so item-card flows can re-emit with values. */
     val revision: StateFlow<Int> = _revision.asStateFlow()
@@ -41,7 +44,7 @@ class ValueContributionRepository(
      */
     suspend fun warm() {
         catalog.refresh()
-        val retail = catalog.all().mapNotNull { s -> s.setId?.let { it to s.retailPrice } }.toMap()
+        val setsById = catalog.all().mapNotNull { s -> s.setId?.let { it to s } }.toMap()
         val rows = runCatching {
             withTimeout(TIMEOUT_MS) { client.from(TABLE).select().decodeList<Row>() }
         }.getOrElse {
@@ -52,7 +55,14 @@ class ValueContributionRepository(
         val now = System.currentTimeMillis()
         cache = rows.filter { it.setId != null }
             .groupBy { it.setId!! }
-            .mapValues { (id, rs) -> ValueAggregator.aggregate(rs.toPoints(), retail[id], now) }
+            .mapValues { (id, rs) ->
+                val set = setsById[id]
+                ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, set?.status == Availability.RETIRED, now)
+            }
+        // Minifig values: no retail anchor, so the outlier guard is skipped (only value > 0).
+        figCache = rows.filter { it.figNum != null }
+            .groupBy { it.figNum!! }
+            .mapValues { (_, rs) -> ValueAggregator.aggregate(rs.toPoints(), null, false, now) }
         _revision.value += 1
     }
 
@@ -62,15 +72,21 @@ class ValueContributionRepository(
     /** Just the cached amount in ₫ for a set id, or null. Convenience for card overlays. */
     fun amountFor(setId: Long?): Long? = valueFor(setId)?.amountVnd
 
-    /** Current value for one set (retail anchors the outlier guard). */
-    suspend fun forSet(setId: Long, retailVnd: Long?): CurrentValue =
-        aggregate(retailVnd) {
+    /** Cached community value for a minifig (synchronous overlay), or null when none is cached. */
+    fun valueForFig(figNum: String?): CurrentValue? = figNum?.let { figCache[it] }
+
+    /** Just the cached minifig amount in ₫, or null. Convenience for card overlays. */
+    fun amountForFig(figNum: String?): Long? = valueForFig(figNum)?.amountVnd
+
+    /** Current value for one set (retail + retired status anchor the outlier guard). */
+    suspend fun forSet(setId: Long, retailVnd: Long?, retired: Boolean): CurrentValue =
+        aggregate(retailVnd, retired) {
             client.from(TABLE).select { filter { eq("set_id", setId) } }.decodeList<Row>()
         }
 
     /** Current value for one minifig (no retail anchor — outlier guard is skipped). */
     suspend fun forFig(figNum: String): CurrentValue =
-        aggregate(null) {
+        aggregate(null, retired = false) {
             client.from(TABLE).select { filter { eq("fig_num", figNum) } }.decodeList<Row>()
         }
 
@@ -78,7 +94,11 @@ class ValueContributionRepository(
      * Bulk current values for many sets (list cards), one round trip → `set_id → CurrentValue`.
      * Sets with no contributions are simply absent from the map (callers treat that as NONE).
      */
-    suspend fun forSets(setIds: List<Long>, retail: Map<Long, Long?>): Map<Long, CurrentValue> {
+    suspend fun forSets(
+        setIds: List<Long>,
+        retail: Map<Long, Long?>,
+        retired: Map<Long, Boolean> = emptyMap(),
+    ): Map<Long, CurrentValue> {
         if (setIds.isEmpty()) return emptyMap()
         val rows = runCatching {
             withTimeout(TIMEOUT_MS) {
@@ -92,16 +112,16 @@ class ValueContributionRepository(
         val now = System.currentTimeMillis()
         return rows.filter { it.setId != null }
             .groupBy { it.setId!! }
-            .mapValues { (id, rs) -> ValueAggregator.aggregate(rs.toPoints(), retail[id], now) }
+            .mapValues { (id, rs) -> ValueAggregator.aggregate(rs.toPoints(), retail[id], retired[id] ?: false, now) }
     }
 
-    private suspend fun aggregate(retailVnd: Long?, fetch: suspend () -> List<Row>): CurrentValue {
+    private suspend fun aggregate(retailVnd: Long?, retired: Boolean, fetch: suspend () -> List<Row>): CurrentValue {
         val rows = runCatching { withTimeout(TIMEOUT_MS) { fetch() } }.getOrElse {
             if (it is CancellationException) throw it
             Log.w(TAG, "value fetch failed", it)
             return CurrentValue.NONE
         }
-        return ValueAggregator.aggregate(rows.toPoints(), retailVnd)
+        return ValueAggregator.aggregate(rows.toPoints(), retailVnd, retired)
     }
 
     private fun List<Row>.toPoints(): List<Pair<Double, Long>> = map { it.value to parseIso(it.submittedAt) }

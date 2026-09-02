@@ -17,6 +17,10 @@ data class SoldItem(
     val condition: Condition = Condition.NEW,
     val soldOn: String? = null,
     val note: String? = null,
+    /** Live catalog status (drives whether the sold card shows a current value). */
+    val status: Availability = Availability.AVAILABLE,
+    /** Community current value for the item, when shown (retired / promo / magazine sets). */
+    val currentValueInfo: CurrentValue? = null,
 ) {
     val profit: Long get() = saleValue - pricePaid
     val profitPercent: Double

@@ -31,6 +31,13 @@ const {
   // "1"/"true" = merge onto the existing seed.sql (dedupe by set_id, newly fetched rows win)
   // instead of overwriting it, so a fetch adds to the current catalog rather than replacing it.
   BRICKSET_APPEND = "",
+  // Extra pass: also pull OLD RETIRED sets (for testing the retired badge/value flows). These go into
+  // the sets + set_prices catalog but are NOT sent through the Rebrickable minifig fetch. "0" disables.
+  BRICKSET_RETIRED = "1",
+  BRICKSET_RETIRED_YEARS = "2014,2015,2016,2017,2018,2019,2020",
+  BRICKSET_RETIRED_THEMES = "Star Wars,Technic,City,Ninjago,Creator Expert,Architecture,Ideas,Marvel Super Heroes,Harry Potter,Speed Champions",
+  BRICKSET_RETIRED_PAGESIZE = "40",
+  BRICKSET_RETIRED_MAX = "200",
 } = process.env;
 
 const APPEND = BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
@@ -161,6 +168,42 @@ function mergeRows(existingRows, freshRows, keyOf) {
   return [...map.values()];
 }
 
+// A set counts as "retired" the way the app derives it: its exit date (or latest LEGO.com
+// date-last-available) is in the past. Promotional / magazine gifts are excluded — the app never
+// marks those RETIRED, so they wouldn't exercise the retired flows.
+function retirementDate(s) {
+  if (s.exitDate) return s.exitDate.slice(0, 10);
+  const lego = s.LEGOCom || {};
+  const dates = ["US", "UK", "CA", "DE"].map((r) => lego[r]?.dateLastAvailable).filter(Boolean).map((d) => d.slice(0, 10));
+  return dates.length ? dates.sort().pop() : null;
+}
+function isRetired(s, today) {
+  const av = (s.availability || "").toLowerCase();
+  if (av === "promotional" || av === "magazine gift") return false;
+  const rd = retirementDate(s);
+  return rd != null && rd < today;
+}
+
+// Extra pass — old retired sets (across BRICKSET_RETIRED_THEMES × BRICKSET_RETIRED_YEARS), for testing
+// the retired badge + retired price-column/value flows. Deduped and capped at BRICKSET_RETIRED_MAX.
+async function fetchRetiredSets(userHash) {
+  const today = new Date().toISOString().slice(0, 10);
+  const themes = BRICKSET_RETIRED_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
+  const pageSize = Number(BRICKSET_RETIRED_PAGESIZE);
+  console.log(`Fetching retired test sets (years ${BRICKSET_RETIRED_YEARS}) for: ${themes.join(", ")}`);
+  const out = [];
+  for (const theme of themes) {
+    const params = JSON.stringify({ theme, year: BRICKSET_RETIRED_YEARS, pageSize, orderBy: "YearFromDESC", extendedData: true });
+    const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
+    if (j.status !== "success") { console.error(`  retired ${theme}: ${j.message}`); continue; }
+    const retired = (j.sets || []).filter((s) => isRetired(s, today));
+    console.log(`  ${theme}: ${j.sets?.length || 0} fetched, ${retired.length} retired`);
+    out.push(...retired);
+  }
+  const unique = [...new Map(out.map((s) => [s.setID, s])).values()];
+  return unique.slice(0, Number(BRICKSET_RETIRED_MAX));
+}
+
 async function main() {
   const userHash = await getUserHash();
   const themes = BRICKSET_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
@@ -193,9 +236,16 @@ async function main() {
     process.exit(1);
   }
 
-  // Row strings for the freshly fetched sets.
-  let setRowList = sets.map(setRow);
-  let priceRowList = sets.flatMap(priceRows);
+  // Extra retired-sets pass (catalog only — these are NOT sent to the Rebrickable minifig fetch, to
+  // avoid its rate limits). Merged into the sets/prices SQL; the primary newest sets win a set_id tie.
+  const enableRetired = BRICKSET_RETIRED !== "0" && BRICKSET_RETIRED.toLowerCase() !== "false";
+  const retiredSets = enableRetired ? await fetchRetiredSets(userHash) : [];
+  const catalogSets = [...new Map([...retiredSets, ...sets].map((s) => [s.setID, s])).values()];
+  if (retiredSets.length) console.log(`Retired test sets: ${retiredSets.length} added (catalog total ${catalogSets.length}).`);
+
+  // Row strings for the freshly fetched sets (primary + retired).
+  let setRowList = catalogSets.map(setRow);
+  let priceRowList = catalogSets.flatMap(priceRows);
 
   // Append mode: merge onto the existing seed.sql. Existing rows are kept; a freshly fetched row
   // for the same key overwrites the old one. Keys: set_id for sets, "set_id-region" for prices.

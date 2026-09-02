@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
  * the left ([alignEnd]) because the value line lives in the narrow right-hand price column.
  */
 @Composable
-fun ValuePriceLine(value: CurrentValue?) {
+fun ValuePriceLine(value: CurrentValue?, alignEnd: Boolean = true) {
     val colors = BwTheme.colors
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -62,7 +62,7 @@ fun ValuePriceLine(value: CurrentValue?) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.price_value), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
             Spacer(Modifier.width(4.dp))
-            ValueInfoBubble(note = currentValueNote(value ?: CurrentValue.NONE), alignEnd = true)
+            ValueInfoBubble(note = currentValueNote(value ?: CurrentValue.NONE), alignEnd = alignEnd)
         }
         Spacer(Modifier.width(6.dp))
         Text(

@@ -76,6 +76,7 @@ import com.senniapp.brickwares.ui.components.releaseLabel
 fun WishlistScreen(
     onNavigateToSearch: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifigDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: WishlistViewModel = viewModel(),
 ) {
@@ -88,6 +89,7 @@ fun WishlistScreen(
         onPageChange = viewModel::onPageChange,
         onNavigateToSearch = onNavigateToSearch,
         onOpenSetDetail = onOpenSetDetail,
+        onOpenMinifigDetail = onOpenMinifigDetail,
         onSearchCatalog = viewModel::searchCatalog,
         onMoveClick = viewModel::onMoveClick,
         onDismissMove = viewModel::onDismissMove,
@@ -107,6 +109,7 @@ private fun WishlistContent(
     onPageChange: (Int) -> Unit,
     onNavigateToSearch: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifigDetail: (String) -> Unit = {},
     onSearchCatalog: (String) -> List<CatalogSet>,
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
@@ -181,7 +184,10 @@ private fun WishlistContent(
                         item = item,
                         onMove = { onMoveClick(item) },
                         onRemove = { onRemove(item.setNumber) },
-                        onOpenDetail = { onOpenSetDetail(item.setNumber) },
+                        onOpenDetail = {
+                            if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
+                            else onOpenSetDetail(item.setNumber)
+                        },
                     )
                 }
                 Spacer(Modifier.height(12.dp))
@@ -299,11 +305,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
-            // Community value (Decision 17) with the "!" info bubble — shown for sets even when none yet.
-            if (!isFig) {
-                ValuePriceLine(item.currentValueInfo)
-                item.growthPercent?.let { GrowthPill(it) }
-            }
+            // Community value (Decision 17) with the "!" info bubble — for sets AND minifigs.
+            ValuePriceLine(item.currentValueInfo)
+            item.growthPercent?.let { GrowthPill(it) }
             // Move to collection — full-width yellow button (matches design).
             Row(
                 modifier = Modifier

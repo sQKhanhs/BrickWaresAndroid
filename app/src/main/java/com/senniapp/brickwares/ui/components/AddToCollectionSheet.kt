@@ -274,6 +274,7 @@ fun AddToCollectionSheet(
                         pieces = set.pieces, minifigs = set.minifigs,
                         retailPrice = set.retailPrice ?: 0L,
                         currentValue = null, growthPercent = null, status = set.status,
+                        imageUrl = set.imageUrl,
                         copies = listOf(
                             Copy(
                                 id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",

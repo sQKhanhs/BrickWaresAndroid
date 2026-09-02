@@ -109,7 +109,7 @@ fun SetResultCard(
                         .fillMaxWidth()
                         .padding(top = 2.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
+                        .background(colors.track)
                         .clickable(onClick = onSeeDetail ?: onOpenDetail)
                         .padding(vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,

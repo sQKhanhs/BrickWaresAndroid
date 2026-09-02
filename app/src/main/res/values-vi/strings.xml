@@ -51,12 +51,14 @@
     <string name="status_exclusive">Độc quyền</string>
     <string name="status_gwp">Quà tặng</string>
     <string name="status_promotional">Khuyến mãi</string>
+    <string name="status_magazine">Quà tạp chí</string>
+    <string name="status_pending">Sắp phát hành</string>
     <string name="status_retired">Ngừng bán</string>
 
     <!-- Growth pill (%1$d = signed percent; %% is a literal percent sign) -->
     <string name="growth_up">▲ +%1$d%% Tăng</string>
     <string name="growth_down">▼ %1$d%% Tăng</string>
-    <string name="growth_flat">0%% Tăng</string>
+    <string name="growth_flat">0% Tăng</string>
 
     <!-- No-image thumbnail fallback -->
     <string name="no_image">Không có ảnh</string>
@@ -191,6 +193,12 @@
     <string name="value_age_days">%1$d ngày</string>
     <string name="value_age_months">%1$d tháng</string>
     <string name="value_age_years">%1$d năm</string>
+
+    <!-- Minifig detail -->
+    <string name="minifig_details">Chi tiết minifig</string>
+    <string name="minifig_number">Số hiệu minifig</string>
+    <string name="minifig_in_sets_label">Thuộc số bộ</string>
+    <string name="minifig_appears_in">Xuất hiện trong các bộ</string>
 
     <!-- ============ Search ============ -->
     <string name="search_title">Tìm bộ</string>

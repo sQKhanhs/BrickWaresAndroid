@@ -45,4 +45,7 @@ interface CatalogRepository {
 
     /** Substring (LIKE-style) match over the minifig cache on fig number or name. */
     fun searchMinifigs(query: String): List<Minifig>
+
+    /** The catalog sets a minifig appears in (resolved from the in-memory caches), newest first. */
+    fun setsForMinifig(figNum: String): List<CatalogSet>
 }
