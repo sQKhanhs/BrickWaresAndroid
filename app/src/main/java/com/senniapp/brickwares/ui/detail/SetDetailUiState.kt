@@ -4,6 +4,7 @@ import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.ui.components.UiText
 
 /**
@@ -28,6 +29,8 @@ data class SetDetailUiState(
     /** When non-null, the Add sheet is in edit mode for this copy. */
     val editingCopy: Copy? = null,
     val isWishlisted: Boolean = false,
+    /** The minifigs this set contains (from the `set_minifigs` inventory), for the minifig grid. */
+    val minifigs: List<Minifig> = emptyList(),
     /** Recommended sets (a stable snapshot per page open; see [SetDetailViewModel.rebuild]). */
     val related: List<CatalogSet> = emptyList(),
     /** Live owned / wishlisted set numbers, so recommendation cards flip their action buttons. */

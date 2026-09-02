@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +43,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -55,6 +59,8 @@ import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
+import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.model.ValueFreshness
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BackCircleButton
@@ -70,7 +76,9 @@ import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.ValueInfoBubble
+import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.currentValueNote
+import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
@@ -87,6 +95,7 @@ fun SetDetailScreen(
     setNumber: String,
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifig: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     modifier: Modifier = Modifier,
     /** When true (the detail is viewed from the Search tab), the search FABs are shown. */
@@ -101,6 +110,7 @@ fun SetDetailScreen(
         state = state,
         onBack = onBack,
         onOpenSetDetail = onOpenSetDetail,
+        onOpenMinifig = onOpenMinifig,
         onNavigateToSearch = onNavigateToSearch,
         onAddWishlist = viewModel::onAddToWishlist,
         onAddCollectionClick = viewModel::onAddToCollectionClick,
@@ -133,6 +143,7 @@ private fun SetDetailContent(
     state: SetDetailUiState,
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
+    onOpenMinifig: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     onAddWishlist: () -> Unit,
     onAddCollectionClick: () -> Unit,
@@ -307,6 +318,11 @@ private fun SetDetailContent(
                 }
             }
 
+            // Minifigs grid — the figs this set contains (from the set_minifigs inventory).
+            if (state.minifigs.isNotEmpty()) {
+                MinifigGridSection(minifigs = state.minifigs, onOpenMinifig = onOpenMinifig)
+            }
+
             // Recommended sets — full collection-style cards with Add / Wishlist actions.
             if (state.related.isNotEmpty()) {
                 Text(stringResource(R.string.detail_more_in, set.theme), style = BwType.cardTitle.copy(fontSize = 15.sp), color = colors.text)
@@ -474,6 +490,93 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     ) {
         Text(title, style = BwType.cardTitle.copy(fontSize = 14.sp), color = colors.text)
         content()
+    }
+}
+
+/**
+ * The "Minifigs" section: the figs this set contains, in a 2-column grid. Each card shows the fig
+ * number, name, image, an "Exclusive" badge when the fig appears in only this set, and the community
+ * value line (with the "!" bubble; `----` when there's no value) — matching the item-list cards.
+ * Built manually (not a lazy grid) because the detail page is one scrolling Column.
+ */
+@Composable
+private fun MinifigGridSection(minifigs: List<Minifig>, onOpenMinifig: (String) -> Unit) {
+    val colors = BwTheme.colors
+    // Overlay each fig's value from the shared warmed cache; re-read when it refreshes (revision).
+    val valueRepo = ValueRepositoryProvider.instance
+    val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            stringResource(R.string.search_results_minifigs, minifigs.size),
+            style = BwType.cardTitle.copy(fontSize = 15.sp),
+            color = colors.text,
+        )
+        minifigs.chunked(2).forEach { pair ->
+            // IntrinsicSize.Min + fillMaxHeight makes both cards in a row equal height, so their
+            // value lines align even when one fig's name wraps to two lines and the other's doesn't.
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                pair.forEach { fig ->
+                    val value = remember(fig.figNum, valueRev) { valueRepo.valueForFig(fig.figNum) }
+                    MinifigGridCard(
+                        fig = fig,
+                        value = value,
+                        onClick = { onOpenMinifig(fig.figNum) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                }
+                // Keep a lone card at half width (don't stretch it across the row).
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinifigGridCard(fig: Minifig, value: CurrentValue?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = BwTheme.colors
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.card)
+            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Fig number chip.
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(colors.track)
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+        ) {
+            Text(fig.figNum, style = BwType.micro, color = colors.textSecondary, maxLines = 1)
+        }
+        Text(
+            fig.name,
+            style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            color = colors.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 36.dp, corner = 10.dp)
+        // "Exclusive" badge below the image (left-aligned) when the fig appears in only this set —
+        // kept off the image so it stays legible.
+        if (fig.setCount <= 1) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                StatusBadge(Availability.EXCLUSIVE)
+            }
+        }
+        // Push the value line to the bottom so it aligns across equal-height cards in a row.
+        Spacer(Modifier.weight(1f))
+        // Community value line (matches the item-list cards): "Value  [!]  ----" until a value exists.
+        ValuePriceLine(value, alignEnd = false)
     }
 }
 

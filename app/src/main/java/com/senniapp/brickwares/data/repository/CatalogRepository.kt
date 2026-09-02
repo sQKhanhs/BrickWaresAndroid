@@ -48,4 +48,7 @@ interface CatalogRepository {
 
     /** The catalog sets a minifig appears in (resolved from the in-memory caches), newest first. */
     fun setsForMinifig(figNum: String): List<CatalogSet>
+
+    /** The catalog minifigs that appear in a set (resolved from the in-memory minifig cache). */
+    fun minifigsForSet(setId: Long?): List<Minifig>
 }

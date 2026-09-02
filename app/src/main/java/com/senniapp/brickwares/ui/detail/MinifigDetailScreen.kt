@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
@@ -44,6 +45,7 @@ import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.SeeDetailsDialog
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
+import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.components.resolve
@@ -140,7 +142,8 @@ fun MinifigDetailScreen(
             SectionCard(title = stringResource(R.string.minifig_details)) {
                 DetailRow(stringResource(R.string.minifig_number), fig.figNum)
                 DetailRow(stringResource(R.string.detail_name), fig.name)
-                if (fig.setCount > 0) DetailRow(stringResource(R.string.minifig_in_sets_label), fig.setCount.toString())
+                // "In sets" count; when the fig is in only one set, mark it Exclusive next to the count.
+                if (fig.setCount > 0) InSetsRow(count = fig.setCount)
                 if (fig.themes.isNotEmpty()) DetailRow(stringResource(R.string.meta_theme), fig.themes.joinToString(", "))
             }
 
@@ -239,5 +242,23 @@ private fun DetailRow(label: String, value: String) {
         Text(label, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
         Spacer(Modifier.width(10.dp))
         Text(value, style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
+    }
+}
+
+/** The "In sets" row: the set count on the right, plus an "Exclusive" badge when it's exactly 1. */
+@Composable
+private fun InSetsRow(count: Int) {
+    val colors = BwTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.minifig_in_sets_label), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+        Spacer(Modifier.width(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(count.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
+            if (count == 1) StatusBadge(Availability.EXCLUSIVE)
+        }
     }
 }

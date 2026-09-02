@@ -52,9 +52,10 @@ class SetDetailViewModel(
     private var valueKey: String? = null
 
     init {
-        // Warm the catalog cache, then rebuild so the set resolves from real data.
+        // Warm the catalog + minifig caches, then rebuild so the set + its minifig grid resolve.
         viewModelScope.launch {
             catalogRepo.refresh()
+            catalogRepo.refreshMinifigs()
             rebuild()
         }
         viewModelScope.launch {
@@ -69,6 +70,7 @@ class SetDetailViewModel(
     fun retry() {
         viewModelScope.launch {
             catalogRepo.refresh()
+            catalogRepo.refreshMinifigs()
             rebuild()
         }
     }
@@ -119,6 +121,7 @@ class SetDetailViewModel(
                 totalPaid = owned?.totalPaid ?: 0L,
                 ownedItem = owned,
                 isWishlisted = wishlist.any { w -> w.setNumber == sn },
+                minifigs = if (set == null) emptyList() else catalogRepo.minifigsForSet(set.setId),
                 related = if (set == null) emptyList() else relatedSnapshot,
                 ownedNumbers = ownedNumbers,
                 wishlistedNumbers = wishlistedNumbers,

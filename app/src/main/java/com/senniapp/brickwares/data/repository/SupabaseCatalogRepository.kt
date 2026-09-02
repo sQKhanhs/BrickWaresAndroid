@@ -149,6 +149,11 @@ class SupabaseCatalogRepository(
         return fig.setIds.mapNotNull { byId[it] }.sortedByDescending { it.releaseYear }
     }
 
+    override fun minifigsForSet(setId: Long?): List<Minifig> {
+        if (setId == null) return emptyList()
+        return minifigCache.filter { setId in it.setIds }.sortedBy { it.figNum }
+    }
+
     /** Row shape for the `sets` table columns we read (unknown columns are ignored by the decoder). */
     @Serializable
     private data class SetRow(

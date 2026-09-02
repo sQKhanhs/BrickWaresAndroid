@@ -138,6 +138,8 @@ fun BrickWaresApp(
                     setNumber = detail,
                     onBack = { detailSetNumber = null },
                     onOpenSetDetail = { detailSetNumber = it },
+                    // Tapping a minifig in the set's grid closes this detail and opens the minifig detail.
+                    onOpenMinifig = { detailSetNumber = null; detailFigNum = it },
                     onNavigateToSearch = { detailSetNumber = null; selectedTab = BwTab.Search },
                     // Show the search FABs on the detail only when it's opened from the Search tab.
                     showSearchFab = selectedTab == BwTab.Search,
