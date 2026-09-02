@@ -57,6 +57,13 @@ class SupabaseCatalogRepository(
 
     private companion object {
         const val LOAD_TIMEOUT_MS = 15_000L
+
+        /**
+         * Brickset's placeholder name for an unrevealed/announced-but-unnamed set. Such rows carry no
+         * real data yet (no name, image, pieces, or price), so they're filtered out of the catalog —
+         * showing them is just scatter in search/browse. They reappear once Brickset names the set.
+         */
+        const val UNREVEALED_NAME = "{?}"
     }
 
     override suspend fun refresh() {
@@ -75,7 +82,10 @@ class SupabaseCatalogRepository(
                             ),
                         )
                         .decodeList<SetRow>()
+                    // Drop unrevealed placeholder sets (Brickset name "{?}", no real data yet) so they
+                    // don't scatter search/browse — they'll show once Brickset actually names them.
                     cache = rows.map { it.toCatalogSet() }
+                        .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
                 }
                 _loadError.value = false
                 // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
