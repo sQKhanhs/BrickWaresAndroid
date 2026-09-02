@@ -52,6 +52,8 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import com.senniapp.brickwares.util.oneDecimal
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -300,19 +302,41 @@ fun PriceLine(label: String, value: String) {
     }
 }
 
-/** Green/red growth pill (▲ +34% Growth). */
+/**
+ * Growth direction (-1 / 0 / +1), judged on the **one-decimal-rounded** percent so a value that
+ * rounds to 0.0% reads as flat (no arrow/colour). Shared so a label and its colour always agree.
+ */
+fun growthDirection(percent: Double): Int {
+    val tenths = (percent * 10.0).roundToInt()
+    return when {
+        tenths > 0 -> 1
+        tenths < 0 -> -1
+        else -> 0
+    }
+}
+
+/**
+ * Localized growth label with **one decimal place**, e.g. "▲ +0.5% Growth" / "▼ -3.2% Growth", or
+ * the flat "0% Growth" when it rounds to zero. (An integer round hid sub-1% growth as "0%".)
+ */
+@Composable
+fun growthLabel(percent: Double): String {
+    val rounded = (percent * 10.0).roundToInt() / 10.0
+    return when {
+        rounded > 0 -> stringResource(R.string.growth_up, oneDecimal(abs(rounded)))
+        rounded < 0 -> stringResource(R.string.growth_down, oneDecimal(rounded))
+        else -> stringResource(R.string.growth_flat)
+    }
+}
+
+/** Green/red growth pill (▲ +34.0% Growth). */
 @Composable
 fun GrowthPill(percent: Double) {
     val colors = BwTheme.colors
-    val pct = percent.roundToInt()
-    val text = when {
-        pct > 0 -> stringResource(R.string.growth_up, pct)
-        pct < 0 -> stringResource(R.string.growth_down, pct)
-        else -> stringResource(R.string.growth_flat)
-    }
-    val color = when {
-        pct > 0 -> colors.success
-        pct < 0 -> colors.error
+    val text = growthLabel(percent)
+    val color = when (growthDirection(percent)) {
+        1 -> colors.success
+        -1 -> colors.error
         else -> colors.textMuted
     }
     Box(

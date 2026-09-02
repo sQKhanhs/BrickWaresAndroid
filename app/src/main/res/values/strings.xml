@@ -56,8 +56,8 @@
     <string name="status_retired">Retired</string>
 
     <!-- Growth pill (%1$d = signed percent; %% is a literal percent sign) -->
-    <string name="growth_up">▲ +%1$d%% Growth</string>
-    <string name="growth_down">▼ %1$d%% Growth</string>
+    <string name="growth_up">▲ +%1$s%% Growth</string>
+    <string name="growth_down">▼ %1$s%% Growth</string>
     <string name="growth_flat">0% Growth</string>
 
     <!-- No-image thumbnail fallback -->

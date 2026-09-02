@@ -82,6 +82,7 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.oneDecimal
 import com.senniapp.brickwares.ui.components.releaseLabel
 import kotlin.math.roundToInt
 
@@ -564,7 +565,11 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
 private fun signedMoney(v: Long): String =
     (if (v > 0) "+" else "") + formatMoney(v, AppCurrency.VND)
 
-private fun signedPct(p: Double): String = "${if (p.roundToInt() > 0) "+" else ""}${p.roundToInt()}%"
+private fun signedPct(p: Double): String {
+    // One decimal place (matches the growth pills), so sub-1% profit isn't rounded to "0%".
+    val rounded = (p * 10.0).roundToInt() / 10.0
+    return (if (rounded > 0) "+" else "") + oneDecimal(rounded) + "%"
+}
 
 @Composable
 private fun SalesStatsRow(summary: SalesSummary) {

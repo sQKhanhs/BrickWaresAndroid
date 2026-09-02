@@ -41,6 +41,9 @@ fun formatRetail(amount: Long?, currency: AppCurrency): String = when {
 fun formatCount(value: Int): String =
     NumberFormat.getNumberInstance(Locale.US).format(value)
 
+/** Formats a number to exactly one decimal place (period separator), e.g. 0.48 -> "0.5", -3.0 -> "-3.0". */
+fun oneDecimal(value: Double): String = String.format(Locale.US, "%.1f", value)
+
 /** Formats a signed growth percentage, e.g. 9.0 -> "+9%", -3.5 -> "-3.5%". */
 fun formatGrowth(percent: Double): String {
     val rounded = if (percent % 1.0 == 0.0) percent.toInt().toString()

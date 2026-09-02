@@ -54,6 +54,8 @@ import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
 import com.senniapp.brickwares.ui.components.animatedNumber
+import com.senniapp.brickwares.ui.components.growthDirection
+import com.senniapp.brickwares.ui.components.growthLabel
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ThemeSummary
@@ -63,7 +65,6 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatMoney
-import kotlin.math.roundToInt
 
 /** Stateful entry point — binds the [HomeViewModel] to the stateless [HomeContent]. */
 @Composable
@@ -245,14 +246,20 @@ private fun HeroCard(
                     .padding(bottom = 22.dp),
             )
         } else {
-            // Layer 0: resting last-frame poster (the hero's steady background).
-            AsyncImage(
-                model = HeroAssets.POSTER,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
-            // Layer 1: animated Lego-drop GIF, played over the poster once. onAnimationEnd marks it
+            // Layer 0: resting last-frame poster (the hero's steady background) — shown only when the
+            // gif is NOT about to play. Drawing it under a still-loading gif made the hero flash the
+            // gif's LAST frame (the poster loads instantly; the ~5.5 MB gif doesn't) before the gif
+            // popped in and animated from frame 0. While the gif plays it fully covers the card, so
+            // during its load the dark card base shows instead — no last-frame flash on first open.
+            if (!showGif) {
+                AsyncImage(
+                    model = HeroAssets.POSTER,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+            // Layer 1: animated Lego-drop GIF, played over the dark card once. onAnimationEnd marks it
             // played only on completion, so leaving mid-play replays it next visit. 100+ sets get the
             // larger remote drop; others the small bundled gif.
             if (showGif) {
@@ -319,16 +326,12 @@ private fun HeroCard(
                         .background(Color(0x66000000))
                         .padding(horizontal = 9.dp, vertical = 3.dp),
                 )
-                // Growth pill (▲/▼ glyph + coloured text, per spec)
-                val pct = summary.growthPercent.roundToInt()
-                val label = when {
-                    pct > 0 -> stringResource(R.string.growth_up, pct)
-                    pct < 0 -> stringResource(R.string.growth_down, pct)
-                    else -> stringResource(R.string.growth_flat)
-                }
-                val growthColor = when {
-                    pct > 0 -> Color(0xFF4ADE80)
-                    pct < 0 -> Color(0xFFF87171)
+                // Growth pill (▲/▼ glyph + coloured text, per spec) — one decimal place, so sub-1%
+                // growth (e.g. +0.5%) isn't rounded away to "0%".
+                val label = growthLabel(summary.growthPercent)
+                val growthColor = when (growthDirection(summary.growthPercent)) {
+                    1 -> Color(0xFF4ADE80)
+                    -1 -> Color(0xFFF87171)
                     else -> Color.White
                 }
                 Text(
