@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,12 @@ fun BoxScope.BwToast(message: String?, onDismiss: () -> Unit) {
     LaunchedEffect(message) {
         delay(2200)
         onDismiss()
+    }
+    // If the screen leaves composition (e.g. a tab switch) before the auto-dismiss delay fires, the
+    // LaunchedEffect is cancelled and the (Activity-scoped) ViewModel would keep the message set — so
+    // it would re-appear on return. Clear it on dispose so a toast never lingers past its screen.
+    DisposableEffect(Unit) {
+        onDispose { onDismiss() }
     }
     // Inverse-surface pill so it always contrasts with the page: dark pill + light text in the light
     // theme, light pill + dark text in dark (a near-black pill was invisible on the dark background).
