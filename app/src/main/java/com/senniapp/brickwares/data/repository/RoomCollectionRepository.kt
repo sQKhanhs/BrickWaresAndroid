@@ -128,6 +128,11 @@ class RoomCollectionRepository(
                 ),
             )
         }
+        // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
+        // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
+        item.copies.lastOrNull()?.let { copy ->
+            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid)
+        }
     }
 
     override fun removeCopy(setNumber: String, copyId: String) = write {
@@ -147,6 +152,8 @@ class RoomCollectionRepository(
                 notes = copy.note, updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
+        // Reflect the edited paid price in the community value cache immediately (Decision 17).
+        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, copy.pricePaid)
     }
 
     override fun addSale(item: CollectionItem, salePrice: Long) = write {
@@ -288,6 +295,22 @@ class RoomCollectionRepository(
     /** The catalog minifig for a fig_num (for the image + set-count overlay), or null. */
     private fun minifigFor(figNum: String?) =
         figNum?.let { fn -> catalog.allMinifigs().firstOrNull { it.figNum == fn } }
+
+    /**
+     * Reflect a just-written paid price in the community value cache immediately (Decision 17), so the
+     * collection value + growth update at once instead of only after the sync round-trip publishes the
+     * real contribution and re-warms. Uses the live catalog retail/status so the outlier guard matches
+     * what [ValueContributionRepository.warm] will later compute.
+     */
+    private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, pricePaid: Long) {
+        if (pricePaid <= 0L) return
+        if (figNum != null) {
+            values.applyLocalPaid(null, figNum, pricePaid, null, false)
+        } else if (setId != null) {
+            val cat = catalogFor(setId, setNumber)
+            values.applyLocalPaid(setId, null, pricePaid, cat?.retailPrice, cat?.status == Availability.RETIRED)
+        }
+    }
 
     private fun List<CollectionCopyEntity>.toCollectionItem(): CollectionItem {
         val head = first()

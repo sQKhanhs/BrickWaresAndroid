@@ -32,6 +32,12 @@ class ValueContributionRepository(
     private var cache: Map<Long, CurrentValue> = emptyMap()
     @Volatile
     private var figCache: Map<String, CurrentValue> = emptyMap()
+    // The raw contribution points behind each cached value, kept so a locally-edited paid price can be
+    // folded in and re-aggregated immediately (see [applyLocalPaid]) instead of waiting for a sync.
+    @Volatile
+    private var setPoints: Map<Long, List<Pair<Double, Long>>> = emptyMap()
+    @Volatile
+    private var figPoints: Map<String, List<Pair<Double, Long>>> = emptyMap()
     private val _revision = MutableStateFlow(0)
     /** Bumps whenever [warm] refreshes the cache, so item-card flows can re-emit with values. */
     val revision: StateFlow<Int> = _revision.asStateFlow()
@@ -53,16 +59,42 @@ class ValueContributionRepository(
             return
         }
         val now = System.currentTimeMillis()
-        cache = rows.filter { it.setId != null }
-            .groupBy { it.setId!! }
-            .mapValues { (id, rs) ->
-                val set = setsById[id]
-                ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, set?.status == Availability.RETIRED, now)
-            }
+        val bySet = rows.filter { it.setId != null }.groupBy { it.setId!! }
+        val byFig = rows.filter { it.figNum != null }.groupBy { it.figNum!! }
+        // Keep the raw points so [applyLocalPaid] can re-aggregate one key without another fetch. The
+        // DB is now authoritative (it includes any just-synced contribution), replacing optimistic ones.
+        setPoints = bySet.mapValues { (_, rs) -> rs.toPoints() }
+        figPoints = byFig.mapValues { (_, rs) -> rs.toPoints() }
+        cache = bySet.mapValues { (id, rs) ->
+            val set = setsById[id]
+            ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, set?.status == Availability.RETIRED, now)
+        }
         // Minifig values: no retail anchor, so the outlier guard is skipped (only value > 0).
-        figCache = rows.filter { it.figNum != null }
-            .groupBy { it.figNum!! }
-            .mapValues { (_, rs) -> ValueAggregator.aggregate(rs.toPoints(), null, false, now) }
+        figCache = byFig.mapValues { (_, rs) -> ValueAggregator.aggregate(rs.toPoints(), null, false, now) }
+        _revision.value += 1
+    }
+
+    /**
+     * Optimistically fold the current user's own paid price into the local value for one set/fig and
+     * re-aggregate immediately, so a paid add/edit is reflected in the value (and any collection stat
+     * derived from it) at once — without waiting for the sync round-trip that publishes the real
+     * community contribution and re-[warm]s. [warm] later replaces this with the DB-accurate value.
+     */
+    fun applyLocalPaid(setId: Long?, figNum: String?, paidVnd: Long, retail: Long?, retired: Boolean) {
+        if (paidVnd <= 0L) return
+        val now = System.currentTimeMillis()
+        val point = paidVnd.toDouble() to now
+        when {
+            setId != null -> {
+                val pts = setPoints[setId].orEmpty() + point
+                cache = cache + (setId to ValueAggregator.aggregate(pts, retail, retired, now))
+            }
+            figNum != null -> {
+                val pts = figPoints[figNum].orEmpty() + point
+                figCache = figCache + (figNum to ValueAggregator.aggregate(pts, null, false, now))
+            }
+            else -> return
+        }
         _revision.value += 1
     }
 
