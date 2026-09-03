@@ -271,7 +271,8 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            modifier = Modifier.clickable(onClick = onOpenDetail),
+            // Tap the image → full-screen gallery; the title still opens the detail.
+            galleryImages = if (isFig) listOfNotNull(item.imageUrl) else CatalogImages.galleryUrls(item.setNumber),
         )
 
         Spacer(Modifier.width(12.dp))

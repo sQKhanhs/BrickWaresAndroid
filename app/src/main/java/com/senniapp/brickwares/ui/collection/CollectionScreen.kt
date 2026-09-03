@@ -493,7 +493,8 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            modifier = Modifier.clickable(onClick = onOpenDetail),
+            // Tap the image → full-screen gallery; the title still opens the detail.
+            galleryImages = if (isFig) listOfNotNull(item.imageUrl) else CatalogImages.galleryUrls(item.setNumber),
         )
 
         Spacer(Modifier.width(12.dp))
@@ -693,7 +694,8 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            modifier = Modifier.clickable(onClick = onOpenDetail),
+            // Tap the image → full-screen gallery; the title still opens the detail.
+            galleryImages = if (isFig) listOfNotNull(sold.imageUrl) else CatalogImages.galleryUrls(sold.setNumber),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (isFig) 4.dp else 5.dp)) {

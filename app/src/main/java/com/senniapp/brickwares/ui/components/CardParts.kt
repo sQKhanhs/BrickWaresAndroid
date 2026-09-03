@@ -82,11 +82,18 @@ fun SetThumb(
     corner: Dp = 10.dp,
     modifier: Modifier = Modifier,
     fallbackUrl: String? = null,
+    /**
+     * When non-empty, tapping the thumbnail opens the full-screen [ImageGalleryDialog] over these
+     * (full-resolution) URLs instead of the caller wiring a navigation click on [modifier]. 404s are
+     * dropped by the gallery, so pass box + render freely.
+     */
+    galleryImages: List<String> = emptyList(),
     onState: ((AsyncImagePainter.State) -> Unit)? = null,
     /** Reports the URL that actually loaded (the box or its fallback), or null when all failed. */
     onResolvedUrl: ((String?) -> Unit)? = null,
 ) {
     val colors = BwTheme.colors
+    var showGallery by remember { mutableStateOf(false) }
     // The ordered chain of URLs to try (dropping a fallback identical to the primary).
     val urls = remember(imageUrl, fallbackUrl) {
         listOfNotNull(imageUrl, fallbackUrl?.takeIf { it != imageUrl })
@@ -102,6 +109,9 @@ fun SetThumb(
             // a soft gray outline provides the border.
             .background(Color.White)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(corner))
+            // Image tap → full-screen gallery (when the caller supplies images); else the caller's
+            // own [modifier] (which may carry a navigation click) applies.
+            .then(if (galleryImages.isNotEmpty()) Modifier.clickable { showGallery = true } else Modifier)
             .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -125,6 +135,9 @@ fun SetThumb(
                 },
             )
         }
+    }
+    if (showGallery && galleryImages.isNotEmpty()) {
+        ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
     }
 }
 

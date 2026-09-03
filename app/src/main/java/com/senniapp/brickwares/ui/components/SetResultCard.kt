@@ -79,7 +79,8 @@ fun SetResultCard(
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            modifier = Modifier.clickable(onClick = onOpenDetail),
+            // Tap the image → full-screen gallery (box + render); the title still opens the detail.
+            galleryImages = listOfNotNull(set.boxImageUrl, set.imageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
