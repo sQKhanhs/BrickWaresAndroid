@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -101,6 +102,13 @@ private fun HomeContent(
             .fillMaxSize()
             .background(colors.bg),
     ) {
+        if (!state.isReady) {
+            // Cold-start: hold the whole page until the collection summary AND the auth session have
+            // resolved, so Home appears all at once — instead of the sign-in prompt flashing in alone
+            // (summary null + auth not yet resolved) and the hero/stats/themes popping in 1-2s later.
+            CircularProgressIndicator(color = colors.brandYellow, modifier = Modifier.align(Alignment.Center))
+            return@Box
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -428,7 +436,7 @@ private val previewThemes = listOf(
 private fun HomeLoggedInPreview() {
     BrickWaresTheme {
         HomeContent(
-            state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
+            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},
@@ -441,7 +449,7 @@ private fun HomeLoggedInPreview() {
 private fun HomeLoggedOutPreview() {
     BrickWaresTheme {
         HomeContent(
-            state = HomeUiState(isLoading = false, isLoggedIn = false, summary = previewSummary),
+            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = false, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},
@@ -454,7 +462,7 @@ private fun HomeLoggedOutPreview() {
 private fun HomeDarkPreview() {
     BrickWaresTheme(darkTheme = true) {
         HomeContent(
-            state = HomeUiState(isLoading = false, isLoggedIn = true, summary = previewSummary),
+            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = true, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},

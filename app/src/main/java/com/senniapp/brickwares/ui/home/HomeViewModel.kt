@@ -44,7 +44,13 @@ class HomeViewModel(
     init {
         authRepository.authState
             .onEach { authState ->
-                _uiState.update { it.copy(isLoggedIn = authState is AuthState.SignedIn) }
+                _uiState.update {
+                    it.copy(
+                        isLoggedIn = authState is AuthState.SignedIn,
+                        // Resolved once it's no longer the initial Loading state (SignedIn or SignedOut).
+                        authReady = authState !is AuthState.Loading,
+                    )
+                }
             }
             .launchIn(viewModelScope)
 
