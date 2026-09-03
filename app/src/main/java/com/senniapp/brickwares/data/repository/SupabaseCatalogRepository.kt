@@ -84,8 +84,11 @@ class SupabaseCatalogRepository(
                         .decodeList<SetRow>()
                     // Drop unrevealed placeholder sets (Brickset name "{?}", no real data yet) so they
                     // don't scatter search/browse — they'll show once Brickset actually names them.
+                    // distinctBy(id) guards against a duplicate row for the same number+variant in the
+                    // catalog: [CatalogSet.id] is the key for every list, and a dup crashes LazyColumn.
                     cache = rows.map { it.toCatalogSet() }
                         .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+                        .distinctBy { it.id }
                 }
                 _loadError.value = false
                 // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
@@ -127,7 +130,9 @@ class SupabaseCatalogRepository(
                     val rows = client.from("minifigs")
                         .select(Columns.raw("fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"))
                         .decodeList<MinifigRow>()
-                    minifigCache = rows.map { it.toMinifig() }
+                    // distinctBy(figNum) for the same reason as sets: figNum is the list key, and a
+                    // duplicate minifig row would crash the LazyColumn/grid that renders them.
+                    minifigCache = rows.map { it.toMinifig() }.distinctBy { it.figNum }
                 }
                 _loadError.value = false
                 _revision.value += 1
@@ -262,7 +267,10 @@ class SupabaseCatalogRepository(
             // preferred box shot from BrickLink — both addressed by set number + variant.
             imageUrl = CatalogImages.renderUrl(setNumber, numberVariant ?: 1),
             boxImageUrl = CatalogImages.boxUrl(setNumber, numberVariant ?: 1),
-            thumbnailUrl = null,
+            // Small server-resized render for list cards: the box shot stays the preferred display
+            // image, but a boxless set now falls back to this (~10–150 KB) instead of the full
+            // multi-MB render — the main cause of slow-loading search thumbnails.
+            thumbnailUrl = CatalogImages.thumbUrl(setNumber, numberVariant ?: 1),
             numberVariant = numberVariant ?: 1,
             notes = notes?.takeIf { it.isNotBlank() },
             notesVi = notesVi?.takeIf { it.isNotBlank() },

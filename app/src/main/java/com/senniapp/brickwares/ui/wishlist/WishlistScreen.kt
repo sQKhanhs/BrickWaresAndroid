@@ -267,7 +267,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else item.imageUrl,
+            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(item.setNumber),
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,

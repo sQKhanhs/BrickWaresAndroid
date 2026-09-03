@@ -16,7 +16,17 @@ object CatalogImages {
     fun boxUrl(setNumber: String, variant: Int = 1): String =
         "https://img.bricklink.com/ItemImage/ON/0/${setNumber.lowercase()}-$variant.png"
 
-    /** Rebrickable studio render of the built set. */
+    /** Rebrickable studio render of the built set (full resolution — can be several MB). */
     fun renderUrl(setNumber: String, variant: Int = 1): String =
         "https://cdn.rebrickable.com/media/sets/${setNumber.lowercase()}-$variant.jpg"
+
+    /**
+     * Rebrickable's server-resized, square-padded thumbnail of the render — the small image for list
+     * cards and small heroes. The full render is often 1–5 MB; this variant is ~10–150 KB, which is
+     * the difference between a card image appearing in <1s vs several seconds on mobile. It 404s
+     * cleanly (like the render) when a set has no image, so a caller's fallback chain still fires.
+     * [size] is the box edge in px; 320 is crisp for a 72–96 dp thumbnail on high-density screens.
+     */
+    fun thumbUrl(setNumber: String, variant: Int = 1, size: Int = 320): String =
+        "https://cdn.rebrickable.com/media/thumbs/sets/${setNumber.lowercase()}-$variant.jpg/${size}x${size}p.jpg"
 }

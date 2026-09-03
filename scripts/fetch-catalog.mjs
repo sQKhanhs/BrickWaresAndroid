@@ -102,7 +102,7 @@ async function fetchMinifigs(sets) {
   console.log(`Fetching minifigs for ${withFigs.length} sets from Rebrickable...`);
   let ok = 0;
   for (const s of withFigs) {
-    const setNum = `${s.number}-${s.numberVariant || 1}`;
+    const setNum = `${s.number}-${variantOf(s)}`;
     let j = null;
     try { j = await rbGet(`sets/${setNum}/minifigs/?page_size=100`); }
     catch (e) { console.error(`  ${setNum}: ${e.message}`); }
@@ -146,8 +146,17 @@ const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Nu
 const bool = (v) => (v === true ? "true" : v === false ? "false" : "null");
 const date = (v) => (v ? `'${String(v).slice(0, 10)}'` : "null"); // ISO datetime -> YYYY-MM-DD
 
+// Brickset's numberVariant, preserving a real 0 (a series "random pack" is e.g. 42233-0), defaulting
+// to 1 only when it's genuinely missing. A plain `x || 1` coerced variant 0 into 1, colliding with the
+// real variant 1 (same number_variant) — two rows then share id "42233-1" and crash the app's list.
+function variantOf(s) {
+  if (s.numberVariant === null || s.numberVariant === undefined || s.numberVariant === "") return 1;
+  const n = Number(s.numberVariant);
+  return Number.isInteger(n) ? n : 1;
+}
+
 function setRow(s) {
-  return `(${num(s.setID)}, ${q(s.number)}, ${num(s.numberVariant) || 1}, ${q(s.name)}, ${num(s.year)}, ` +
+  return `(${num(s.setID)}, ${q(s.number)}, ${variantOf(s)}, ${q(s.name)}, ${num(s.year)}, ` +
     `${q(s.theme)}, ${q(s.themeGroup)}, ${q(s.subtheme)}, ${q(s.category)}, 'set', ${num(s.pieces)}, ` +
     `${num(s.minifigs)}, ${num(s.ageRange?.min)}, ${bool(s.released)}, ${q(s.availability)}, ${q(s.image?.imageURL)}, ` +
     `${q(s.image?.thumbnailURL)}, ${q(s.bricksetURL)}, ${num(s.rating)}, ${num(s.reviewCount)}, ` +

@@ -105,7 +105,7 @@ fun SearchModal(
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            SetThumb(imageUrl = set.boxImageUrl, fallbackUrl = set.imageUrl, itemType = set.itemType, size = 44.dp, iconSize = 20.dp)
+                            SetThumb(imageUrl = set.boxImageUrl, fallbackUrl = set.thumbnailUrl ?: set.imageUrl, itemType = set.itemType, size = 44.dp, iconSize = 20.dp)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
