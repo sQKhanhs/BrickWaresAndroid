@@ -41,6 +41,8 @@ data class CatalogSet(
     val numberVariant: Int = 1,
     /** Brickset availability/sourcing note (e.g. "[NA] Available from Target and Kohl's"); usually null. */
     val notes: String? = null,
+    /** Vietnamese translation of [notes] (translate-at-ingest, `sets.notes_vi`); null if untranslated. */
+    val notesVi: String? = null,
     /**
      * Catalog primary key (`sets.set_id`, the Brickset setID). Present for rows read from Supabase;
      * null for mock/owned-item-built rows. Used to write user-data rows (which FK to `sets`).

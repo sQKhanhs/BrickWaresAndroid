@@ -25,6 +25,11 @@ data class MinifigDetailUiState(
     val valueLoading: Boolean = true,
     /** Catalog sets this minifig appears in (tap to open that set's detail). */
     val appearsIn: List<CatalogSet> = emptyList(),
+    /**
+     * Two-state availability shown on the detail page: false = Retail (still obtainable in some set),
+     * true = Retired (all its sets are retired/promo/magazine). Null = unknown (no sets resolved yet).
+     */
+    val retired: Boolean? = null,
     /** Live owned / wishlisted set numbers so the "appears in" cards flip their action buttons. */
     val ownedNumbers: Set<String> = emptySet(),
     val wishlistedNumbers: Set<String> = emptySet(),

@@ -78,7 +78,7 @@ class SupabaseCatalogRepository(
                         .select(
                             Columns.raw(
                                 "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
-                                    "minifigs,availability,notes,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
+                                    "minifigs,availability,notes,notes_vi,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
                             ),
                         )
                         .decodeList<SetRow>()
@@ -180,6 +180,7 @@ class SupabaseCatalogRepository(
         /** Brickset sales channel: "Retail", "LEGO exclusive", "Retail - limited", GWP, etc. */
         val availability: String? = null,
         val notes: String? = null,
+        @SerialName("notes_vi") val notesVi: String? = null,
         /** Brickset set-level "Launch"/"Exit" dates — the canonical release + retirement dates. */
         @SerialName("launch_date") val launchDate: String? = null,
         @SerialName("exit_date") val exitDate: String? = null,
@@ -264,6 +265,7 @@ class SupabaseCatalogRepository(
             thumbnailUrl = null,
             numberVariant = numberVariant ?: 1,
             notes = notes?.takeIf { it.isNotBlank() },
+            notesVi = notesVi?.takeIf { it.isNotBlank() },
             setId = setId,
         )
     }

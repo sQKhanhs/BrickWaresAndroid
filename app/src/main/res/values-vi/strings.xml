@@ -32,6 +32,8 @@
     <string name="price_retail">Giá bán lẻ</string>
     <string name="price_paid">Đã trả</string>
     <string name="price_value">Giá trị</string>
+    <string name="price_no_retail">Không có</string>
+    <string name="price_no_retail_currency">Không có giá bán lẻ cho %1$s</string>
 
     <string name="action_add">Thêm</string>
     <string name="action_wishlist">Mong muốn</string>
@@ -54,6 +56,7 @@
     <string name="status_magazine">Quà tạp chí</string>
     <string name="status_pending">Sắp phát hành</string>
     <string name="status_retired">Ngừng bán</string>
+    <string name="status_retail">Đang bán</string>
 
     <!-- Growth pill (%1$d = signed percent; %% is a literal percent sign) -->
     <string name="growth_up">▲ +%1$s%% Tăng</string>

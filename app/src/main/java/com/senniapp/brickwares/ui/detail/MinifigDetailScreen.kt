@@ -145,6 +145,18 @@ fun MinifigDetailScreen(
                 // "In sets" count; when the fig is in only one set, mark it Exclusive next to the count.
                 if (fig.setCount > 0) InSetsRow(count = fig.setCount)
                 if (fig.themes.isNotEmpty()) DetailRow(stringResource(R.string.meta_theme), fig.themes.joinToString(", "))
+                // Two-state availability (Retail / Retired), derived from the fig's sets. Shown only
+                // once it's known (a set has resolved from the catalog).
+                state.retired?.let { retired ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.detail_availability), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                        MinifigStatusBadge(retired = retired)
+                    }
+                }
             }
 
             // Community value (Decision 17) — no retail anchor for minifigs.
@@ -242,6 +254,25 @@ private fun DetailRow(label: String, value: String) {
         Text(label, style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
         Spacer(Modifier.width(10.dp))
         Text(value, style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
+    }
+}
+
+/** Two-state availability pill for the minifig detail: Retail (green) or Retired (red). */
+@Composable
+private fun MinifigStatusBadge(retired: Boolean) {
+    val colors = BwTheme.colors
+    val (textRes, color) = if (retired) {
+        R.string.status_retired to colors.error
+    } else {
+        R.string.status_retail to colors.success
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+    ) {
+        Text(stringResource(textRes), style = BwType.micro, color = color)
     }
 }
 

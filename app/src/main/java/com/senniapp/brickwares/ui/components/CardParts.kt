@@ -52,6 +52,8 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.formatMoney
 import com.senniapp.brickwares.util.oneDecimal
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -203,6 +205,18 @@ fun releaseLabel(month: Int, year: Int): String {
     if (month !in 1..12) return year.toString()
     val label = stringArrayResource(R.array.release_months)[month - 1]
     return stringResource(R.string.release_format, label, year)
+}
+
+/**
+ * Localized retail-price label: the formatted amount, or a "no retail price" message when there's
+ * none (VND shows a generic message; other currencies name themselves). The resource-backed,
+ * translatable counterpart of the util `formatRetail`, whose null case was hardcoded English.
+ */
+@Composable
+fun retailLabel(amount: Long?, currency: AppCurrency): String = when {
+    amount != null -> formatMoney(amount, currency)
+    currency == AppCurrency.VND -> stringResource(R.string.price_no_retail)
+    else -> stringResource(R.string.price_no_retail_currency, currency.name)
 }
 
 /**

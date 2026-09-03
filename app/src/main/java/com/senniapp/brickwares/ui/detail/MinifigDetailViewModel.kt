@@ -72,6 +72,11 @@ class MinifigDetailViewModel(
         val fn = figNum ?: return
         val fig = catalogRepo.allMinifigs().firstOrNull { it.figNum == fn }
         val owned = collectionItems.find { it.itemType == ItemType.MINIFIG && it.setNumber == fn }
+        val appearsIn = if (fig == null) emptyList() else catalogRepo.setsForMinifig(fn)
+        // Two-state availability from the fig's sets: Retail while any containing set is still
+        // obtainable (available / exclusive / GWP / pending); else Retired (all retired, or
+        // promo/magazine — never sold at retail). Null = unknown (no sets resolved / catalog not loaded).
+        val retired = if (fig == null || appearsIn.isEmpty()) null else appearsIn.none { it.status in OBTAINABLE }
         _uiState.update {
             it.copy(
                 loaded = true,
@@ -85,7 +90,8 @@ class MinifigDetailViewModel(
                 // deleted) so it doesn't re-open when the item is re-added.
                 showCopies = owned != null && it.showCopies,
                 isWishlisted = wishlist.any { w -> w.itemType == ItemType.MINIFIG && w.setNumber == fn },
-                appearsIn = if (fig == null) emptyList() else catalogRepo.setsForMinifig(fn),
+                appearsIn = appearsIn,
+                retired = retired,
                 ownedNumbers = collectionItems.mapTo(HashSet()) { c -> c.setNumber },
                 wishlistedNumbers = wishlist.mapTo(HashSet()) { w -> w.setNumber },
             )
@@ -194,4 +200,11 @@ class MinifigDetailViewModel(
         pieces = fig.numParts, minifigs = 0, retailPrice = null,
         status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
     )
+
+    private companion object {
+        /** Set statuses that count as "still obtainable" → the minifig reads as Retail (not Retired). */
+        val OBTAINABLE = setOf(
+            Availability.AVAILABLE, Availability.EXCLUSIVE, Availability.GWP, Availability.PENDING,
+        )
+    }
 }

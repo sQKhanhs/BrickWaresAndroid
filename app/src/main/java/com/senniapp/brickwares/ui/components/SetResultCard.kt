@@ -36,7 +36,6 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
-import com.senniapp.brickwares.util.formatRetail
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)
@@ -96,7 +95,7 @@ fun SetResultCard(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, AppCurrency.VND))
             // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
             val valueRepo = ValueRepositoryProvider.instance
             val valueRev by valueRepo.revision.collectAsState()

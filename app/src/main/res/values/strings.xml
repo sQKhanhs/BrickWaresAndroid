@@ -32,6 +32,8 @@
     <string name="price_retail">Retail</string>
     <string name="price_paid">Paid</string>
     <string name="price_value">Value</string>
+    <string name="price_no_retail">No retail price</string>
+    <string name="price_no_retail_currency">No retail price for %1$s</string>
 
     <string name="action_add">Add</string>
     <string name="action_wishlist">Wishlist</string>
@@ -54,6 +56,7 @@
     <string name="status_magazine">Magazine gift</string>
     <string name="status_pending">Pending Release</string>
     <string name="status_retired">Retired</string>
+    <string name="status_retail">Retail</string>
 
     <!-- Growth pill (%1$d = signed percent; %% is a literal percent sign) -->
     <string name="growth_up">▲ +%1$s%% Growth</string>

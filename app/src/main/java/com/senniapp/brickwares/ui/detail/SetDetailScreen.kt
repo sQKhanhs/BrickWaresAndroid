@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -84,8 +85,8 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatMoney
 import kotlinx.coroutines.launch
-import com.senniapp.brickwares.util.formatRetail
 import com.senniapp.brickwares.ui.components.releaseLabel
+import com.senniapp.brickwares.ui.components.retailLabel
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)
@@ -292,11 +293,15 @@ private fun SetDetailContent(
 
             // Pricing card.
             SectionCard(title = stringResource(R.string.detail_pricing)) {
-                DetailRow(stringResource(R.string.price_retail), formatRetail(set.retailPrice, AppCurrency.VND), strong = true)
+                DetailRow(stringResource(R.string.price_retail), retailLabel(set.retailPrice, AppCurrency.VND), strong = true)
                 // Brickset availability/sourcing note (only ~11% of sets have one), italic under retail.
-                set.notes?.let { note ->
+                // Show the Vietnamese translation (translate-at-ingest, sets.notes_vi) when the app
+                // language is VI and a translation exists; otherwise the original English note.
+                val noteLang = LocalConfiguration.current.locales[0].language
+                val note = if (noteLang == "vi") (set.notesVi ?: set.notes) else set.notes
+                note?.let { n ->
                     Text(
-                        note,
+                        n,
                         style = BwType.body.copy(fontSize = 12.sp, fontStyle = FontStyle.Italic),
                         color = colors.textMuted,
                     )
