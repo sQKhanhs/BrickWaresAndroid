@@ -31,6 +31,20 @@ const {
   // "1"/"true" = merge onto the existing seed.sql (dedupe by set_id, newly fetched rows win)
   // instead of overwriting it, so a fetch adds to the current catalog rather than replacing it.
   BRICKSET_APPEND = "",
+  // Themes pulled COMPLETELY — every set across all pages, any availability (retired included), not
+  // just the newest few. Use to bring a whole theme into the catalog (e.g. all DC Comics Super
+  // Heroes sets). Runs on every fetch, so these themes stay fully covered "from now on".
+  BRICKSET_FULL_THEMES = "DC Comics Super Heroes",
+  BRICKSET_FULL_PAGESIZE = "100",
+  // "1" = also pull Rebrickable minifigs for the full-theme sets. A whole theme is many sets, so the
+  // minifig fetch is slow/rate-limited — off by default (full-theme sets are catalog-only); the
+  // primary newest-N pass always fetches minifigs.
+  BRICKSET_FULL_MINIFIGS = "0",
+  // Translate-at-ingest: machine-translate each set's English `notes` to Vietnamese (stored in
+  // sets.notes_vi, shown on the detail page when the app language is VI). "0" disables. Uses the free
+  // MyMemory API (no key); TRANSLATE_EMAIL is optional and raises its daily quota.
+  TRANSLATE_NOTES = "1",
+  TRANSLATE_EMAIL = "",
   // Extra pass: also pull OLD RETIRED sets (for testing the retired badge/value flows). These go into
   // the sets + set_prices catalog but are NOT sent through the Rebrickable minifig fetch. "0" disables.
   BRICKSET_RETIRED = "1",
@@ -204,9 +218,67 @@ async function fetchRetiredSets(userHash) {
   return unique.slice(0, Number(BRICKSET_RETIRED_MAX));
 }
 
+// Full-theme pass — pull EVERY set in each BRICKSET_FULL_THEMES theme (all pages, any availability,
+// retired included), so an entire theme lands in the catalog rather than just its newest page.
+async function fetchFullThemes(userHash) {
+  const themes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
+  if (themes.length === 0) return [];
+  const pageSize = Number(BRICKSET_FULL_PAGESIZE);
+  console.log(`Fetching ALL sets (every page) for: ${themes.join(", ")}`);
+  const out = [];
+  for (const theme of themes) {
+    let total = 0;
+    for (let page = 1; page <= 50; page++) {
+      const params = JSON.stringify({ theme, pageSize, pageNumber: page, orderBy: "YearFromDESC", extendedData: true });
+      const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
+      if (j.status !== "success") { console.error(`  full ${theme} p${page}: ${j.message}`); break; }
+      const batch = j.sets || [];
+      out.push(...batch);
+      total += batch.length;
+      if (batch.length < pageSize) break; // last page
+    }
+    console.log(`  ${theme}: ${total} sets (all pages)`);
+  }
+  return out;
+}
+
+// Translate-at-ingest: machine-translate English set notes to Vietnamese via MyMemory (free, no key).
+// Deduped (each distinct note once); failures/quota are skipped and the app falls back to English.
+// Returns a Map of englishNote -> vietnameseNote.
+async function translateNotes(notes) {
+  const out = new Map();
+  const enabled = TRANSLATE_NOTES !== "0" && TRANSLATE_NOTES.toLowerCase() !== "false";
+  if (!enabled) return out;
+  const unique = [...new Set(notes.map((n) => (n || "").trim()).filter(Boolean))];
+  if (unique.length === 0) return out;
+  console.log(`Translating ${unique.length} unique notes -> vi (MyMemory)...`);
+  let ok = 0;
+  for (const n of unique) {
+    const params = new URLSearchParams({ q: n, langpair: "en|vi" });
+    if (TRANSLATE_EMAIL) params.set("de", TRANSLATE_EMAIL);
+    try {
+      const r = await fetch(`https://api.mymemory.translated.net/get?${params}`);
+      const j = await r.json();
+      const vi = j?.responseData?.translatedText;
+      if (r.ok && Number(j.responseStatus) === 200 && vi && vi.trim() && vi !== n) {
+        out.set(n, vi.trim());
+        ok++;
+      } else {
+        console.error(`  note translate skipped (${j?.responseStatus}): ${n.slice(0, 40)}...`);
+      }
+    } catch (e) {
+      console.error(`  note translate error: ${e.message}`);
+    }
+    await sleep(300); // be gentle with the free endpoint
+  }
+  console.log(`  translated ${ok}/${unique.length} notes.`);
+  return out;
+}
+
 async function main() {
   const userHash = await getUserHash();
   const themes = BRICKSET_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
+  const fullThemes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
   const pageSize = Number(BRICKSET_PAGESIZE);
 
   console.log(`Fetching newest ${pageSize} sets each for: ${themes.join(", ")}`);
@@ -229,56 +301,85 @@ async function main() {
     collected.push(...(j.sets || []));
   }
 
-  // Dedupe by setID (a set can match more than one query).
-  const sets = [...new Map(collected.map((s) => [s.setID, s])).values()];
-  if (sets.length === 0) {
+  // Primary newest-N sets, deduped by setID (a set can match more than one query).
+  const primarySets = [...new Map(collected.map((s) => [s.setID, s])).values()];
+
+  // Full-theme pass — every set in BRICKSET_FULL_THEMES (all pages, retired included).
+  const fullSets = await fetchFullThemes(userHash);
+
+  // Extra retired-sets pass (catalog only — NOT sent to the Rebrickable minifig fetch, to avoid its
+  // rate limits). For exercising the retired badge/value flows across a spread of themes/years.
+  const enableRetired = BRICKSET_RETIRED !== "0" && BRICKSET_RETIRED.toLowerCase() !== "false";
+  const retiredSets = enableRetired ? await fetchRetiredSets(userHash) : [];
+
+  // Sets that go through the Rebrickable minifig fetch: always the primary pass; the full-theme pass
+  // too only when BRICKSET_FULL_MINIFIGS is on (a whole theme is many sets → slow, so catalog-only by
+  // default). Retired-test sets never fetch minifigs.
+  const fullMinifigs = BRICKSET_FULL_MINIFIGS === "1" || BRICKSET_FULL_MINIFIGS.toLowerCase() === "true";
+  const minifigSets = fullMinifigs
+    ? [...new Map([...primarySets, ...fullSets].map((s) => [s.setID, s])).values()]
+    : primarySets;
+
+  // Full catalog written to seed.sql (primary + full-theme + retired), deduped; a primary/full set
+  // wins a set_id tie over the retired pass.
+  const catalogSets = [...new Map([...retiredSets, ...fullSets, ...primarySets].map((s) => [s.setID, s])).values()];
+  if (catalogSets.length === 0) {
     console.error("No sets returned — check your key/hash and theme names.");
     process.exit(1);
   }
+  console.log(`Catalog: ${primarySets.length} primary + ${fullSets.length} full-theme + ${retiredSets.length} retired -> ${catalogSets.length} unique.`);
 
-  // Extra retired-sets pass (catalog only — these are NOT sent to the Rebrickable minifig fetch, to
-  // avoid its rate limits). Merged into the sets/prices SQL; the primary newest sets win a set_id tie.
-  const enableRetired = BRICKSET_RETIRED !== "0" && BRICKSET_RETIRED.toLowerCase() !== "false";
-  const retiredSets = enableRetired ? await fetchRetiredSets(userHash) : [];
-  const catalogSets = [...new Map([...retiredSets, ...sets].map((s) => [s.setID, s])).values()];
-  if (retiredSets.length) console.log(`Retired test sets: ${retiredSets.length} added (catalog total ${catalogSets.length}).`);
+  // Minifigs (Rebrickable): fig list per set → the `minifigs` catalog + `set_minifigs` join.
+  const { figs, setFigs } = REBRICKABLE_API_KEY
+    ? await fetchMinifigs(minifigSets)
+    : { figs: new Map(), setFigs: [] };
 
-  // Row strings for the freshly fetched sets (primary + retired).
+  // Fresh row strings for everything just fetched.
   let setRowList = catalogSets.map(setRow);
   let priceRowList = catalogSets.flatMap(priceRows);
+  let minifigRowList = [...figs.entries()].map(
+    ([figNum, f]) => `(${q(figNum)}, ${q(f.name)}, null, ${q(f.image_url)})`,
+  );
+  let setMinifigRowList = setFigs.map((sf) => `(${num(sf.setId)}, ${q(sf.figNum)}, ${num(sf.quantity) || 1})`);
 
-  // Append mode: merge onto the existing seed.sql. Existing rows are kept; a freshly fetched row
-  // for the same key overwrites the old one. Keys: set_id for sets, "set_id-region" for prices.
+  // Vietnamese note translations (translate-at-ingest) — emitted as a separate UPDATE block keyed by
+  // set_id (not a column in the sets INSERT), so it stays append-compatible with older seeds.
+  const noteViMap = await translateNotes(catalogSets.map((s) => s.extendedData?.notes));
+  let noteViRowList = catalogSets
+    .filter((s) => s.extendedData?.notes && noteViMap.has(s.extendedData.notes.trim()))
+    .map((s) => `(${num(s.setID)}, ${q(noteViMap.get(s.extendedData.notes.trim()))})`);
+
+  // Append mode: merge onto the existing seed.sql. Existing rows are kept; a freshly fetched row for
+  // the same key overwrites the old one. Minifigs + note translations are merged too (not just
+  // sets/prices), so an append never drops previously-seeded figs or notes — even when this run skips
+  // the Rebrickable fetch or translation.
   if (APPEND) {
     const existing = await readFile(OUT, "utf8").catch(() => null);
     if (existing) {
       const exSets = extractRows(existing, /insert into public\.sets[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id\)/);
       const exPrices = extractRows(existing, /insert into public\.set_prices[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id, region\)/);
+      const exFigs = extractRows(existing, /insert into public\.minifigs[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(fig_num\)/);
+      const exSetFigs = extractRows(existing, /insert into public\.set_minifigs[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id, fig_num\)/);
+      const exNoteVi = extractRows(existing, /set notes_vi = v\.notes_vi\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, notes_vi\)/);
       setRowList = mergeRows(exSets, setRowList, (r) => r.match(/^\((\d+),/)?.[1]);
       priceRowList = mergeRows(exPrices, priceRowList, (r) => r.match(/^\((\d+), '([A-Z]+)'/)?.slice(1, 3).join("-"));
-      console.log(`Append: ${exSets.length} existing + ${sets.length} fetched -> ${setRowList.length} sets after merge.`);
+      minifigRowList = mergeRows(exFigs, minifigRowList, (r) => r.match(/^\('([^']+)'/)?.[1]);
+      setMinifigRowList = mergeRows(exSetFigs, setMinifigRowList, (r) => r.match(/^\((\d+), '([^']+)'/)?.slice(1, 3).join("-"));
+      noteViRowList = mergeRows(exNoteVi, noteViRowList, (r) => r.match(/^\((\d+),/)?.[1]);
+      console.log(`Append: ${exSets.length} existing sets -> ${setRowList.length}; minifigs ${exFigs.length} -> ${minifigRowList.length}; notes_vi ${exNoteVi.length} -> ${noteViRowList.length}.`);
     }
   }
-
-  // Minifigs (Rebrickable): fig list per fetched set → the `minifigs` catalog + `set_minifigs` join.
-  // NOTE: only covers the freshly fetched sets, so run a full regenerate (not APPEND) for minifigs.
-  const { figs, setFigs } = REBRICKABLE_API_KEY
-    ? await fetchMinifigs(sets)
-    : { figs: new Map(), setFigs: [] };
-  const minifigRowList = [...figs.entries()].map(
-    ([figNum, f]) => `(${q(figNum)}, ${q(f.name)}, null, ${q(f.image_url)})`,
-  );
-  const setMinifigRowList = setFigs.map((sf) => `(${num(sf.setId)}, ${q(sf.figNum)}, ${num(sf.quantity) || 1})`);
 
   const setValues = setRowList.join(",\n  ");
   const priceValues = priceRowList.join(",\n  ");
   const minifigValues = minifigRowList.join(",\n  ");
   const setMinifigValues = setMinifigRowList.join(",\n  ");
+  const noteViValues = noteViRowList.join(",\n  ");
 
   const sql =
 `-- Generated by scripts/fetch-catalog.mjs from Brickset. Sample catalog for LOCAL dev.
 -- Regenerate: node --env-file=supabase/.env.local scripts/fetch-catalog.mjs
--- ${setRowList.length} sets total${APPEND ? ` (merged: +${sets.length} newly fetched)` : ""}. Latest fetch themes: ${themes.join(", ")}${BRICKSET_YEAR ? `; years ${BRICKSET_YEAR}` : ""}
+-- ${setRowList.length} sets total${APPEND ? ` (merged: +${catalogSets.length} newly fetched)` : ""}. Themes: ${themes.join(", ")}${fullThemes.length ? `; full: ${fullThemes.join(", ")}` : ""}${BRICKSET_YEAR ? `; years ${BRICKSET_YEAR}` : ""}
 
 insert into public.sets
   (set_id, set_number, number_variant, name, year, theme, theme_group, subtheme, category,
@@ -304,6 +405,13 @@ on conflict (set_id, region) do update set
   retail_price = excluded.retail_price,
   date_first_available = excluded.date_first_available,
   date_last_available = excluded.date_last_available;` : "-- (no retail prices in this sample)"}
+
+${noteViValues ? `-- Vietnamese note translations (translate-at-ingest; shown when the app language is VI)
+update public.sets as s set notes_vi = v.notes_vi
+from (values
+  ${noteViValues}
+) as v(set_id, notes_vi)
+where s.set_id = v.set_id;` : "-- (no translated notes)"}
 
 ${minifigValues ? `insert into public.minifigs
   (fig_num, name, num_parts, image_url)
