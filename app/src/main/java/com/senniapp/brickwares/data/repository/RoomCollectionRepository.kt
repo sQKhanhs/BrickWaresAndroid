@@ -14,6 +14,8 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
+import com.senniapp.brickwares.data.model.ValueAggregator
+import com.senniapp.brickwares.data.model.ValueGuardTier
 import com.senniapp.brickwares.data.model.WishlistItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -305,10 +307,11 @@ class RoomCollectionRepository(
     private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, pricePaid: Long) {
         if (pricePaid <= 0L) return
         if (figNum != null) {
-            values.applyLocalPaid(null, figNum, pricePaid, null, false)
+            values.applyLocalPaid(null, figNum, pricePaid, null, ValueGuardTier.AVAILABLE)
         } else if (setId != null) {
             val cat = catalogFor(setId, setNumber)
-            values.applyLocalPaid(setId, null, pricePaid, cat?.retailPrice, cat?.status == Availability.RETIRED)
+            val tier = ValueAggregator.tierOf(cat?.status ?: Availability.AVAILABLE, cat?.retiredYear ?: 0, cat?.retiredMonth ?: 0)
+            values.applyLocalPaid(setId, null, pricePaid, cat?.retailPrice, tier)
         }
     }
 

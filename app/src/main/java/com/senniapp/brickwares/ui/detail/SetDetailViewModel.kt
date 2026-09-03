@@ -3,11 +3,11 @@ package com.senniapp.brickwares.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
-import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
+import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
@@ -141,7 +141,8 @@ class SetDetailViewModel(
         val id = set.setId ?: return
         _uiState.update { it.copy(currentValue = CurrentValue.NONE, valueLoading = true) }
         viewModelScope.launch {
-            val value = valueRepo.forSet(id, set.retailPrice, set.status == Availability.RETIRED)
+            val tier = ValueAggregator.tierOf(set.status, set.retiredYear, set.retiredMonth)
+            val value = valueRepo.forSet(id, set.retailPrice, tier)
             // Ignore a late result if the user has since navigated to another set.
             if (valueKey == set.id) _uiState.update { it.copy(currentValue = value, valueLoading = false) }
         }
