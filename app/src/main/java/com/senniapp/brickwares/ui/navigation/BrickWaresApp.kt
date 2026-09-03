@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,9 +26,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,10 +84,20 @@ fun BrickWaresApp(
     onThemeModeChange: (ThemeMode) -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
-    // When non-null, the Set Detail / Minifig Detail page is shown over the current tab (nav bar stays).
-    var detailSetNumber by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailFigNum by rememberSaveable { mutableStateOf<String?>(null) }
+    // Detail navigation back-stack shown over the current tab (nav bar stays). Each entry is a set
+    // ("s:<setNumber>") or a minifig ("f:<figNum>"); the last entry is the visible detail, so opening
+    // a set/fig pushes and Back pops — travelling set → fig → set … returns step by step, not straight
+    // to the tab. Empty = the tab's own content is shown. Saveable across config change / process death.
+    val detailStack = rememberSaveable(
+        saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
+    ) { mutableStateListOf<String>() }
+    val openSet: (String) -> Unit = { detailStack.add("s:$it") }
+    val openFig: (String) -> Unit = { detailStack.add("f:$it") }
+    val popDetail: () -> Unit = { if (detailStack.isNotEmpty()) detailStack.removeAt(detailStack.lastIndex) }
+    val current = detailStack.lastOrNull()
     val colors = BwTheme.colors
+    // Hardware / gesture Back pops the detail stack while a detail is open (mirrors the ← button).
+    BackHandler(enabled = current != null, onBack = popDetail)
     // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
     // its default browse view — a lingering search shouldn't persist across tab switches.
     val searchViewModel: SearchViewModel = viewModel()
@@ -95,8 +109,7 @@ fun BrickWaresApp(
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn && showLogin) {
             SignInController.dismiss()
-            detailSetNumber = null
-            detailFigNum = null
+            detailStack.clear()
             selectedTab = BwTab.Collection
         }
     }
@@ -113,8 +126,7 @@ fun BrickWaresApp(
                     // previous results, since that path doesn't reset.)
                     if (tab == BwTab.Search) searchViewModel.resetToDefault()
                     selectedTab = tab
-                    detailSetNumber = null
-                    detailFigNum = null
+                    detailStack.clear()
                 },
             )
         },
@@ -124,28 +136,36 @@ fun BrickWaresApp(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            val fig = detailFigNum
-            val detail = detailSetNumber
-            if (fig != null) {
+            if (current != null && current.startsWith("f:")) {
                 MinifigDetailScreen(
-                    figNum = fig,
-                    onBack = { detailFigNum = null },
-                    // Tapping an "appears in" set closes the minifig detail and opens that set's detail.
-                    onOpenSetDetail = { detailFigNum = null; detailSetNumber = it },
-                )
-            } else if (detail != null) {
-                SetDetailScreen(
-                    setNumber = detail,
-                    onBack = { detailSetNumber = null },
-                    onOpenSetDetail = { detailSetNumber = it },
-                    // Tapping a minifig in the set's grid closes this detail and opens the minifig detail.
-                    onOpenMinifig = { detailSetNumber = null; detailFigNum = it },
-                    onNavigateToSearch = { detailSetNumber = null; selectedTab = BwTab.Search },
+                    figNum = current.substring(2),
+                    onBack = popDetail,
+                    // Tapping an "appears in" set pushes that set's detail onto the stack.
+                    onOpenSetDetail = openSet,
+                    // Quick-search can land on another minifig — pushes it.
+                    onOpenMinifig = openFig,
                     // Show the search FABs on the detail only when it's opened from the Search tab.
                     showSearchFab = selectedTab == BwTab.Search,
-                    // Switching to minifig search closes the detail and lands on the Search minifig home.
+                    // The mode-switch FAB exits the detail stack and lands on the Search set home.
+                    onSwitchToSetSearch = {
+                        detailStack.clear()
+                        selectedTab = BwTab.Search
+                        searchViewModel.showSets()
+                    },
+                )
+            } else if (current != null) { // "s:" — a set
+                SetDetailScreen(
+                    setNumber = current.substring(2),
+                    onBack = popDetail,
+                    onOpenSetDetail = openSet,
+                    // Tapping a minifig in the set's grid pushes the minifig detail.
+                    onOpenMinifig = openFig,
+                    onNavigateToSearch = { detailStack.clear(); selectedTab = BwTab.Search },
+                    // Show the search FABs on the detail only when it's opened from the Search tab.
+                    showSearchFab = selectedTab == BwTab.Search,
+                    // Switching to minifig search exits the detail stack and lands on the minifig home.
                     onSwitchToMinifigSearch = {
-                        detailSetNumber = null
+                        detailStack.clear()
                         selectedTab = BwTab.Search
                         searchViewModel.showMinifigs()
                     },
@@ -154,17 +174,17 @@ fun BrickWaresApp(
                 when (selectedTab) {
                     BwTab.Home -> HomeScreen()
                     BwTab.Collection -> CollectionScreen(
-                        onOpenSetDetail = { detailSetNumber = it },
-                        onOpenMinifigDetail = { detailFigNum = it },
+                        onOpenSetDetail = openSet,
+                        onOpenMinifigDetail = openFig,
                     )
                     BwTab.Wishlist -> WishlistScreen(
                         onNavigateToSearch = { selectedTab = BwTab.Search },
-                        onOpenSetDetail = { detailSetNumber = it },
-                        onOpenMinifigDetail = { detailFigNum = it },
+                        onOpenSetDetail = openSet,
+                        onOpenMinifigDetail = openFig,
                     )
                     BwTab.Search -> SearchScreen(
-                        onOpenSetDetail = { detailSetNumber = it },
-                        onOpenMinifig = { detailFigNum = it },
+                        onOpenSetDetail = openSet,
+                        onOpenMinifig = openFig,
                         viewModel = searchViewModel,
                     )
                     BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)

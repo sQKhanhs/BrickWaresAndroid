@@ -211,6 +211,8 @@ class MinifigDetailViewModel(
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 
+    fun searchMinifigs(query: String): List<Minifig> = catalogRepo.searchMinifigs(query)
+
     fun onToastShown() = _uiState.update { it.copy(toastMessage = null) }
 
     /** A minifig as a fig-num-keyed [CatalogSet] so it flows through the shared Add sheet + collection. */

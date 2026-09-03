@@ -13,6 +13,7 @@ import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,6 +125,12 @@ class SearchViewModel(
         if (minifigs.isEmpty()) loadMinifigs()
     }
 
+    /** Enter the set browse home directly (used when switching to set search from a Minifig Detail). */
+    fun showSets() {
+        resetToDefault()
+        _uiState.update { it.copy(mode = SearchMode.SETS) }
+    }
+
     /** Flip the Search tab between browsing sets and minifigs. */
     fun onToggleMode() {
         val next = if (_uiState.value.mode == SearchMode.SETS) SearchMode.MINIFIGS else SearchMode.SETS
@@ -143,24 +150,84 @@ class SearchViewModel(
         }
     }
 
-    /** Tapping a minifig theme card → that theme's figs. */
-    fun onMinifigThemeClick(theme: String) {
-        _uiState.update {
-            it.copy(
-                minifigThemeDetail = theme,
-                minifigItems = minifigs.filter { m -> theme in m.themes }.sortedBy { m -> m.name },
-                minifigPage = 1,
-            )
-        }
-    }
+    /** Tapping a minifig theme card → that theme's figs (all subthemes). */
+    fun onMinifigThemeClick(theme: String) = openMinifigThemeDetail(theme, ALL_SUBTHEMES)
 
     fun onMinifigThemeBack() {
-        _uiState.update { it.copy(minifigThemeDetail = null, minifigItems = emptyList()) }
+        _uiState.update {
+            it.copy(
+                minifigThemeDetail = null,
+                minifigItems = emptyList(),
+                minifigThemeDetailSub = ALL_SUBTHEMES,
+                minifigThemeDetailSort = MinifigSort.NAME,
+                minifigThemeDetailSubOptions = emptyList(),
+            )
+        }
     }
 
     fun onMinifigPageChange(page: Int) {
         _uiState.update { it.copy(minifigPage = page) }
     }
+
+    private fun openMinifigThemeDetail(theme: String, sub: String) {
+        _uiState.update {
+            it.copy(
+                minifigThemeDetail = theme,
+                minifigThemeDetailSub = sub,
+                minifigThemeDetailSort = MinifigSort.NAME,
+                minifigThemeDetailSubOptions = minifigSubthemesFor(theme),
+                minifigItems = minifigThemeResults(theme, sub, MinifigSort.NAME),
+                minifigPage = 1,
+            )
+        }
+    }
+
+    fun onMinifigThemeDetailSubChange(sub: String) {
+        _uiState.update {
+            val theme = it.minifigThemeDetail ?: return@update it
+            it.copy(
+                minifigThemeDetailSub = sub,
+                minifigItems = minifigThemeResults(theme, sub, it.minifigThemeDetailSort),
+                minifigPage = 1,
+            )
+        }
+    }
+
+    fun onMinifigThemeDetailSortChange(sort: MinifigSort) {
+        _uiState.update {
+            val theme = it.minifigThemeDetail ?: return@update it
+            it.copy(
+                minifigThemeDetailSort = sort,
+                minifigItems = minifigThemeResults(theme, it.minifigThemeDetailSub, sort),
+                minifigPage = 1,
+            )
+        }
+    }
+
+    private fun minifigThemeResults(theme: String, sub: String, sort: MinifigSort): List<Minifig> {
+        val filtered = minifigs.filter { m ->
+            if (sub == ALL_SUBTHEMES) theme in m.themes else (theme to sub) in m.themeSubthemes
+        }
+        return when (sort) {
+            MinifigSort.NAME -> filtered.sortedBy { it.name }
+            // Minifigs have no retail price, so "value" sorts use the community current value.
+            MinifigSort.VALUE_HIGH -> filtered.sortedWith(compareByDescending<Minifig> { figValue(it.figNum) }.thenBy { it.name })
+            MinifigSort.VALUE_LOW -> filtered.sortedWith(compareBy<Minifig> { figValue(it.figNum) }.thenBy { it.name })
+            MinifigSort.MOST_SETS -> filtered.sortedWith(compareByDescending<Minifig> { it.setCount }.thenBy { it.name })
+        }
+    }
+
+    /** Community current value for a fig (₫); 0 when none. Snapshot at sort time (the value cache
+     *  warms asynchronously — re-selecting the sort re-reads it). */
+    private fun figValue(figNum: String): Long =
+        ValueRepositoryProvider.instance.valueForFig(figNum)?.amountVnd ?: 0L
+
+    private fun minifigSubthemesFor(theme: String): List<SubthemeCount> =
+        minifigs.filter { theme in it.themes }
+            .flatMap { f -> f.themeSubthemes.filter { it.first == theme }.map { it.second } }
+            .groupingBy { it }.eachCount()
+            .map { (name, count) -> SubthemeCount(name, count) }
+            .sortedBy { it.name }
 
     // Same ThemeGroup shape as the set browser (so ThemeCard is reused). count = number of minifigs in
     // the theme; subthemes left empty for now (minifigs don't carry subtheme data yet).
@@ -190,15 +257,7 @@ class SearchViewModel(
     )
 
     /** Tapping a minifig subtheme link → that theme's figs filtered to the subtheme. */
-    fun onMinifigSubthemeClick(theme: String, subtheme: String) {
-        _uiState.update {
-            it.copy(
-                minifigThemeDetail = theme,
-                minifigItems = minifigs.filter { m -> (theme to subtheme) in m.themeSubthemes }.sortedBy { m -> m.name },
-                minifigPage = 1,
-            )
-        }
-    }
+    fun onMinifigSubthemeClick(theme: String, subtheme: String) = openMinifigThemeDetail(theme, subtheme)
 
     // Same ThemeGroup shape as the set browser (so ThemeCard + its subtheme links are reused).
     // count = minifigs in the theme; subthemes = the sets' subthemes (with per-subtheme fig counts).
@@ -308,6 +367,8 @@ class SearchViewModel(
                 // Minifig browse home too (keep the current mode).
                 minifigThemeDetail = null,
                 minifigItems = emptyList(),
+                // Signal the screen to scroll the browse list back to the top.
+                homeScrollTick = it.homeScrollTick + 1,
             )
         }
     }
@@ -320,6 +381,14 @@ class SearchViewModel(
         _uiState.update {
             val next = if (theme in it.favoriteThemes) it.favoriteThemes - theme else it.favoriteThemes + theme
             it.copy(favoriteThemes = next)
+        }
+    }
+
+    /** Favorite toggle for the MINIFIG theme browse — independent of the set-theme favorites. */
+    fun onToggleMinifigFavorite(theme: String) {
+        _uiState.update {
+            val next = if (theme in it.favoriteMinifigThemes) it.favoriteMinifigThemes - theme else it.favoriteMinifigThemes + theme
+            it.copy(favoriteMinifigThemes = next)
         }
     }
 

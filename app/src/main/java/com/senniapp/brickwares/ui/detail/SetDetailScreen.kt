@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +69,7 @@ import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ErrorScreen
+import com.senniapp.brickwares.ui.components.ImageGalleryDialog
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.SearchModal
@@ -106,10 +108,17 @@ fun SetDetailScreen(
     onSwitchToMinifigSearch: () -> Unit = {},
     viewModel: SetDetailViewModel = viewModel(),
 ) {
-    LaunchedEffect(setNumber) { viewModel.load(setNumber) }
+    val scrollState = rememberScrollState()
+    // Load the set and reset scroll to the top whenever the target changes (e.g. tapping a
+    // recommendation), so the new detail doesn't open at the previous page's scroll offset.
+    LaunchedEffect(setNumber) {
+        viewModel.load(setNumber)
+        scrollState.scrollTo(0)
+    }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     SetDetailContent(
         state = state,
+        scrollState = scrollState,
         onBack = onBack,
         onOpenSetDetail = onOpenSetDetail,
         onOpenMinifig = onOpenMinifig,
@@ -145,6 +154,7 @@ fun SetDetailScreen(
 @Composable
 private fun SetDetailContent(
     state: SetDetailUiState,
+    scrollState: ScrollState,
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onOpenMinifig: (String) -> Unit,
@@ -198,15 +208,17 @@ private fun SetDetailContent(
             heroFallback -> listOfNotNull(set?.imageUrl)
             else -> emptyList()
         }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Back header.
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Sticky back header — pinned above the scroll so a long minifig list can still be exited
+            // from anywhere on the page (not just the top).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 BackCircleButton(onBack = onBack)
                 if (set != null) {
                     Text(
@@ -217,7 +229,14 @@ private fun SetDetailContent(
                     )
                 }
             }
-
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(scrollState)
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 104.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
             if (set == null) {
                 // Offline is handled full-screen above; here the catalog loaded but this set isn't in it.
                 if (state.loaded) {
@@ -351,6 +370,7 @@ private fun SetDetailContent(
                         onRemoveWishlist = { onRecommendRemoveWishlist(rel) },
                     )
                 }
+            }
             }
         }
 
@@ -656,79 +676,4 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
     }
 }
 
-/**
- * Full-screen image gallery: a swipeable pager over the [candidates] (box shot + set render) with a
- * thumbnail strip for jumping between them. Any candidate whose image 404s (e.g. a set that has a box
- * but no render, or vice-versa) is dropped, so only real photos are listed. Tap the backdrop (or
- * back) to dismiss.
- */
-@Composable
-private fun ImageGalleryDialog(candidates: List<String>, onDismiss: () -> Unit) {
-    val colors = BwTheme.colors
-    // Images that failed to load — removed from the pager and the thumbnail strip.
-    val failed = remember(candidates) { mutableStateListOf<String>() }
-    val images = candidates.filterNot { it in failed }
-    val onImageError: (String) -> Unit = { url -> if (url !in failed) failed.add(url) }
-    val pagerState = rememberPagerState(pageCount = { candidates.size - failed.size })
-    val scope = rememberCoroutineScope()
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
-            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                val url = images.getOrNull(page)
-                Box(
-                    modifier = Modifier.fillMaxSize().clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (url != null) {
-                        AsyncImage(
-                            model = url,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 96.dp),
-                            onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
-                        )
-                    }
-                }
-            }
-            // Close affordance.
-            Text(
-                "✕",
-                style = BwType.cardTitle.copy(fontSize = 22.sp),
-                color = Color.White,
-                modifier = Modifier.align(Alignment.TopEnd).padding(20.dp).clickable(onClick = onDismiss),
-            )
-            // Thumbnail strip — only meaningful with more than one image. The thumbnails render all
-            // candidates, so a 404 is detected and dropped even if the user never swipes to it.
-            if (images.size > 1) {
-                Row(
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    images.forEachIndexed { i, url ->
-                        val selected = i == pagerState.currentPage
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .border(
-                                    BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.brandYellow else Color(0x55FFFFFF)),
-                                    RoundedCornerShape(8.dp),
-                                )
-                                .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AsyncImage(
-                                model = url,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize().padding(4.dp),
-                                onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+// ImageGalleryDialog now lives in ui/components/ImageGalleryDialog.kt (shared with the item cards).

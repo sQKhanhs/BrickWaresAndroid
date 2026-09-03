@@ -238,6 +238,9 @@
     <string name="sort_price_high">Giá: cao đến thấp</string>
     <string name="sort_price_low">Giá: thấp đến cao</string>
     <string name="sort_name">Tên</string>
+    <string name="sort_value_high">Giá trị: cao đến thấp</string>
+    <string name="sort_value_low">Giá trị: thấp đến cao</string>
+    <string name="sort_most_sets">Trong nhiều bộ nhất</string>
 
     <!-- ============ Sign-in modal ============ -->
     <string name="login_welcome_back">Chào mừng trở lại</string>

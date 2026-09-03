@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,6 +108,7 @@ fun SearchScreen(
         onSubthemeClick = viewModel::onSubthemeClick,
         onThemeSortChange = viewModel::onThemeSortChange,
         onToggleFavorite = viewModel::onToggleFavorite,
+        onToggleMinifigFavorite = viewModel::onToggleMinifigFavorite,
         onThemeDetailBack = viewModel::onThemeDetailBack,
         onThemeDetailSubChange = viewModel::onThemeDetailSubChange,
         onThemeDetailSortChange = viewModel::onThemeDetailSortChange,
@@ -123,6 +125,8 @@ fun SearchScreen(
         onMinifigThemeClick = viewModel::onMinifigThemeClick,
         onMinifigSubthemeClick = viewModel::onMinifigSubthemeClick,
         onMinifigThemeBack = viewModel::onMinifigThemeBack,
+        onMinifigThemeDetailSubChange = viewModel::onMinifigThemeDetailSubChange,
+        onMinifigThemeDetailSortChange = viewModel::onMinifigThemeDetailSortChange,
         onMinifigPageChange = viewModel::onMinifigPageChange,
         onAddMinifig = viewModel::onAddMinifigClick,
         onWishlistMinifig = viewModel::onAddMinifigToWishlist,
@@ -143,6 +147,7 @@ private fun SearchContent(
     onSubthemeClick: (String, String) -> Unit,
     onThemeSortChange: (ThemeSort) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onToggleMinifigFavorite: (String) -> Unit,
     onThemeDetailBack: () -> Unit,
     onThemeDetailSubChange: (String) -> Unit,
     onThemeDetailSortChange: (ThemeDetailSort) -> Unit,
@@ -159,6 +164,8 @@ private fun SearchContent(
     onMinifigThemeClick: (String) -> Unit,
     onMinifigSubthemeClick: (String, String) -> Unit,
     onMinifigThemeBack: () -> Unit,
+    onMinifigThemeDetailSubChange: (String) -> Unit,
+    onMinifigThemeDetailSortChange: (MinifigSort) -> Unit,
     onMinifigPageChange: (Int) -> Unit,
     onAddMinifig: (Minifig) -> Unit,
     onWishlistMinifig: (Minifig) -> Unit,
@@ -167,6 +174,17 @@ private fun SearchContent(
 ) {
     val colors = BwTheme.colors
     var showSearchModal by remember { mutableStateOf(false) }
+    val browseListState = rememberLazyListState()
+    // Scroll the browse list to the top when the tab resets to its browse home (mode toggle, a mode
+    // switch from a detail page, or the Search-nav tap) — signalled by [homeScrollTick]. Guarded by a
+    // saved last-seen tick so back-navigation (which doesn't bump the tick) keeps its prior scroll.
+    var lastHomeTick by rememberSaveable { mutableStateOf(-1) }
+    LaunchedEffect(state.homeScrollTick) {
+        if (state.homeScrollTick != lastHomeTick) {
+            lastHomeTick = state.homeScrollTick
+            browseListState.scrollToItem(0)
+        }
+    }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         // Catalog unavailable (no connection / error) → the error fallback replaces the whole tab.
         if (state.loadError) {
@@ -194,8 +212,29 @@ private fun SearchContent(
                 onAddCollection = onAddToCollectionClick,
                 onAddWishlist = onAddToWishlist,
             )
+        } else if (state.showMinifigThemeDetail) {
+            MinifigThemeDetailView(
+                theme = state.minifigThemeDetail.orEmpty(),
+                results = state.minifigPageItems,
+                sub = state.minifigThemeDetailSub,
+                subOptions = state.minifigThemeDetailSubOptions,
+                sort = state.minifigThemeDetailSort,
+                ownedNumbers = state.ownedNumbers,
+                wishlistedNumbers = state.wishlistedNumbers,
+                totalCount = state.minifigItems.size,
+                currentPage = state.minifigCurrentPage,
+                pageCount = state.minifigPageCount,
+                onPageChange = onMinifigPageChange,
+                onBack = onMinifigThemeBack,
+                onSubChange = onMinifigThemeDetailSubChange,
+                onSortChange = onMinifigThemeDetailSortChange,
+                onOpen = onOpenMinifig,
+                onAdd = onAddMinifig,
+                onWishlist = onWishlistMinifig,
+            )
         } else {
         LazyColumn(
+            state = browseListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
         ) {
@@ -286,33 +325,6 @@ private fun SearchContent(
                                 CircularProgressIndicator(color = colors.brandYellow)
                             }
                         }
-                    } else if (state.minifigThemeDetail != null) {
-                        item {
-                            MinifigListHeader(title = state.minifigThemeDetail, showBack = true, onBack = onMinifigThemeBack)
-                            Spacer(Modifier.height(10.dp))
-                        }
-                        if (state.minifigItems.isEmpty()) {
-                            item { SectionLabel(stringResource(R.string.search_minifig_empty)) }
-                        } else {
-                            items(state.minifigPageItems, key = { it.figNum }) { fig ->
-                                MinifigCard(
-                                    fig = fig,
-                                    owned = fig.figNum in state.ownedNumbers,
-                                    wishlisted = fig.figNum in state.wishlistedNumbers,
-                                    onOpen = { onOpenMinifig(fig.figNum) },
-                                    onAdd = { onAddMinifig(fig) },
-                                    onWishlist = { onWishlistMinifig(fig) },
-                                )
-                                Spacer(Modifier.height(12.dp))
-                            }
-                            item {
-                                PaginationBar(
-                                    currentPage = state.minifigCurrentPage,
-                                    totalPages = state.minifigPageCount,
-                                    onPageSelected = onMinifigPageChange,
-                                )
-                            }
-                        }
                     } else if (state.minifigThemes.isEmpty()) {
                         item { SectionLabel(stringResource(R.string.search_minifig_empty)) }
                     } else {
@@ -323,9 +335,9 @@ private fun SearchContent(
                         items(state.sortedMinifigThemes, key = { it.theme }) { group ->
                             ThemeCard(
                                 group = group,
-                                isFavorite = group.theme in state.favoriteThemes,
+                                isFavorite = group.theme in state.favoriteMinifigThemes,
                                 onClick = { onMinifigThemeClick(group.theme) },
-                                onToggleFavorite = { onToggleFavorite(group.theme) },
+                                onToggleFavorite = { onToggleMinifigFavorite(group.theme) },
                                 onSubthemeClick = { sub -> onMinifigSubthemeClick(group.theme, sub) },
                             )
                             Spacer(Modifier.height(12.dp))
@@ -573,18 +585,24 @@ private fun ThemeDetailView(
     val listState = rememberLazyListState()
     // Jump to the top when the page changes (the pager sits at the bottom of the list).
     LaunchedEffect(currentPage) { listState.scrollToItem(0) }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BackCircleButton(onBack = onBack)
-                Text(theme, style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
-            }
-            Spacer(Modifier.height(12.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Sticky back header — pinned so a long theme result list can still be exited from anywhere.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.bg)
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            BackCircleButton(onBack = onBack)
+            Text(theme, style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
         }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 104.dp),
+        ) {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -632,6 +650,108 @@ private fun ThemeDetailView(
                 onPageSelected = onPageChange,
             )
         }
+    }
+    }
+}
+
+/**
+ * Minifig theme-detail — the minifig-mode counterpart of [ThemeDetailView]: its own full page (no
+ * banner/search) with a back header, count, subtheme + sort filters, minifig cards, and pagination.
+ * Sort has no newest/price (minifigs carry neither); "value" sorts use the community current value.
+ */
+@Composable
+private fun MinifigThemeDetailView(
+    theme: String,
+    results: List<Minifig>,
+    sub: String,
+    subOptions: List<SubthemeCount>,
+    sort: MinifigSort,
+    ownedNumbers: Set<String>,
+    wishlistedNumbers: Set<String>,
+    totalCount: Int,
+    currentPage: Int,
+    pageCount: Int,
+    onPageChange: (Int) -> Unit,
+    onBack: () -> Unit,
+    onSubChange: (String) -> Unit,
+    onSortChange: (MinifigSort) -> Unit,
+    onOpen: (String) -> Unit,
+    onAdd: (Minifig) -> Unit,
+    onWishlist: (Minifig) -> Unit,
+) {
+    val colors = BwTheme.colors
+    val listState = rememberLazyListState()
+    LaunchedEffect(currentPage) { listState.scrollToItem(0) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Sticky back header — pinned so a long theme result list can still be exited from anywhere.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.bg)
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            BackCircleButton(onBack = onBack)
+            Text(theme, style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
+        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 104.dp),
+        ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.search_results_minifigs, totalCount),
+                    style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.weight(1f))
+                val allSubthemesLabel = stringResource(R.string.search_all_subthemes)
+                if (subOptions.size > 1) {
+                    val subLabel = if (sub == ALL_SUBTHEMES) allSubthemesLabel else sub
+                    OptionDropdown(
+                        selectedLabel = subLabel,
+                        options = listOf(ALL_SUBTHEMES to allSubthemesLabel) + subOptions.map { it.name to "${it.name} (${it.count})" },
+                        onSelect = onSubChange,
+                    )
+                }
+                OptionDropdown(
+                    selectedLabel = sort.text(),
+                    options = MinifigSort.entries.map { it to it.text() },
+                    onSelect = onSortChange,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        if (results.isEmpty()) {
+            item { SectionLabel(stringResource(R.string.search_minifig_empty)) }
+        } else {
+            items(results, key = { it.figNum }) { fig ->
+                MinifigCard(
+                    fig = fig,
+                    owned = fig.figNum in ownedNumbers,
+                    wishlisted = fig.figNum in wishlistedNumbers,
+                    onOpen = { onOpen(fig.figNum) },
+                    onAdd = { onAdd(fig) },
+                    onWishlist = { onWishlist(fig) },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+            item {
+                PaginationBar(
+                    currentPage = currentPage,
+                    totalPages = pageCount,
+                    onPageSelected = onPageChange,
+                )
+            }
+        }
+    }
     }
 }
 
@@ -708,15 +828,6 @@ private fun ThemeSortSelector(selected: ThemeSort, onSelect: (ThemeSort) -> Unit
 // ---- Minifig mode ----
 
 @Composable
-private fun MinifigListHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
-    val colors = BwTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (showBack) BackCircleButton(onBack = onBack)
-        Text(title, style = BwType.cardTitle.copy(fontSize = 16.sp), color = colors.text)
-    }
-}
-
-@Composable
 private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpen: () -> Unit, onAdd: () -> Unit, onWishlist: () -> Unit) {
     val colors = BwTheme.colors
     val isLoggedIn = rememberIsLoggedIn()
@@ -733,7 +844,7 @@ private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpe
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
-        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 64.dp, iconSize = 28.dp, modifier = Modifier.clickable(onClick = onOpen))
+        SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 64.dp, iconSize = 28.dp, galleryImages = listOfNotNull(fig.imageUrl))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(fig.figNum, style = BwType.micro, color = colors.textMuted)
@@ -847,7 +958,8 @@ private fun ResultCard(
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            modifier = Modifier.clickable(onClick = onOpenDetail),
+            // Tap the image → full-screen gallery (box + render); the title still opens the detail.
+            galleryImages = listOfNotNull(set.boxImageUrl, set.imageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1002,6 +1114,17 @@ private fun ThemeDetailSort.text(): String = stringResource(
         ThemeDetailSort.PRICE_HIGH -> R.string.sort_price_high
         ThemeDetailSort.PRICE_LOW -> R.string.sort_price_low
         ThemeDetailSort.NAME -> R.string.sort_name
+    },
+)
+
+/** Localized display label for the minifig theme-detail sort order. */
+@Composable
+private fun MinifigSort.text(): String = stringResource(
+    when (this) {
+        MinifigSort.NAME -> R.string.sort_name
+        MinifigSort.VALUE_HIGH -> R.string.sort_value_high
+        MinifigSort.VALUE_LOW -> R.string.sort_value_low
+        MinifigSort.MOST_SETS -> R.string.sort_most_sets
     },
 )
 

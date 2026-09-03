@@ -239,6 +239,9 @@
     <string name="sort_price_high">Price: high to low</string>
     <string name="sort_price_low">Price: low to high</string>
     <string name="sort_name">Name</string>
+    <string name="sort_value_high">Value: high to low</string>
+    <string name="sort_value_low">Value: low to high</string>
+    <string name="sort_most_sets">In most sets</string>
 
     <!-- ============ Sign-in modal ============ -->
     <string name="login_welcome_back">Welcome back</string>

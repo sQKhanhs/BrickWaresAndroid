@@ -36,6 +36,18 @@ enum class ThemeDetailSort(val label: String) {
     NAME("Name"),
 }
 
+/**
+ * Ordering for the minifigs listed inside a minifig theme-detail view. Minifigs have no release year
+ * or retail price, so instead of newest/price the sorts are by name, community current value, and how
+ * many sets the fig appears in.
+ */
+enum class MinifigSort(val label: String) {
+    NAME("Name"),
+    VALUE_HIGH("Value: high to low"),
+    VALUE_LOW("Value: low to high"),
+    MOST_SETS("In most sets"),
+}
+
 /** Sentinel meaning "all subthemes" in the theme-detail subtheme filter. */
 const val ALL_SUBTHEMES = "__all"
 
@@ -56,7 +68,10 @@ data class SearchUiState(
     val suggestions: List<CatalogSet> = emptyList(),
     val themes: List<ThemeGroup> = emptyList(),
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
+    /** Favorited SET themes (separate from minifig favorites — the two browses are independent). */
     val favoriteThemes: Set<String> = emptySet(),
+    /** Favorited MINIFIG themes (kept apart from [favoriteThemes]). */
+    val favoriteMinifigThemes: Set<String> = emptySet(),
     val wishlistedNumbers: Set<String> = emptySet(),
     /** Set numbers already in the collection — result cards show "See Detail" instead of Add/Wishlist. */
     val ownedNumbers: Set<String> = emptySet(),
@@ -80,15 +95,34 @@ data class SearchUiState(
     val minifigThemes: List<ThemeGroup> = emptyList(),
     /** Open minifig theme (its figs are in [minifigItems]); null = the theme browse. */
     val minifigThemeDetail: String? = null,
+    /** Selected subtheme filter inside the minifig theme-detail (ALL_SUBTHEMES = no filter). */
+    val minifigThemeDetailSub: String = ALL_SUBTHEMES,
+    /** Sort applied inside the minifig theme-detail. */
+    val minifigThemeDetailSort: MinifigSort = MinifigSort.NAME,
+    /** Subtheme options (with counts) for the open minifig theme's filter dropdown. */
+    val minifigThemeDetailSubOptions: List<SubthemeCount> = emptyList(),
     /** The minifigs currently shown — a theme's figs, or keyword-search results. */
     val minifigItems: List<Minifig> = emptyList(),
     /** 1-based page for the minifig list. */
     val minifigPage: Int = 1,
+    /**
+     * Bumped on every reset-to-browse-home (mode toggle, mode switch from a detail, Search-nav tap) so
+     * the screen can scroll the browse list back to the top — without disturbing back-navigation, which
+     * doesn't reset and so leaves this unchanged (the list restores its previous scroll).
+     */
+    val homeScrollTick: Int = 0,
 ) {
     val isMinifigMode: Boolean get() = mode == SearchMode.MINIFIGS
     /** Minifig browse (theme cards) shows when no theme is open and no search is submitted. */
     val showMinifigBrowse: Boolean get() = isMinifigMode && minifigThemeDetail == null && submittedQuery == null
     val showMinifigList: Boolean get() = isMinifigMode && (minifigThemeDetail != null || submittedQuery != null)
+
+    /**
+     * The minifig theme-detail is its own full view (like the set [showThemeDetail]) — a theme was
+     * opened and no keyword search is active — so it replaces the banner/search browse chrome.
+     */
+    val showMinifigThemeDetail: Boolean
+        get() = isMinifigMode && minifigThemeDetail != null && submittedQuery == null && !minifigsLoading
 
     val minifigPageCount: Int get() = ((minifigItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
     val minifigCurrentPage: Int get() = minifigPage.coerceIn(1, minifigPageCount)
@@ -110,8 +144,8 @@ data class SearchUiState(
     /** Themes ordered by the active [themeSort] (favorites-first for the favorite sort). */
     val sortedThemes: List<ThemeGroup> get() = themes.sortedByThemeSort(themeSort, favoriteThemes)
 
-    /** Minifig-browse themes ordered by the same [themeSort]. */
-    val sortedMinifigThemes: List<ThemeGroup> get() = minifigThemes.sortedByThemeSort(themeSort, favoriteThemes)
+    /** Minifig-browse themes ordered by the same [themeSort], using the minifig favorites. */
+    val sortedMinifigThemes: List<ThemeGroup> get() = minifigThemes.sortedByThemeSort(themeSort, favoriteMinifigThemes)
 
     companion object {
         const val MAX_RESULTS = 20

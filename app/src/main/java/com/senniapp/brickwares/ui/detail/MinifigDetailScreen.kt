@@ -23,6 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +47,7 @@ import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.ItemDetailsDialog
 import com.senniapp.brickwares.ui.components.ItemDetailsTab
+import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -63,12 +67,25 @@ fun MinifigDetailScreen(
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Open another minifig's detail (quick-search result) — re-points this screen. */
+    onOpenMinifig: (String) -> Unit = {},
+    /** When true (viewed from the Search tab), the search FABs are shown. */
+    showSearchFab: Boolean = false,
+    /** Switch to set search: navigate back to the Search tab's set browse home. */
+    onSwitchToSetSearch: () -> Unit = {},
     viewModel: MinifigDetailViewModel = viewModel(),
 ) {
-    LaunchedEffect(figNum) { viewModel.load(figNum) }
+    val scrollState = rememberScrollState()
+    // Load the fig and reset scroll to the top whenever the target changes (e.g. tapping a
+    // quick-search result), so a new minifig doesn't open at the previous page's scroll offset.
+    LaunchedEffect(figNum) {
+        viewModel.load(figNum)
+        scrollState.scrollTo(0)
+    }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = BwTheme.colors
     val isLoggedIn = rememberIsLoggedIn()
+    var showSearchModal by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (state.offline) {
@@ -76,15 +93,17 @@ fun MinifigDetailScreen(
             return@Box
         }
         val fig = state.fig
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Back header.
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Sticky back header — pinned above the scroll so a long "appears in" list can still be
+            // exited from anywhere on the page.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 BackCircleButton(onBack = onBack)
                 if (fig != null) {
                     Text(
@@ -95,7 +114,14 @@ fun MinifigDetailScreen(
                     )
                 }
             }
-
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(scrollState)
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 104.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
             if (fig == null) {
                 if (state.loaded) {
                     Text(stringResource(R.string.detail_set_not_found), style = BwType.body, color = colors.textMuted)
@@ -181,6 +207,7 @@ fun MinifigDetailScreen(
                     )
                 }
             }
+            }
         }
 
         state.addTarget?.let { target ->
@@ -209,6 +236,58 @@ fun MinifigDetailScreen(
                 allowSell = false,
                 salesEditable = false, // sale edit lives on the Collection > Sales tab
                 initialTab = if (state.ownedItem != null) ItemDetailsTab.COLLECTION else ItemDetailsTab.SALES,
+            )
+        }
+
+        // Search FABs — only when this detail is viewed from the Search tab, so the user can start a
+        // new search (or switch to set browse) without backing out first. Mirrors Set Detail.
+        if (showSearchFab) {
+            // Mode-toggle FAB (bottom-start) — consistent with the Search tab's toggle: the minifig
+            // head on a yellow fill signals "you're in the minifig context"; tapping flips to set search.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 20.dp, bottom = 24.dp)
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .border(BorderStroke(1.5.dp, colors.brandYellow), CircleShape)
+                    .clickable(onClick = onSwitchToSetSearch),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_minifig),
+                    contentDescription = stringResource(R.string.search_toggle_minifigs_cd),
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            // Quick-search FAB (bottom-end) — opens the global search modal (sets + minifigs).
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandYellow)
+                    .clickable { showSearchModal = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_bw_search),
+                    contentDescription = stringResource(R.string.nav_search),
+                    tint = colors.onYellow,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+        if (showSearchModal) {
+            SearchModal(
+                onSearch = viewModel::searchCatalog,
+                onOpenSetDetail = { id -> showSearchModal = false; onOpenSetDetail(id) },
+                onDismiss = { showSearchModal = false },
+                onSearchMinifigs = viewModel::searchMinifigs,
+                onSelectMinifig = { m -> showSearchModal = false; onOpenMinifig(m.figNum) },
             )
         }
 
