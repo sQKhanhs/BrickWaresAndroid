@@ -71,7 +71,8 @@ import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.SearchModal
-import com.senniapp.brickwares.ui.components.SeeDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
@@ -126,8 +127,10 @@ fun SetDetailScreen(
         onSeeCopies = viewModel::onSeeCopies,
         onDismissCopies = viewModel::onDismissCopies,
         onDeleteCopy = viewModel::onDeleteCopy,
+        onDeleteSale = viewModel::onDeleteSale,
         onEditCopy = viewModel::onEditCopy,
         onAddCopyForSet = viewModel::onAddCopyForSet,
+        onAddSaleForSet = viewModel::onAddSaleForSet,
         onSellCopy = viewModel::onSellCopyRequest,
         onDismissSell = viewModel::onDismissSell,
         onConfirmSell = viewModel::onConfirmSell,
@@ -159,8 +162,10 @@ private fun SetDetailContent(
     onSeeCopies: () -> Unit,
     onDismissCopies: () -> Unit,
     onDeleteCopy: (String, String) -> Unit,
+    onDeleteSale: (String) -> Unit,
     onEditCopy: (Copy) -> Unit,
     onAddCopyForSet: () -> Unit,
+    onAddSaleForSet: () -> Unit,
     onSellCopy: (Copy) -> Unit,
     onDismissSell: () -> Unit,
     onConfirmSell: (Int, Long, String) -> Unit,
@@ -185,9 +190,12 @@ private fun SetDetailContent(
         // The URL the hero actually loaded (box, or its render fallback for a boxless set) — the
         // gallery lists only images that exist, so a boxless set shows just the render (no dead page).
         var heroResolved by remember(set?.id) { mutableStateOf<String?>(null) }
+        // A boxless set's 96dp hero falls back to the small render thumbnail (not the multi-MB full
+        // render); the gallery behind it still offers the full-resolution render.
+        val heroFallback = set?.let { it.thumbnailUrl ?: it.imageUrl }
         val galleryImages = when (heroResolved) {
             set?.boxImageUrl -> listOfNotNull(set?.boxImageUrl, set?.imageUrl).distinct()
-            set?.imageUrl -> listOfNotNull(set?.imageUrl)
+            heroFallback -> listOfNotNull(set?.imageUrl)
             else -> emptyList()
         }
         Column(
@@ -222,7 +230,7 @@ private fun SetDetailContent(
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 SetThumb(
                     imageUrl = set.boxImageUrl,
-                    fallbackUrl = set.imageUrl,
+                    fallbackUrl = heroFallback,
                     itemType = set.itemType,
                     size = 96.dp,
                     iconSize = 40.dp,
@@ -237,9 +245,9 @@ private fun SetDetailContent(
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
-                    if (state.isOwned) {
-                        // Already owned → a single gray "See Detail" opening the copies dialog (matches
-                        // the gray See Detail pill on the item cards).
+                    if (state.isOwned || state.isSold) {
+                        // Owned and/or sold → a single gray "See Detail" opening the merged copies/sales
+                        // modal (matches the gray See Detail pill on the item cards).
                         ActionButton(
                             iconRes = R.drawable.ic_bw_check,
                             label = stringResource(R.string.action_see_detail),
@@ -355,6 +363,7 @@ private fun SetDetailContent(
                 onAdd = onAddCollectionSubmit,
                 allowSalesMode = true,
                 onAddSale = onAddSaleSubmit,
+                initialSalesMode = state.addSalesMode,
             )
         }
 
@@ -362,8 +371,8 @@ private fun SetDetailContent(
         // Sell dialog is open it renders on top instead (cancelling Sell returns here).
         val copiesItem = state.copiesItem
         val sellCopy = state.sellCopy
-        if (copiesItem != null) {
-            if (sellCopy != null) {
+        if (copiesItem != null || state.copiesSales.isNotEmpty()) {
+            if (sellCopy != null && copiesItem != null) {
                 SellCopyDialog(
                     item = copiesItem,
                     copy = sellCopy,
@@ -371,13 +380,18 @@ private fun SetDetailContent(
                     onConfirm = onConfirmSell,
                 )
             } else {
-                SeeDetailsDialog(
+                ItemDetailsDialog(
                     item = copiesItem,
+                    sales = state.copiesSales,
                     onDismiss = onDismissCopies,
                     onDeleteCopy = onDeleteCopy,
                     onEditCopy = onEditCopy,
-                    onAddItem = onAddCopyForSet,
                     onSellCopy = onSellCopy,
+                    onDeleteSale = onDeleteSale,
+                    onAddCollection = onAddCopyForSet,
+                    onAddSale = onAddSaleForSet,
+                    salesEditable = false, // sale edit lives on the Collection > Sales tab
+                    initialTab = if (copiesItem != null) ItemDetailsTab.COLLECTION else ItemDetailsTab.SALES,
                 )
             }
         }

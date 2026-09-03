@@ -133,7 +133,7 @@ class RoomCollectionRepository(
         // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
         // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
         item.copies.lastOrNull()?.let { copy ->
-            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid)
+            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, isSale = false)
         }
     }
 
@@ -155,7 +155,7 @@ class RoomCollectionRepository(
             ),
         )
         // Reflect the edited paid price in the community value cache immediately (Decision 17).
-        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, copy.pricePaid)
+        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, copy.pricePaid, isSale = false)
     }
 
     override fun addSale(item: CollectionItem, salePrice: Long) = write {
@@ -180,6 +180,8 @@ class RoomCollectionRepository(
                 updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
+        // A sale price is a community value point too (Decision 17) — reflect it locally at once.
+        contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, salePrice, isSale = true)
     }
 
     override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, soldOn: String?) = write {
@@ -214,6 +216,8 @@ class RoomCollectionRepository(
                 ),
             )
         }
+        // The sale price seeds the community value too (Decision 17).
+        contributeLocalValue(copy.setId, copy.figNum, copy.setNumber, salePrice, isSale = true)
     }
 
     override fun updateSale(
@@ -234,6 +238,8 @@ class RoomCollectionRepository(
                 updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
+        // Reflect the edited sale price in the community value cache immediately (Decision 17).
+        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, salePrice, isSale = true)
     }
 
     override fun removeSale(saleId: String) = write {
@@ -304,14 +310,14 @@ class RoomCollectionRepository(
      * real contribution and re-warms. Uses the live catalog retail/status so the outlier guard matches
      * what [ValueContributionRepository.warm] will later compute.
      */
-    private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, pricePaid: Long) {
-        if (pricePaid <= 0L) return
+    private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, price: Long, isSale: Boolean) {
+        if (price <= 0L) return
         if (figNum != null) {
-            values.applyLocalPaid(null, figNum, pricePaid, null, ValueGuardTier.AVAILABLE)
+            values.applyLocalPaid(null, figNum, price, null, ValueGuardTier.NO_ANCHOR, isSale)
         } else if (setId != null) {
             val cat = catalogFor(setId, setNumber)
             val tier = ValueAggregator.tierOf(cat?.status ?: Availability.AVAILABLE, cat?.retiredYear ?: 0, cat?.retiredMonth ?: 0)
-            values.applyLocalPaid(setId, null, pricePaid, cat?.retailPrice, tier)
+            values.applyLocalPaid(setId, null, price, cat?.retailPrice, tier, isSale)
         }
     }
 

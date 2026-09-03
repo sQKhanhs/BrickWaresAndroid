@@ -64,8 +64,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
-import com.senniapp.brickwares.ui.components.SaleDetailsDialog
-import com.senniapp.brickwares.ui.components.SeeDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsDialog
 import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.PaginationBar
@@ -113,18 +112,21 @@ fun CollectionScreen(
         onEditSaleSubmit = viewModel::submitEditSale,
         onDismissDetail = viewModel::onDismissDetail,
         onDeleteCopy = viewModel::onDeleteCopy,
-        onAddCopyForSet = viewModel::onAddCopyForSet,
+        onDetailAddCollection = viewModel::onDetailAddCollection,
+        onDetailAddSale = viewModel::onDetailAddSale,
         onEditCopy = viewModel::onEditCopy,
         onSellCopyRequest = viewModel::onSellCopyRequest,
         onDismissSell = viewModel::onDismissSell,
         onConfirmSell = viewModel::onConfirmSell,
         onSaleDetail = viewModel::onSaleDetail,
-        onDismissSaleDetail = viewModel::onDismissSaleDetail,
         onEditSale = viewModel::onEditSale,
         onDeleteSale = viewModel::onDeleteSale,
         onRequestDeleteItem = viewModel::onRequestDeleteItem,
         onConfirmDeleteItem = viewModel::onConfirmDeleteItem,
         onCancelDeleteItem = viewModel::onCancelDeleteItem,
+        onRequestDeleteSale = viewModel::onRequestDeleteSale,
+        onConfirmDeleteSale = viewModel::onConfirmDeleteSale,
+        onCancelDeleteSale = viewModel::onCancelDeleteSale,
         onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
@@ -150,18 +152,21 @@ private fun CollectionContent(
     onEditSaleSubmit: (CollectionItem, Long) -> Unit,
     onDismissDetail: () -> Unit,
     onDeleteCopy: (String, String) -> Unit,
-    onAddCopyForSet: (CollectionItem) -> Unit,
+    onDetailAddCollection: () -> Unit,
+    onDetailAddSale: () -> Unit,
     onEditCopy: (CollectionItem, Copy) -> Unit,
     onSellCopyRequest: (String, Copy) -> Unit,
     onDismissSell: () -> Unit,
     onConfirmSell: (Int, Long, String) -> Unit,
     onSaleDetail: (SoldItem) -> Unit,
-    onDismissSaleDetail: () -> Unit,
     onEditSale: (SoldItem) -> Unit,
     onDeleteSale: (String) -> Unit,
     onRequestDeleteItem: (CollectionItem) -> Unit,
     onConfirmDeleteItem: () -> Unit,
     onCancelDeleteItem: () -> Unit,
+    onRequestDeleteSale: (String) -> Unit,
+    onConfirmDeleteSale: () -> Unit,
+    onCancelDeleteSale: () -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -278,7 +283,7 @@ private fun CollectionContent(
                     item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
                     items(state.salesPageItems, key = { it.id }) { sold ->
-                        SwipeToDelete(onSwiped = { onDeleteSale(sold.id) }, autoDismiss = true) {
+                        SwipeToDelete(onSwiped = { onRequestDeleteSale(sold.id) }, autoDismiss = false) {
                             SoldCard(
                                 sold,
                                 onDetail = { onSaleDetail(sold) },
@@ -356,21 +361,27 @@ private fun CollectionContent(
                 onAdd = onAddItem,
                 allowSalesMode = true,
                 onAddSale = onAddSale,
-                // Tapping + while in Sales mode opens the sheet already on the Sales side.
-                initialSalesMode = state.mode == CollectionMode.SALES,
+                // Opened in Sales mode by the Sales-mode FAB or the modal's Sales-tab add button.
+                initialSalesMode = state.addSheetSalesMode,
                 initialSalePrice = state.editingSalePrice,
                 onEditSale = onEditSaleSubmit,
             )
         }
 
-        state.detailItem?.let { detail ->
-            SeeDetailsDialog(
-                item = detail,
+        // Merged See Details — collection copies and/or sales for the same set, with a toggle when both.
+        if (state.detailSetNumber != null && (state.detailItem != null || state.detailSales.isNotEmpty())) {
+            ItemDetailsDialog(
+                item = state.detailItem,
+                sales = state.detailSales,
                 onDismiss = onDismissDetail,
                 onDeleteCopy = onDeleteCopy,
-                onEditCopy = { copy -> onEditCopy(detail, copy) },
-                onAddItem = { onAddCopyForSet(detail) },
-                onSellCopy = { copy -> onSellCopyRequest(detail.setNumber, copy) },
+                onEditCopy = { copy -> state.detailItem?.let { onEditCopy(it, copy) } },
+                onSellCopy = { copy -> state.detailItem?.let { onSellCopyRequest(it.setNumber, copy) } },
+                onEditSale = onEditSale,
+                onDeleteSale = onDeleteSale,
+                onAddCollection = onDetailAddCollection,
+                onAddSale = onDetailAddSale,
+                initialTab = state.detailInitialTab,
             )
         }
 
@@ -383,20 +394,19 @@ private fun CollectionContent(
             )
         }
 
-        state.saleDetailItem?.let { sold ->
-            SaleDetailsDialog(
-                sold = sold,
-                onDismiss = onDismissSaleDetail,
-                onEdit = onEditSale,
-                onDelete = onDeleteSale,
-            )
-        }
-
         state.pendingDeleteItem?.let { item ->
             ConfirmDeleteDialog(
                 message = stringResource(R.string.collection_delete_confirm, item.name),
                 onConfirm = onConfirmDeleteItem,
                 onCancel = onCancelDeleteItem,
+            )
+        }
+
+        state.pendingDeleteSale?.let { sold ->
+            ConfirmDeleteDialog(
+                message = stringResource(R.string.sales_delete_confirm, sold.name),
+                onConfirm = onConfirmDeleteSale,
+                onCancel = onCancelDeleteSale,
             )
         }
 
@@ -479,7 +489,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else item.imageUrl,
+            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(item.setNumber),
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
@@ -679,7 +689,7 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else sold.imageUrl,
+            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(sold.setNumber),
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,

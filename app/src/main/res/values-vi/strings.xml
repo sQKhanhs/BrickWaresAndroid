@@ -34,11 +34,12 @@
     <string name="price_value">Giá trị</string>
     <string name="price_no_retail">Không có</string>
     <string name="price_no_retail_currency">Không có giá bán lẻ cho %1$s</string>
+    <string name="item_details_empty">Chưa có gì ở đây — thêm mới</string>
 
     <string name="action_add">Thêm</string>
     <string name="action_wishlist">Mong muốn</string>
     <string name="action_wishlisted">Đã lưu</string>
-    <string name="action_add_to_collection">Thêm vào bộ sưu tập</string>
+    <string name="action_add_to_collection">Thêm vào bộ sưu tập/đã bán</string>
     <string name="action_see_detail">Xem chi tiết</string>
     <string name="action_owned">Đã sở hữu</string>
     <string name="action_sign_in">Đăng nhập</string>
@@ -143,6 +144,7 @@
     <string name="collection_add_fab_cd">Thêm vào bộ sưu tập</string>
     <string name="collection_delete_title">Xóa bộ</string>
     <string name="collection_delete_confirm">Xóa \"%1$s\" và tất cả bản sao khỏi bộ sưu tập của bạn?</string>
+    <string name="sales_delete_confirm">Xóa lần bán \"%1$s\" này?</string>
     <string name="filter_all">Tất cả</string>
     <string name="filter_set">Bộ</string>
     <string name="filter_minifig">Minifig</string>

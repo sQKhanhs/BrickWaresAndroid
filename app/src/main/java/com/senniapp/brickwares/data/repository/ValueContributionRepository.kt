@@ -5,6 +5,7 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.model.ValueGuardTier
+import com.senniapp.brickwares.data.model.ValuePoint
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
@@ -36,9 +37,9 @@ class ValueContributionRepository(
     // The raw contribution points behind each cached value, kept so a locally-edited paid price can be
     // folded in and re-aggregated immediately (see [applyLocalPaid]) instead of waiting for a sync.
     @Volatile
-    private var setPoints: Map<Long, List<Pair<Double, Long>>> = emptyMap()
+    private var setPoints: Map<Long, List<ValuePoint>> = emptyMap()
     @Volatile
-    private var figPoints: Map<String, List<Pair<Double, Long>>> = emptyMap()
+    private var figPoints: Map<String, List<ValuePoint>> = emptyMap()
     private val _revision = MutableStateFlow(0)
     /** Bumps whenever [warm] refreshes the cache, so item-card flows can re-emit with values. */
     val revision: StateFlow<Int> = _revision.asStateFlow()
@@ -71,8 +72,8 @@ class ValueContributionRepository(
             val tier = ValueAggregator.tierOf(set?.status ?: Availability.AVAILABLE, set?.retiredYear ?: 0, set?.retiredMonth ?: 0, now)
             ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, tier, now)
         }
-        // Minifig values: no retail anchor, so the outlier guard is skipped (only value > 0).
-        figCache = byFig.mapValues { (_, rs) -> ValueAggregator.aggregate(rs.toPoints(), null, ValueGuardTier.AVAILABLE, now) }
+        // Minifig values: no retail anchor → the absolute ₫ sanity band applies (see ValueAggregator).
+        figCache = byFig.mapValues { (_, rs) -> ValueAggregator.aggregate(rs.toPoints(), null, ValueGuardTier.NO_ANCHOR, now) }
         _revision.value += 1
     }
 
@@ -82,10 +83,10 @@ class ValueContributionRepository(
      * derived from it) at once — without waiting for the sync round-trip that publishes the real
      * community contribution and re-[warm]s. [warm] later replaces this with the DB-accurate value.
      */
-    fun applyLocalPaid(setId: Long?, figNum: String?, paidVnd: Long, retail: Long?, tier: ValueGuardTier) {
+    fun applyLocalPaid(setId: Long?, figNum: String?, paidVnd: Long, retail: Long?, tier: ValueGuardTier, isSale: Boolean) {
         if (paidVnd <= 0L) return
         val now = System.currentTimeMillis()
-        val point = paidVnd.toDouble() to now
+        val point = ValuePoint(paidVnd.toDouble(), now, isSale)
         when {
             setId != null -> {
                 val pts = setPoints[setId].orEmpty() + point
@@ -118,9 +119,9 @@ class ValueContributionRepository(
             client.from(TABLE).select { filter { eq("set_id", setId) } }.decodeList<Row>()
         }
 
-    /** Current value for one minifig (no retail anchor — outlier guard is skipped). */
+    /** Current value for one minifig (no retail anchor → the absolute ₫ sanity band applies). */
     suspend fun forFig(figNum: String): CurrentValue =
-        aggregate(null, ValueGuardTier.AVAILABLE) {
+        aggregate(null, ValueGuardTier.NO_ANCHOR) {
             client.from(TABLE).select { filter { eq("fig_num", figNum) } }.decodeList<Row>()
         }
 
@@ -158,7 +159,8 @@ class ValueContributionRepository(
         return ValueAggregator.aggregate(rows.toPoints(), retailVnd, tier)
     }
 
-    private fun List<Row>.toPoints(): List<Pair<Double, Long>> = map { it.value to parseIso(it.submittedAt) }
+    private fun List<Row>.toPoints(): List<ValuePoint> =
+        map { ValuePoint(it.value, parseIso(it.submittedAt), it.source == "sale") }
 
     private fun parseIso(s: String?): Long =
         s?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L
@@ -169,6 +171,8 @@ class ValueContributionRepository(
         @SerialName("fig_num") val figNum: String? = null,
         val value: Double,
         @SerialName("submitted_at") val submittedAt: String? = null,
+        /** 'paid' or 'sale' — the available-tier floor is looser for a realized sale. */
+        val source: String? = null,
     )
 
     private companion object {

@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.collection
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
@@ -76,14 +77,44 @@ class CollectionViewModel(
     // ---- Add sheet ----
 
     fun onAddClick() {
-        _uiState.update { it.copy(showAddSheet = true, addSheetPreselect = null) }
+        _uiState.update { it.copy(showAddSheet = true, addSheetPreselect = null, addSheetSalesMode = it.mode == CollectionMode.SALES) }
     }
 
     fun onDismissAddSheet() {
         _uiState.update {
             it.copy(
-                showAddSheet = false, addSheetPreselect = null, editingCopy = null,
+                showAddSheet = false, addSheetPreselect = null, addSheetSalesMode = false, editingCopy = null,
                 editingSetNumber = null, editingSaleId = null, editingSalePrice = null,
+            )
+        }
+    }
+
+    /** The catalog record for the open detail set/fig (from a collection item, a sale, or the catalog). */
+    private fun detailCatalog(): CatalogSet? {
+        val sn = _uiState.value.detailSetNumber ?: return null
+        _uiState.value.items.find { it.setNumber == sn }?.let { return catalogFrom(it) }
+        _uiState.value.soldItems.find { it.setNumber == sn }?.let { return catalogFrom(it) }
+        return catalogRepo.all().firstOrNull { it.setNumber == sn }
+    }
+
+    /** From the merged modal's Collection tab (add-another-copy or empty-state): open the Add sheet. */
+    fun onDetailAddCollection() {
+        val cat = detailCatalog() ?: return
+        _uiState.update {
+            it.copy(
+                detailSetNumber = null, showAddSheet = true, addSheetPreselect = cat, addSheetSalesMode = false,
+                editingCopy = null, editingSetNumber = null, editingSaleId = null, editingSalePrice = null,
+            )
+        }
+    }
+
+    /** From the merged modal's Sales tab (add-another-sale or empty-state): open the Add sheet in Sales mode. */
+    fun onDetailAddSale() {
+        val cat = detailCatalog() ?: return
+        _uiState.update {
+            it.copy(
+                detailSetNumber = null, showAddSheet = true, addSheetPreselect = cat, addSheetSalesMode = true,
+                editingCopy = null, editingSetNumber = null, editingSaleId = null, editingSalePrice = null,
             )
         }
     }
@@ -125,19 +156,35 @@ class CollectionViewModel(
     // ---- Sold-item See Details (view / edit / delete a sale) ----
 
     fun onSaleDetail(sold: SoldItem) {
-        _uiState.update { it.copy(saleDetailId = sold.id) }
-    }
-
-    fun onDismissSaleDetail() {
-        _uiState.update { it.copy(saleDetailId = null) }
+        _uiState.update { it.copy(detailSetNumber = sold.setNumber, detailInitialTab = ItemDetailsTab.SALES) }
     }
 
     fun onDeleteSale(saleId: String) {
         val name = _uiState.value.soldItems.find { it.id == saleId }?.name
         repository.removeSale(saleId)
+        // Leave the merged modal open — it closes itself once the set has no copies and no sales left.
+        _uiState.update {
+            it.copy(toastMessage = name?.let { n -> UiText.Res(R.string.toast_removed_sale, listOf(n)) } ?: it.toastMessage)
+        }
+    }
+
+    // ---- Swipe-to-delete a sale (with confirmation, mirroring the collection list) ----
+
+    fun onRequestDeleteSale(saleId: String) {
+        _uiState.update { it.copy(pendingDeleteSaleId = saleId) }
+    }
+
+    fun onCancelDeleteSale() {
+        _uiState.update { it.copy(pendingDeleteSaleId = null) }
+    }
+
+    fun onConfirmDeleteSale() {
+        val id = _uiState.value.pendingDeleteSaleId ?: return
+        val name = _uiState.value.soldItems.find { it.id == id }?.name
+        repository.removeSale(id)
         _uiState.update {
             it.copy(
-                saleDetailId = null,
+                pendingDeleteSaleId = null,
                 toastMessage = name?.let { n -> UiText.Res(R.string.toast_removed_sale, listOf(n)) } ?: it.toastMessage,
             )
         }
@@ -147,7 +194,7 @@ class CollectionViewModel(
     fun onEditSale(sold: SoldItem) {
         _uiState.update {
             it.copy(
-                saleDetailId = null, showAddSheet = true, addSheetPreselect = catalogFrom(sold),
+                detailSetNumber = null, showAddSheet = true, addSheetPreselect = catalogFrom(sold),
                 editingCopy = Copy(
                     id = sold.id, condition = sold.condition, qty = sold.quantity,
                     pricePaid = sold.pricePaid, dateAdded = sold.soldOn ?: "", note = sold.note,
@@ -202,7 +249,7 @@ class CollectionViewModel(
     // ---- See Details ----
 
     fun onItemDetail(item: CollectionItem) {
-        _uiState.update { it.copy(detailSetNumber = item.setNumber) }
+        _uiState.update { it.copy(detailSetNumber = item.setNumber, detailInitialTab = ItemDetailsTab.COLLECTION) }
     }
 
     fun onDismissDetail() {
@@ -235,22 +282,12 @@ class CollectionViewModel(
         _uiState.update { it.copy(toastMessage = null) }
     }
 
-    /** From the See Details "Add Item" button: open the Add sheet pre-filled with this set. */
-    fun onAddCopyForSet(item: CollectionItem) {
-        _uiState.update {
-            it.copy(
-                detailSetNumber = null, showAddSheet = true, addSheetPreselect = catalogFrom(item),
-                editingCopy = null, editingSetNumber = null,
-            )
-        }
-    }
-
     /** From the See Details edit button: open the Add sheet in edit mode for this copy. */
     fun onEditCopy(item: CollectionItem, copy: Copy) {
         _uiState.update {
             it.copy(
                 detailSetNumber = null, showAddSheet = true, addSheetPreselect = catalogFrom(item),
-                editingCopy = copy, editingSetNumber = item.setNumber,
+                addSheetSalesMode = false, editingCopy = copy, editingSetNumber = item.setNumber,
             )
         }
     }

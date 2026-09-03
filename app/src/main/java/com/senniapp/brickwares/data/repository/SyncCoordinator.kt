@@ -107,6 +107,7 @@ class SyncCoordinator(
         salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             client.from("sales").upsert(dirty.mapNotNull { it.toRemote(uid) })
             salesDao.clearDirty(dirty.map { it.id })
+            contributeSaleValues(dirty) // a realized sale price is a community value point too (Decision 17)
         }
     }
 
@@ -128,9 +129,34 @@ class SyncCoordinator(
                         row.setId?.let { put("p_set_id", it) }
                         row.figNum?.let { put("p_fig_num", it) }
                         put("p_value", row.pricePaid)
+                        put("p_source", "paid")
                     },
                 )
             }.onFailure { Log.w(TAG, "contribute_value failed for ${row.id}", it) }
+        }
+    }
+
+    /**
+     * Decision 17: publish each newly-synced SALE price as a community value point (same one-row-per-
+     * user-per-item upsert as paid prices). Runs after the sale rows are upserted so the owner-gate
+     * (now sales-aware) passes; when a user has both a paid copy and a sale of the same item, the sale
+     * is contributed last in a push and so wins the single point — a realized sale is the better signal.
+     */
+    private suspend fun contributeSaleValues(rows: List<SalesEntity>) {
+        rows.forEach { row ->
+            if (row.deleted || row.salePrice <= 0L) return@forEach
+            if ((row.setId == null) == (row.figNum == null)) return@forEach // need exactly one ref
+            runCatching {
+                client.postgrest.rpc(
+                    "contribute_value",
+                    buildJsonObject {
+                        row.setId?.let { put("p_set_id", it) }
+                        row.figNum?.let { put("p_fig_num", it) }
+                        put("p_value", row.salePrice)
+                        put("p_source", "sale")
+                    },
+                )
+            }.onFailure { Log.w(TAG, "contribute_value (sale) failed for ${row.id}", it) }
         }
     }
 

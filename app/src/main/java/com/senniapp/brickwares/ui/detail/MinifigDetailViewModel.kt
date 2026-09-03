@@ -9,6 +9,7 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.Minifig
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
@@ -41,6 +42,7 @@ class MinifigDetailViewModel(
     private var figNum: String? = null
     private var collectionItems: List<CollectionItem> = emptyList()
     private var wishlist: List<WishlistItem> = emptyList()
+    private var soldItems: List<SoldItem> = emptyList()
     private var valueKey: String? = null
 
     init {
@@ -51,6 +53,7 @@ class MinifigDetailViewModel(
         }
         viewModelScope.launch { repository.getCollectionItems().collect { collectionItems = it; rebuild() } }
         viewModelScope.launch { repository.getWishlistItems().collect { wishlist = it; rebuild() } }
+        viewModelScope.launch { repository.getSoldItems().collect { soldItems = it; rebuild() } }
     }
 
     fun retry() {
@@ -77,6 +80,7 @@ class MinifigDetailViewModel(
         // obtainable (available / exclusive / GWP / pending); else Retired (all retired, or
         // promo/magazine — never sold at retail). Null = unknown (no sets resolved / catalog not loaded).
         val retired = if (fig == null || appearsIn.isEmpty()) null else appearsIn.none { it.status in OBTAINABLE }
+        val figSales = soldItems.filter { it.itemType == ItemType.MINIFIG && it.setNumber == fn }
         _uiState.update {
             it.copy(
                 loaded = true,
@@ -86,10 +90,12 @@ class MinifigDetailViewModel(
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 ownedItem = owned,
-                // Close the copies dialog if the item is no longer owned (e.g. its last copy was
-                // deleted) so it doesn't re-open when the item is re-added.
-                showCopies = owned != null && it.showCopies,
+                // Keep the See Details modal open while the fig still has copies OR sales; close it
+                // when both are gone (so it doesn't re-open when the item is re-added).
+                showCopies = (owned != null || figSales.isNotEmpty()) && it.showCopies,
                 isWishlisted = wishlist.any { w -> w.itemType == ItemType.MINIFIG && w.setNumber == fn },
+                isSold = figSales.isNotEmpty(),
+                sales = figSales,
                 appearsIn = appearsIn,
                 retired = retired,
                 ownedNumbers = collectionItems.mapTo(HashSet()) { c -> c.setNumber },
@@ -120,7 +126,7 @@ class MinifigDetailViewModel(
 
     // ---- Hero add / wishlist ----
 
-    fun onAddClick() = _uiState.update { it.copy(addTarget = it.fig?.let(::figAsCatalogSet)) }
+    fun onAddClick() = _uiState.update { it.copy(addTarget = it.fig?.let(::figAsCatalogSet), addSalesMode = false) }
 
     fun onAddToWishlist() {
         val fig = _uiState.value.fig ?: return
@@ -143,7 +149,7 @@ class MinifigDetailViewModel(
 
     // ---- "Appears in" set cards (act on a set, not the minifig) ----
 
-    fun onSetAddCollection(set: CatalogSet) = _uiState.update { it.copy(addTarget = set) }
+    fun onSetAddCollection(set: CatalogSet) = _uiState.update { it.copy(addTarget = set, addSalesMode = false) }
     fun onSetAddWishlist(set: CatalogSet) = wishlist(set)
     fun onSetRemoveWishlist(set: CatalogSet) {
         repository.removeFromWishlist(set.setNumber)
@@ -165,7 +171,7 @@ class MinifigDetailViewModel(
 
     // ---- Add sheet ----
 
-    fun onDismissAdd() = _uiState.update { it.copy(addTarget = null, editingCopy = null) }
+    fun onDismissAdd() = _uiState.update { it.copy(addTarget = null, editingCopy = null, addSalesMode = false) }
 
     fun onAddSubmit(item: CollectionItem) {
         if (_uiState.value.editingCopy != null) {
@@ -180,14 +186,28 @@ class MinifigDetailViewModel(
         refreshValueSoon()
     }
 
+    /** Add sheet in Sales mode: record a standalone minifig sale (does not touch the collection). */
+    fun onAddSaleSubmit(item: CollectionItem, salePrice: Long) {
+        repository.addSale(item, salePrice)
+        _uiState.update {
+            it.copy(addTarget = null, editingCopy = null, addSalesMode = false, toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name)))
+        }
+        refreshValueSoon()
+    }
+
     // ---- Owned-copies See Details ----
 
     fun onSeeCopies() = _uiState.update { it.copy(showCopies = true) }
     fun onDismissCopies() = _uiState.update { it.copy(showCopies = false) }
     fun onDeleteCopy(setNumber: String, copyId: String) = repository.removeCopy(setNumber, copyId)
 
-    fun onAddCopy() = _uiState.update { it.copy(showCopies = false, editingCopy = null, addTarget = it.fig?.let(::figAsCatalogSet)) }
-    fun onEditCopy(copy: Copy) = _uiState.update { it.copy(showCopies = false, editingCopy = copy, addTarget = it.fig?.let(::figAsCatalogSet)) }
+    /** Delete a sale shown in the merged See Details modal (sale edit lives on the Collection tab). */
+    fun onDeleteSale(saleId: String) = repository.removeSale(saleId)
+
+    fun onAddCopy() = _uiState.update { it.copy(showCopies = false, editingCopy = null, addSalesMode = false, addTarget = it.fig?.let(::figAsCatalogSet)) }
+    /** Add a sale of this minifig (opens the Add sheet in Sales mode) — from the modal's Sales tab. */
+    fun onAddSaleForFig() = _uiState.update { it.copy(showCopies = false, editingCopy = null, addSalesMode = true, addTarget = it.fig?.let(::figAsCatalogSet)) }
+    fun onEditCopy(copy: Copy) = _uiState.update { it.copy(showCopies = false, editingCopy = copy, addSalesMode = false, addTarget = it.fig?.let(::figAsCatalogSet)) }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
 

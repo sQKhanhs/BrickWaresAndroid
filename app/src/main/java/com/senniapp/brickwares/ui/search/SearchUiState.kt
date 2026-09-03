@@ -60,6 +60,8 @@ data class SearchUiState(
     val wishlistedNumbers: Set<String> = emptySet(),
     /** Set numbers already in the collection — result cards show "See Detail" instead of Add/Wishlist. */
     val ownedNumbers: Set<String> = emptySet(),
+    /** Set/fig numbers the user has sold — also show "See Detail" (the detail page surfaces the sale). */
+    val soldNumbers: Set<String> = emptySet(),
     // Theme-detail view (non-null theme = open, overrides the search/browse views).
     val themeDetail: String? = null,
     val themeDetailSub: String = ALL_SUBTHEMES,

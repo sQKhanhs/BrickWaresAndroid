@@ -68,6 +68,13 @@ class SearchViewModel(
                 _uiState.update { it.copy(ownedNumbers = items.map { c -> c.setNumber }.toSet()) }
             }
         }
+        // Observe sales too, so a set the user has sold also shows "See Detail" (opens the detail page,
+        // which surfaces the sale in the merged modal).
+        viewModelScope.launch {
+            repository.getSoldItems().collect { items ->
+                _uiState.update { it.copy(soldNumbers = items.map { s -> s.setNumber }.toSet()) }
+            }
+        }
     }
 
     /** Retry after a catalog load failure (the error fallback's Retry button). */

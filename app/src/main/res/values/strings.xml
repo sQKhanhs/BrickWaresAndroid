@@ -34,11 +34,12 @@
     <string name="price_value">Value</string>
     <string name="price_no_retail">No retail price</string>
     <string name="price_no_retail_currency">No retail price for %1$s</string>
+    <string name="item_details_empty">Nothing here yet — add something</string>
 
     <string name="action_add">Add</string>
     <string name="action_wishlist">Wishlist</string>
     <string name="action_wishlisted">Wishlisted</string>
-    <string name="action_add_to_collection">Add to Collection</string>
+    <string name="action_add_to_collection">Add to Collection/Sales</string>
     <string name="action_see_detail">See Detail</string>
     <string name="action_owned">Owned</string>
     <string name="action_sign_in">Sign In</string>
@@ -144,6 +145,7 @@
     <string name="collection_add_fab_cd">Add to collection</string>
     <string name="collection_delete_title">Delete set</string>
     <string name="collection_delete_confirm">Delete \"%1$s\" and all its copies from your collection?</string>
+    <string name="sales_delete_confirm">Delete this sale of \"%1$s\"?</string>
     <string name="filter_all">All</string>
     <string name="filter_set">Set</string>
     <string name="filter_minifig">Minifig</string>

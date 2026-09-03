@@ -182,6 +182,7 @@ private fun SearchContent(
                 sort = state.themeDetailSort,
                 wishlistedNumbers = state.wishlistedNumbers,
                 ownedNumbers = state.ownedNumbers,
+                soldNumbers = state.soldNumbers,
                 totalCount = state.themeDetailResults.size,
                 currentPage = state.themeDetailCurrentPage,
                 pageCount = state.themeDetailPageCount,
@@ -242,7 +243,7 @@ private fun SearchContent(
                             ResultCard(
                                 set = set,
                                 wishlisted = set.setNumber in state.wishlistedNumbers,
-                                owned = set.setNumber in state.ownedNumbers,
+                                owned = set.setNumber in state.ownedNumbers || set.setNumber in state.soldNumbers,
                                 onOpenDetail = { onOpenSetDetail(set.id) },
                                 onAddCollection = { onAddToCollectionClick(set) },
                                 onAddWishlist = { onAddToWishlist(set) },
@@ -556,6 +557,7 @@ private fun ThemeDetailView(
     sort: ThemeDetailSort,
     wishlistedNumbers: Set<String>,
     ownedNumbers: Set<String>,
+    soldNumbers: Set<String>,
     totalCount: Int,
     currentPage: Int,
     pageCount: Int,
@@ -616,7 +618,7 @@ private fun ThemeDetailView(
             ResultCard(
                 set = set,
                 wishlisted = set.setNumber in wishlistedNumbers,
-                owned = set.setNumber in ownedNumbers,
+                owned = set.setNumber in ownedNumbers || set.setNumber in soldNumbers,
                 onOpenDetail = { onOpenSetDetail(set.id) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },

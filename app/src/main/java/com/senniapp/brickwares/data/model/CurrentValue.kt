@@ -12,9 +12,16 @@ enum class ValueFreshness { FRESH, STALE, NONE }
 /**
  * Availability tier for the outlier guard's retail-relative bounds: an available set trades near
  * retail, a recently-retired one (< 1 year) has softened, and a long-retired one (>= 1 year) can sit
- * well below retail on the used market. See [ValueAggregator.tierOf].
+ * well below retail. NO_ANCHOR (promo / magazine / GWP, which have no real retail price) skips the
+ * guard entirely. See [ValueAggregator.tierOf].
  */
-enum class ValueGuardTier { AVAILABLE, RETIRED_RECENT, RETIRED_OLD }
+enum class ValueGuardTier { AVAILABLE, RETIRED_RECENT, RETIRED_OLD, NO_ANCHOR }
+
+/**
+ * One contributed value point for [ValueAggregator]: the amount, its submission time, and whether it
+ * came from a realized **sale** (vs a paid price) — the available-tier floor is looser for a sale.
+ */
+data class ValuePoint(val value: Double, val submittedAtMs: Long, val isSale: Boolean = false)
 
 /**
  * The community "current value" for a set or minifig — a recency-tiered median over the public
@@ -43,10 +50,10 @@ data class CurrentValue(
  *
  * Rules:
  *  - **Outlier guard** — when a retail anchor is known, drop points outside a retail-relative band
- *    before aggregating. The lower bound is tiered by [ValueGuardTier]: reject below **60%** of
- *    retail for an available set, **40%** for a set retired < 1 year, **20%** for one retired >= 1
- *    year. The upper bound is 10× (available) or 50× (retired) — a fat-finger high barely moves a
- *    median but wrecks a small sample's tails.
+ *    before aggregating (skipped entirely for NO_ANCHOR — promo/magazine/GWP — and for minifigs /
+ *    no-price sets). Lower bound: **60% paid / 70% sale** (available), **50%** (retired < 2yr),
+ *    **40%** (retired >= 2yr). Upper bound: **5×** (available), **8×** (retired < 2yr), **20×**
+ *    (retired >= 2yr) — a fat-finger high barely moves a median but wrecks a small sample's tails.
  *  - **Median, not average** — resists the remaining spread.
  *  - **Tiered recency** — if any point falls in the last ~24 months, the value is the median of
  *    *only* those (recent wins → FRESH); otherwise fall back to the median of all remaining points
@@ -55,23 +62,32 @@ data class CurrentValue(
 object ValueAggregator {
     /** ~24 months. Decision 17's primary window. */
     private const val RECENT_WINDOW_DAYS = 730L
-    // Lower outlier bound (reject a value below this fraction of retail), tiered by availability.
-    private const val OUTLIER_MIN_AVAILABLE = 0.60       // available: trades near retail
-    private const val OUTLIER_MIN_RETIRED_RECENT = 0.40  // retired < 1 year
-    private const val OUTLIER_MIN_RETIRED_OLD = 0.20     // retired >= 1 year
-    // Upper outlier bound (reject a value above this multiple of retail).
-    private const val OUTLIER_MAX_AVAILABLE = 10.0       // available sets stay near retail
-    private const val OUTLIER_MAX_RETIRED = 50.0         // retired sets can genuinely appreciate
+    // Lower outlier bound (reject below this fraction of retail). The available tier's floor is looser
+    // for a realized sale than for a paid price; retired tiers don't distinguish source.
+    private const val OUTLIER_MIN_AVAILABLE_PAID = 0.60
+    private const val OUTLIER_MIN_AVAILABLE_SALE = 0.70
+    private const val OUTLIER_MIN_RETIRED_RECENT = 0.50  // retired < 2 years
+    private const val OUTLIER_MIN_RETIRED_OLD = 0.40     // retired >= 2 years
+    // Upper outlier bound (reject above this multiple of retail), tiered.
+    private const val OUTLIER_MAX_AVAILABLE = 5.0
+    private const val OUTLIER_MAX_RETIRED_RECENT = 8.0
+    private const val OUTLIER_MAX_RETIRED_OLD = 20.0
+    // Split between the two retired tiers: retired < / >= this many days.
+    private const val RETIRED_RECENT_DAYS = 730L         // 2 years
+    // Absolute ₫ sanity band for items with NO retail anchor (promo/magazine/GWP, minifigs, no-price
+    // sets): with nothing to compare against, bound the raw value instead of accepting anything. The
+    // cap (~1B₫ ≈ $38k) clears the priciest sealed sets and all normal minifigs while rejecting
+    // fat-fingers and the gold-minifig one-offs (~$200k).
+    private const val ABS_MIN_VND = 10_000.0
+    private const val ABS_MAX_VND = 1_000_000_000.0
     private const val DAY_MS = 86_400_000L
-    private const val YEAR_DAYS = 365L
 
     /**
      * The [ValueGuardTier] for a set from its availability [status]:
-     *  - RETIRED → RETIRED_RECENT (< 1 year since retirement) or RETIRED_OLD (>= 1 year), from the
+     *  - RETIRED → RETIRED_RECENT (< 2 years since retirement) or RETIRED_OLD (>= 2 years), from the
      *    catalog's [retiredYear]/[retiredMonth]; an unknown date falls back to RETIRED_OLD.
-     *  - **PROMO / MAGAZINE** → treated as retired even though they never carry a RETIRED status
-     *    (they're never sold at retail and Brickset gives them no exit date). With no retirement date
-     *    to age, they use RETIRED_OLD.
+     *  - **PROMO / MAGAZINE / GWP** → NO_ANCHOR: they have no real retail price to anchor against
+     *    (never sold at retail), so the guard is skipped for them.
      *  - anything else → AVAILABLE.
      */
     fun tierOf(
@@ -80,49 +96,61 @@ object ValueAggregator {
         retiredMonth: Int,
         nowMs: Long = System.currentTimeMillis(),
     ): ValueGuardTier {
-        if (status == Availability.PROMO || status == Availability.MAGAZINE) return ValueGuardTier.RETIRED_OLD
+        if (status == Availability.PROMO || status == Availability.MAGAZINE || status == Availability.GWP) {
+            return ValueGuardTier.NO_ANCHOR
+        }
         if (status != Availability.RETIRED) return ValueGuardTier.AVAILABLE
         if (retiredYear <= 0) return ValueGuardTier.RETIRED_OLD
         val retiredDate = LocalDate.of(retiredYear, retiredMonth.coerceIn(1, 12), 1)
         val today = Instant.ofEpochMilli(nowMs).atZone(ZoneId.systemDefault()).toLocalDate()
         val ageDays = ChronoUnit.DAYS.between(retiredDate, today)
-        return if (ageDays < YEAR_DAYS) ValueGuardTier.RETIRED_RECENT else ValueGuardTier.RETIRED_OLD
+        return if (ageDays < RETIRED_RECENT_DAYS) ValueGuardTier.RETIRED_RECENT else ValueGuardTier.RETIRED_OLD
     }
 
     /**
-     * @param points contributions as (valueVnd, submittedAtEpochMs).
-     * @param retailVnd retail anchor for the outlier guard; null skips the guard.
-     * @param tier availability tier setting the guard's retail-relative bounds (see [tierOf]).
+     * @param points contributed value points (value, submittedAt, isSale).
+     * @param retailVnd retail anchor for the guard; null (or a NO_ANCHOR [tier]) uses the absolute band.
+     * @param tier availability tier setting the guard's bounds (see [tierOf]).
      */
     fun aggregate(
-        points: List<Pair<Double, Long>>,
+        points: List<ValuePoint>,
         retailVnd: Long?,
         tier: ValueGuardTier = ValueGuardTier.AVAILABLE,
         nowMs: Long = System.currentTimeMillis(),
     ): CurrentValue {
-        val guarded = if (retailVnd != null && retailVnd > 0) {
-            val minF = when (tier) {
-                ValueGuardTier.AVAILABLE -> OUTLIER_MIN_AVAILABLE
-                ValueGuardTier.RETIRED_RECENT -> OUTLIER_MIN_RETIRED_RECENT
-                ValueGuardTier.RETIRED_OLD -> OUTLIER_MIN_RETIRED_OLD
+        val anchored = retailVnd != null && retailVnd > 0 && tier != ValueGuardTier.NO_ANCHOR
+        val guarded = if (anchored) {
+            val maxF = when (tier) {
+                ValueGuardTier.AVAILABLE -> OUTLIER_MAX_AVAILABLE
+                ValueGuardTier.RETIRED_RECENT -> OUTLIER_MAX_RETIRED_RECENT
+                ValueGuardTier.RETIRED_OLD -> OUTLIER_MAX_RETIRED_OLD
+                ValueGuardTier.NO_ANCHOR -> 0.0 // unreachable (anchored is false)
             }
-            val maxF = if (tier == ValueGuardTier.AVAILABLE) OUTLIER_MAX_AVAILABLE else OUTLIER_MAX_RETIRED
-            val lo = retailVnd * minF
-            val hi = retailVnd * maxF
-            points.filter { it.first in lo..hi }
+            val hi = retailVnd!! * maxF
+            points.filter { p ->
+                val minF = when (tier) {
+                    // Available floor is looser for a realized sale than a paid price.
+                    ValueGuardTier.AVAILABLE -> if (p.isSale) OUTLIER_MIN_AVAILABLE_SALE else OUTLIER_MIN_AVAILABLE_PAID
+                    ValueGuardTier.RETIRED_RECENT -> OUTLIER_MIN_RETIRED_RECENT
+                    ValueGuardTier.RETIRED_OLD -> OUTLIER_MIN_RETIRED_OLD
+                    ValueGuardTier.NO_ANCHOR -> 0.0
+                }
+                p.value in (retailVnd * minF)..hi
+            }
         } else {
-            points.filter { it.first > 0 }
+            // No retail to compare against → bound the raw value with the absolute sanity band.
+            points.filter { it.value in ABS_MIN_VND..ABS_MAX_VND }
         }
         if (guarded.isEmpty()) return CurrentValue.NONE
 
         val cutoff = nowMs - RECENT_WINDOW_DAYS * DAY_MS
-        val recent = guarded.filter { it.second >= cutoff }
+        val recent = guarded.filter { it.submittedAtMs >= cutoff }
         val fresh = recent.isNotEmpty()
         val used = if (fresh) recent else guarded
 
-        val newestAgeDays = ((nowMs - guarded.maxOf { it.second }) / DAY_MS).toInt().coerceAtLeast(0)
+        val newestAgeDays = ((nowMs - guarded.maxOf { it.submittedAtMs }) / DAY_MS).toInt().coerceAtLeast(0)
         return CurrentValue(
-            amountVnd = roundToVnd(median(used.map { it.first })),
+            amountVnd = roundToVnd(median(used.map { it.value })),
             contributionCount = used.size,
             freshness = if (fresh) ValueFreshness.FRESH else ValueFreshness.STALE,
             newestAgeDays = newestAgeDays,

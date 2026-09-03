@@ -5,6 +5,7 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.Minifig
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.components.UiText
 
 /**
@@ -29,6 +30,10 @@ data class SetDetailUiState(
     /** When non-null, the Add sheet is in edit mode for this copy. */
     val editingCopy: Copy? = null,
     val isWishlisted: Boolean = false,
+    /** The hero set has one or more sale records — the hero shows "See Detail" when owned OR sold. */
+    val isSold: Boolean = false,
+    /** Sale records for the set whose copies modal is open (hero or a recommended set). */
+    val copiesSales: List<SoldItem> = emptyList(),
     /** The minifigs this set contains (from the `set_minifigs` inventory), for the minifig grid. */
     val minifigs: List<Minifig> = emptyList(),
     /** Recommended sets (a stable snapshot per page open; see [SetDetailViewModel.rebuild]). */
@@ -38,6 +43,8 @@ data class SetDetailUiState(
     val wishlistedNumbers: Set<String> = emptySet(),
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
+    /** Open the Add sheet in Sales mode (the copies modal's Sales-tab add button). */
+    val addSalesMode: Boolean = false,
     /** When non-null, the Sell dialog is open for this owned copy. */
     val sellCopy: Copy? = null,
     /** The catalog isn't available (offline / not yet loaded) so the detail can't be shown. */

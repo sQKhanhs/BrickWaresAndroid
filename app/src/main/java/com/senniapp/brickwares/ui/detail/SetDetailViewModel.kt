@@ -7,6 +7,7 @@ import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
@@ -42,6 +43,7 @@ class SetDetailViewModel(
     private var catalogKey: String? = null
     private var collectionItems: List<CollectionItem> = emptyList()
     private var wishlist: List<WishlistItem> = emptyList()
+    private var soldItems: List<SoldItem> = emptyList()
 
     // Recommendation snapshot: computed once per page open (keyed by the resolved set id) so cards
     // stay put as the user adds/wishlists here; a fresh batch is drawn on the next open (see [load]).
@@ -63,6 +65,9 @@ class SetDetailViewModel(
         }
         viewModelScope.launch {
             repository.getWishlistItems().collect { wishlist = it; rebuild() }
+        }
+        viewModelScope.launch {
+            repository.getSoldItems().collect { soldItems = it; rebuild() }
         }
     }
 
@@ -93,8 +98,11 @@ class SetDetailViewModel(
         // Keep the open copies dialog live (hero OR a recommended set), so edits/deletes/sells reflect.
         // If its item is no longer owned (last copy deleted), close it — clearing copiesSetNumber too,
         // so it doesn't silently re-open when that set is added again later.
-        val copiesItem = _uiState.value.copiesSetNumber?.let { cs -> collectionItems.find { it.setNumber == cs } }
-        val copiesSn = copiesItem?.setNumber
+        val openCs = _uiState.value.copiesSetNumber
+        val copiesItem = openCs?.let { cs -> collectionItems.find { it.setNumber == cs } }
+        val copiesSales = openCs?.let { cs -> soldItems.filter { s -> s.setNumber == cs } } ?: emptyList()
+        // Keep the modal open while the set still has copies OR sales; close it when both are gone.
+        val copiesSn = openCs?.takeIf { copiesItem != null || copiesSales.isNotEmpty() }
         val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
         val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
         // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — captured ONCE per
@@ -121,6 +129,8 @@ class SetDetailViewModel(
                 totalPaid = owned?.totalPaid ?: 0L,
                 ownedItem = owned,
                 isWishlisted = wishlist.any { w -> w.setNumber == sn },
+                isSold = soldItems.any { s -> s.setNumber == sn },
+                copiesSales = copiesSales,
                 minifigs = if (set == null) emptyList() else catalogRepo.minifigsForSet(set.setId),
                 related = if (set == null) emptyList() else relatedSnapshot,
                 ownedNumbers = ownedNumbers,
@@ -166,14 +176,14 @@ class SetDetailViewModel(
     }
 
     fun onAddToCollectionClick() {
-        _uiState.update { it.copy(addTarget = it.set) }
+        _uiState.update { it.copy(addTarget = it.set, addSalesMode = false) }
     }
 
     // ---- Recommendation cards (act on a given related set, not the hero set) ----
 
     /** From a recommendation card's Add button: open the Add sheet targeted at that set. */
     fun onAddRecommendToCollection(set: CatalogSet) {
-        _uiState.update { it.copy(addTarget = set) }
+        _uiState.update { it.copy(addTarget = set, addSalesMode = false) }
     }
 
     /** From a recommendation card's Wishlist button. */
@@ -188,7 +198,11 @@ class SetDetailViewModel(
     /** From a recommendation card's "See Detail" (owned) button — opens its copies dialog in place. */
     fun onRecommendSeeCopies(set: CatalogSet) {
         _uiState.update {
-            it.copy(copiesSetNumber = set.setNumber, copiesItem = collectionItems.find { c -> c.setNumber == set.setNumber })
+            it.copy(
+                copiesSetNumber = set.setNumber,
+                copiesItem = collectionItems.find { c -> c.setNumber == set.setNumber },
+                copiesSales = soldItems.filter { s -> s.setNumber == set.setNumber },
+            )
         }
     }
 
@@ -206,7 +220,7 @@ class SetDetailViewModel(
     }
 
     fun onDismissAdd() {
-        _uiState.update { it.copy(addTarget = null, editingCopy = null) }
+        _uiState.update { it.copy(addTarget = null, editingCopy = null, addSalesMode = false) }
     }
 
     fun onAddToCollectionSubmit(item: CollectionItem) {
@@ -257,19 +271,33 @@ class SetDetailViewModel(
 
     // ---- Owned-item copies (the See-Details dialog — hero set or a recommended owned set) ----
 
-    fun onSeeCopies() = _uiState.update { it.copy(copiesSetNumber = it.set?.setNumber, copiesItem = it.ownedItem) }
-    fun onDismissCopies() = _uiState.update { it.copy(copiesSetNumber = null, copiesItem = null) }
+    fun onSeeCopies() = _uiState.update {
+        val sn = it.set?.setNumber
+        it.copy(
+            copiesSetNumber = sn, copiesItem = it.ownedItem,
+            copiesSales = sn?.let { s -> soldItems.filter { x -> x.setNumber == s } } ?: emptyList(),
+        )
+    }
+    fun onDismissCopies() = _uiState.update { it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList()) }
+
+    /** Delete a sale shown in the merged See Details modal (view-only edit lives on the Collection tab). */
+    fun onDeleteSale(saleId: String) = repository.removeSale(saleId)
 
     fun onDeleteCopy(setNumber: String, copyId: String) = repository.removeCopy(setNumber, copyId)
 
-    /** Add another copy of the copies dialog's set (opens the Add sheet, fresh copy). */
+    /** Add another copy of the copies dialog's set (opens the Add sheet in Collection mode). */
     fun onAddCopyForSet() = _uiState.update {
-        it.copy(copiesSetNumber = null, copiesItem = null, editingCopy = null, addTarget = it.copiesTargetSet())
+        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = false, addTarget = it.copiesTargetSet())
+    }
+
+    /** Add a sale of the copies dialog's set (opens the Add sheet in Sales mode). */
+    fun onAddSaleForSet() = _uiState.update {
+        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = true, addTarget = it.copiesTargetSet())
     }
 
     /** Edit an existing copy of the copies dialog's set (opens the Add sheet in edit mode). */
     fun onEditCopy(copy: Copy) = _uiState.update {
-        it.copy(copiesSetNumber = null, copiesItem = null, editingCopy = copy, addTarget = it.copiesTargetSet())
+        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = copy, addSalesMode = false, addTarget = it.copiesTargetSet())
     }
 
     /** The exact [CatalogSet] the copies dialog is for — the hero or a recommended set (right variant). */

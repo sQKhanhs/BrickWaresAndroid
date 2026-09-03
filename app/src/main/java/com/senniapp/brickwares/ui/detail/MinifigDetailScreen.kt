@@ -42,7 +42,8 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ErrorScreen
-import com.senniapp.brickwares.ui.components.SeeDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
@@ -107,7 +108,7 @@ fun MinifigDetailScreen(
                 SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 40.dp, corner = 12.dp)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(fig.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
-                    if (state.isOwned) {
+                    if (state.isOwned || state.isSold) {
                         MinifigActionButton(
                             iconRes = R.drawable.ic_bw_check,
                             label = stringResource(R.string.action_see_detail),
@@ -189,18 +190,25 @@ fun MinifigDetailScreen(
                 onDismiss = viewModel::onDismissAdd,
                 onSearch = viewModel::searchCatalog,
                 onAdd = viewModel::onAddSubmit,
+                allowSalesMode = true,
+                onAddSale = viewModel::onAddSaleSubmit,
+                initialSalesMode = state.addSalesMode,
             )
         }
 
-        val ownedItem = state.ownedItem
-        if (state.showCopies && ownedItem != null) {
-            SeeDetailsDialog(
-                item = ownedItem,
+        if (state.showCopies && (state.ownedItem != null || state.sales.isNotEmpty())) {
+            ItemDetailsDialog(
+                item = state.ownedItem,
+                sales = state.sales,
                 onDismiss = viewModel::onDismissCopies,
                 onDeleteCopy = viewModel::onDeleteCopy,
                 onEditCopy = viewModel::onEditCopy,
-                onAddItem = viewModel::onAddCopy,
+                onDeleteSale = viewModel::onDeleteSale,
+                onAddCollection = viewModel::onAddCopy,
+                onAddSale = viewModel::onAddSaleForFig,
                 allowSell = false,
+                salesEditable = false, // sale edit lives on the Collection > Sales tab
+                initialTab = if (state.ownedItem != null) ItemDetailsTab.COLLECTION else ItemDetailsTab.SALES,
             )
         }
 

@@ -8,6 +8,7 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
+import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.PAGE_SIZE
 
 /** Collection tab has two modes: the collection view and its Sales sub-view. */
@@ -31,15 +32,18 @@ data class CollectionUiState(
     val salesSummary: SalesSummary? = null,
     val showAddSheet: Boolean = false,
     val addSheetPreselect: CatalogSet? = null,
+    /** Open the Add sheet in Sales mode (Collection FAB in Sales mode, or the modal's Sales-tab add). */
+    val addSheetSalesMode: Boolean = false,
     /** When non-null the Add sheet is in edit mode for this copy. */
     val editingCopy: Copy? = null,
     val editingSetNumber: String? = null,
     /** When non-null the Add sheet is editing this sale (Sales fields, prefilled [editingSalePrice]). */
     val editingSaleId: String? = null,
     val editingSalePrice: Long? = null,
-    /** When non-null, the sold-item See Details dialog is open for this sale. */
-    val saleDetailId: String? = null,
+    /** When non-null, the merged See Details modal is open for this set/fig (collection + sales). */
     val detailSetNumber: String? = null,
+    /** Which tab the merged modal opens on (a collection card → Collection, a sold card → Sales). */
+    val detailInitialTab: ItemDetailsTab = ItemDetailsTab.COLLECTION,
     /** When both are non-null, the Sell dialog is open for this owned copy. */
     val sellSetNumber: String? = null,
     val sellCopyId: String? = null,
@@ -49,6 +53,8 @@ data class CollectionUiState(
     val salesPage: Int = 1,
     /** When non-null, the swipe-to-delete confirmation dialog is open for this set. */
     val pendingDeleteSetNumber: String? = null,
+    /** When non-null, the swipe-to-delete confirmation dialog is open for this sale record. */
+    val pendingDeleteSaleId: String? = null,
     /** Transient toast message (e.g. after a delete); cleared once shown. */
     val toastMessage: UiText? = null,
 ) {
@@ -58,6 +64,10 @@ data class CollectionUiState(
     /** The item awaiting delete confirmation, resolved from the live list. */
     val pendingDeleteItem: CollectionItem?
         get() = pendingDeleteSetNumber?.let { sn -> items.find { it.setNumber == sn } }
+
+    /** The sale record awaiting delete confirmation, resolved from the live sales list. */
+    val pendingDeleteSale: SoldItem?
+        get() = pendingDeleteSaleId?.let { id -> soldItems.find { it.id == id } }
 
     val visibleItems: List<CollectionItem>
         get() = when (filter) {
@@ -84,9 +94,9 @@ data class CollectionUiState(
     val detailItem: CollectionItem?
         get() = detailSetNumber?.let { sn -> items.find { it.setNumber == sn } }
 
-    /** The sold item whose See Details dialog is open, resolved from the live sales list. */
-    val saleDetailItem: SoldItem?
-        get() = saleDetailId?.let { id -> soldItems.find { it.id == id } }
+    /** The open set/fig's sale records (all of them), resolved from the live sales list. */
+    val detailSales: List<SoldItem>
+        get() = detailSetNumber?.let { sn -> soldItems.filter { it.setNumber == sn } } ?: emptyList()
 
     /**
      * The (item, copy) the Sell dialog targets, resolved from the live list — so the dialog closes
