@@ -78,9 +78,11 @@
     <!-- Sign-in messages -->
     <string name="login_err_no_google">Không có tài khoản Google trên thiết bị này</string>
     <string name="login_info_confirm_email">Kiểm tra email để xác nhận tài khoản, sau đó đăng nhập.</string>
+    <string name="login_info_needs_confirm">Tài khoản này chưa được xác nhận. Nhập mã trong email của bạn, hoặc gửi lại bên dưới.</string>
     <string name="login_err_invalid_email">Nhập địa chỉ email hợp lệ</string>
     <string name="login_err_password_short">Mật khẩu phải có ít nhất %1$d ký tự</string>
     <string name="login_err_password_mismatch">Mật khẩu không khớp</string>
+    <string name="login_err_code_invalid">Mã không đúng hoặc đã hết hạn. Kiểm tra lại hoặc gửi lại mã mới.</string>
 
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Trang chủ</string>
@@ -255,6 +257,15 @@
     <string name="login_no_account">Chưa có tài khoản? </string>
     <string name="login_signup_link">Đăng ký</string>
     <string name="login_offline">Không có kết nối mạng — hãy kết nối để đăng nhập.</string>
+    <!-- OTP email confirmation -->
+    <string name="login_confirm_title">Xác nhận email</string>
+    <string name="login_confirm_sent">Nhập mã 6 số chúng tôi đã gửi đến %1$s</string>
+    <string name="login_code_hint">Mã 6 số</string>
+    <string name="login_verify_action">Xác nhận</string>
+    <string name="login_resend_prompt">Chưa nhận được mã? </string>
+    <string name="login_resend_code">Gửi lại</string>
+    <string name="login_code_resent">Mã mới đang được gửi.</string>
+    <string name="login_back">Quay lại</string>
 
     <!-- ============ Add-to-collection sheet ============ -->
     <string name="sheet_edit_item">Chỉnh sửa</string>

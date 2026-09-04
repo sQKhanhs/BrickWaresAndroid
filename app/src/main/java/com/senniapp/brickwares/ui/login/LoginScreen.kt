@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -65,13 +66,19 @@ fun LoginScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // The language currently on screen (respects the in-app switcher via the Activity config), stamped
+    // onto a new account so its confirmation email arrives in the same language.
+    val appLang = if (LocalConfiguration.current.locales[0].language == "vi") "vi" else "en"
     val isOnline = rememberIsOnline()
     val colors = BwTheme.colors
     val busy = state.signingIn
     val enabled = isOnline && !busy
     val signUp = state.mode == LoginMode.SIGN_UP
+    // Closing the modal resets the retained VM, so reopening starts on a fresh form rather than a
+    // leftover OTP step. (Success paths are handled inside the VM via the auth-state observer.)
+    val dismiss = { onDismiss(); viewModel.reset() }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = colors.card,
@@ -96,34 +103,17 @@ fun LoginScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        stringResource(if (signUp) R.string.login_create_account else R.string.login_welcome_back),
+                        stringResource(
+                            when {
+                                state.awaitingCode -> R.string.login_confirm_title
+                                signUp -> R.string.login_create_account
+                                else -> R.string.login_welcome_back
+                            }
+                        ),
                         style = BwType.body.copy(fontSize = 13.sp),
                         color = colors.textMuted,
                     )
                     Spacer(Modifier.height(22.dp))
-
-                    OutlinedButton(
-                        onClick = { viewModel.onGoogleSignIn(context) },
-                        enabled = enabled,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(50),
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_google),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(stringResource(R.string.login_google), style = BwType.pill, color = colors.text)
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
-                        Text("  ${stringResource(R.string.login_or)}  ", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
-                    }
-                    Spacer(Modifier.height(16.dp))
 
                     val fieldColors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = colors.brandYellow,
@@ -132,36 +122,108 @@ fun LoginScreen(
                         unfocusedTextColor = colors.text,
                         cursorColor = colors.brandYellow,
                     )
-                    OutlinedTextField(
-                        value = state.email,
-                        onValueChange = viewModel::onEmailChange,
-                        placeholder = { Text(stringResource(R.string.login_email)) },
-                        singleLine = true,
-                        enabled = !busy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        colors = fieldColors,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                    val yellowButton = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandYellow,
+                        contentColor = colors.onYellow,
+                        disabledContainerColor = colors.track,
+                        disabledContentColor = colors.textMuted,
                     )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = state.password,
-                        onValueChange = viewModel::onPasswordChange,
-                        placeholder = { Text(stringResource(R.string.login_password)) },
-                        singleLine = true,
-                        enabled = !busy,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        colors = fieldColors,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (signUp) {
+
+                    if (state.awaitingCode) {
+                        // ---- OTP confirmation: type the 6-digit code from the email ----
+                        Text(
+                            stringResource(R.string.login_confirm_sent, state.pendingEmail),
+                            style = BwType.body.copy(fontSize = 13.sp),
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = state.code,
+                            onValueChange = viewModel::onCodeChange,
+                            placeholder = { Text(stringResource(R.string.login_code_hint)) },
+                            singleLine = true,
+                            enabled = !busy,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            colors = fieldColors,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(18.dp))
+                        Button(
+                            onClick = { viewModel.onVerifyCode() },
+                            enabled = enabled,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = yellowButton,
+                        ) {
+                            if (busy) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.onYellow)
+                            } else {
+                                Text(stringResource(R.string.login_verify_action), style = BwType.pill)
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Row {
+                            Text(
+                                stringResource(R.string.login_resend_prompt),
+                                style = BwType.body.copy(fontSize = 13.sp),
+                                color = colors.textMuted,
+                            )
+                            Text(
+                                stringResource(R.string.login_resend_code),
+                                style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                color = colors.brandYellow,
+                                modifier = Modifier.clickable(enabled = enabled) { viewModel.onResendCode() },
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.login_back),
+                            style = BwType.body.copy(fontSize = 13.sp),
+                            color = colors.textMuted,
+                            modifier = Modifier.clickable(enabled = !busy) { viewModel.onBackFromCode() },
+                        )
+                    } else {
+                        OutlinedButton(
+                            onClick = { viewModel.onGoogleSignIn(context) },
+                            enabled = enabled,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(50),
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_google),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.login_google), style = BwType.pill, color = colors.text)
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
+                            Text("  ${stringResource(R.string.login_or)}  ", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colors.borderSoft)
+                        }
+                        Spacer(Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = state.email,
+                            onValueChange = viewModel::onEmailChange,
+                            placeholder = { Text(stringResource(R.string.login_email)) },
+                            singleLine = true,
+                            enabled = !busy,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            colors = fieldColors,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(
-                            value = state.confirmPassword,
-                            onValueChange = viewModel::onConfirmPasswordChange,
-                            placeholder = { Text(stringResource(R.string.login_confirm_password)) },
+                            value = state.password,
+                            onValueChange = viewModel::onPasswordChange,
+                            placeholder = { Text(stringResource(R.string.login_password)) },
                             singleLine = true,
                             enabled = !busy,
                             visualTransformation = PasswordVisualTransformation(),
@@ -170,41 +232,51 @@ fun LoginScreen(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-                    Button(
-                        onClick = { viewModel.onEmailSubmit() },
-                        enabled = enabled,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.brandYellow,
-                            contentColor = colors.onYellow,
-                            disabledContainerColor = colors.track,
-                            disabledContentColor = colors.textMuted,
-                        ),
-                    ) {
-                        if (busy) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.onYellow)
-                        } else {
-                            Text(stringResource(if (signUp) R.string.login_signup_action else R.string.action_sign_in), style = BwType.pill)
+                        if (signUp) {
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = state.confirmPassword,
+                                onValueChange = viewModel::onConfirmPasswordChange,
+                                placeholder = { Text(stringResource(R.string.login_confirm_password)) },
+                                singleLine = true,
+                                enabled = !busy,
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                colors = fieldColors,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
-                    }
 
-                    Spacer(Modifier.height(14.dp))
-                    Row {
-                        Text(
-                            stringResource(if (signUp) R.string.login_have_account else R.string.login_no_account),
-                            style = BwType.body.copy(fontSize = 13.sp),
-                            color = colors.textMuted,
-                        )
-                        Text(
-                            stringResource(if (signUp) R.string.settings_sign_in else R.string.login_signup_link),
-                            style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                            color = colors.brandYellow,
-                            modifier = Modifier.clickable { viewModel.onSwitchMode() },
-                        )
+                        Spacer(Modifier.height(18.dp))
+                        Button(
+                            onClick = { viewModel.onEmailSubmit(appLang) },
+                            enabled = enabled,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = yellowButton,
+                        ) {
+                            if (busy) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.onYellow)
+                            } else {
+                                Text(stringResource(if (signUp) R.string.login_signup_action else R.string.action_sign_in), style = BwType.pill)
+                            }
+                        }
+
+                        Spacer(Modifier.height(14.dp))
+                        Row {
+                            Text(
+                                stringResource(if (signUp) R.string.login_have_account else R.string.login_no_account),
+                                style = BwType.body.copy(fontSize = 13.sp),
+                                color = colors.textMuted,
+                            )
+                            Text(
+                                stringResource(if (signUp) R.string.settings_sign_in else R.string.login_signup_link),
+                                style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                color = colors.brandYellow,
+                                modifier = Modifier.clickable { viewModel.onSwitchMode() },
+                            )
+                        }
                     }
 
                     state.error?.let {
@@ -230,7 +302,7 @@ fun LoginScreen(
                     "✕",
                     style = BwType.cardTitle.copy(fontSize = 20.sp),
                     color = colors.textMuted,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).clickable(onClick = onDismiss),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).clickable(onClick = dismiss),
                 )
             }
         }

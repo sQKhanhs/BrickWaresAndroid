@@ -196,7 +196,9 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised for local testing now that Resend SMTP is enabled (was 2 — too low to exercise the
+# sign-up-confirm / password-reset flows). Local-only; prod's limit is set on the dashboard.
+email_sent = 30
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -235,15 +237,35 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Real SMTP for the LOCAL stack — routes auth email (sign-up confirmation, password reset) through
+# Resend instead of the Mailpit test inbox, so you can verify true end-to-end delivery from dev.
+# Uses the same verified sending domain as prod: brickwares.app (Resend, Tokyo/ap-northeast-1 region).
+# TOGGLE: set enabled = false (or comment the block) to fall back to the Mailpit inbox
+# (http://localhost:54324) for offline / no-quota dev. Restart the stack after ANY change here:
+# `supabase stop && supabase start` (a `db reset` alone does NOT reload auth config).
+# The API key is a SECRET — put RESEND_API_KEY=re_... in the gitignored supabase/.env (auto-loaded
+# by the CLI), never here. If the local mailer errors on TLS, switch port to 587 (STARTTLS).
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "no-reply@brickwares.app"
+sender_name = "BrickWares"
+
+# OTP sign-up confirmation email — shows the 6-digit code ({{ .Token }}) the app verifies, since
+# mobile has no working web page for the emailed confirmation link. Renders in the user's app language
+# (VI or EN) by branching on {{ .Data.lang }}, which the app stamps into user_metadata at sign-up.
+# content_path is resolved relative to the project root (where you run `supabase`). Restart the stack
+# after editing the template file. MIRROR this on the PROD dashboard: Authentication → Emails →
+# Templates → "Confirm signup" (paste the same HTML + subject; the local config.toml block does NOT
+# affect prod). NOTE: if the templated subject renders as literal "{{ ... }}" text in your test,
+# GoTrue isn't templating the subject on your version — fall back to a plain subject like
+# "Mã xác nhận BrickWares / BrickWares code". The body always renders correctly.
+[auth.email.template.confirmation]
+subject = "{{ if eq (or .Data.lang \"en\") \"vi\" }}Mã xác nhận BrickWares{{ else }}Your BrickWares code{{ end }}"
+content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

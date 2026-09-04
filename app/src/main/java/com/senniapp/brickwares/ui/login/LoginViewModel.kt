@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
+import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +25,13 @@ data class LoginUiState(
     val confirmPassword: String = "",
     val signingIn: Boolean = false,
     val error: UiText? = null,
-    /** Non-error status, e.g. "check your email to confirm" after sign-up on a confirm-required project. */
+    /** Non-error status, e.g. "a new code is on the way" after a resend. */
     val info: UiText? = null,
+    /** After a confirm-required sign-up, the form is replaced by a 6-digit code (OTP) entry step. */
+    val awaitingCode: Boolean = false,
+    /** The address being confirmed — shown on the code step and used to verify/resend. */
+    val pendingEmail: String = "",
+    val code: String = "",
 )
 
 /**
@@ -38,6 +44,19 @@ class LoginViewModel(
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+
+    init {
+        // When sign-in completes through ANY path (email, OTP verify, Google), clear the form so a
+        // later reopen — e.g. after signing out in the same session — starts fresh instead of
+        // resurrecting the pending OTP step. The modal only opens while logged out, so this never
+        // wipes a code the user is mid-entry.
+        viewModelScope.launch {
+            authRepository.authState.collect { if (it is AuthState.SignedIn) reset() }
+        }
+    }
+
+    /** Restores the pristine form (clears any pending OTP step and typed fields). */
+    fun reset() { _uiState.value = LoginUiState() }
 
     fun onEmailChange(value: String) = _uiState.update { it.copy(email = value, error = null) }
     fun onPasswordChange(value: String) = _uiState.update { it.copy(password = value, error = null) }
@@ -58,13 +77,15 @@ class LoginViewModel(
                 SignInResult.Success, SignInResult.Cancelled -> null
                 SignInResult.NoCredential -> UiText.Res(R.string.login_err_no_google)
                 is SignInResult.Error -> UiText.Raw(result.message)
-                SignInResult.EmailConfirmationRequired -> null
+                SignInResult.EmailConfirmationRequired, SignInResult.EmailNotConfirmed -> null
             }
             _uiState.update { it.copy(signingIn = false, error = message) }
         }
     }
 
-    fun onEmailSubmit() {
+    /** [languageTag] is the app's current display language ("en"/"vi"), stamped onto a new account so
+     *  its confirmation email arrives in that language. Ignored for sign-in. */
+    fun onEmailSubmit(languageTag: String) {
         val s = _uiState.value
         if (s.signingIn) return
         validate(s)?.let { err -> _uiState.update { it.copy(error = err) }; return }
@@ -74,20 +95,73 @@ class LoginViewModel(
             val result = if (s.mode == LoginMode.SIGN_IN) {
                 authRepository.signInWithEmail(s.email, s.password)
             } else {
-                authRepository.signUpWithEmail(s.email, s.password)
+                authRepository.signUpWithEmail(s.email, s.password, languageTag)
             }
             _uiState.update {
                 when (result) {
                     SignInResult.Success -> it.copy(signingIn = false) // AuthGate routes to the app
                     SignInResult.EmailConfirmationRequired -> it.copy(
-                        signingIn = false, mode = LoginMode.SIGN_IN, password = "", confirmPassword = "",
-                        info = UiText.Res(R.string.login_info_confirm_email),
+                        signingIn = false, awaitingCode = true, pendingEmail = s.email.trim(),
+                        password = "", confirmPassword = "", code = "", info = null,
+                    )
+                    // Signing in to an account that was never confirmed → open the code step (with the
+                    // Resend option right there) instead of a dead-end error.
+                    SignInResult.EmailNotConfirmed -> it.copy(
+                        signingIn = false, awaitingCode = true, pendingEmail = s.email.trim(),
+                        password = "", confirmPassword = "", code = "",
+                        info = UiText.Res(R.string.login_info_needs_confirm),
                     )
                     is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Raw(result.message))
                     else -> it.copy(signingIn = false)
                 }
             }
         }
+    }
+
+    fun onCodeChange(value: String) = _uiState.update {
+        it.copy(code = value.filter(Char::isDigit).take(CODE_LENGTH), error = null)
+    }
+
+    /** Verifies the 6-digit sign-up code; on success the session is established and [AuthGate] routes in. */
+    fun onVerifyCode() {
+        val s = _uiState.value
+        if (s.signingIn) return
+        if (s.code.length < CODE_LENGTH) {
+            _uiState.update { it.copy(error = UiText.Res(R.string.login_err_code_invalid)) }; return
+        }
+        _uiState.update { it.copy(signingIn = true, error = null, info = null) }
+        viewModelScope.launch {
+            val result = authRepository.verifySignUpOtp(s.pendingEmail, s.code)
+            _uiState.update {
+                when (result) {
+                    SignInResult.Success -> it.copy(signingIn = false) // AuthGate routes to the app
+                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_code_invalid))
+                    else -> it.copy(signingIn = false)
+                }
+            }
+        }
+    }
+
+    /** Re-sends the confirmation code to the pending email. */
+    fun onResendCode() {
+        val s = _uiState.value
+        if (s.signingIn || s.pendingEmail.isBlank()) return
+        _uiState.update { it.copy(signingIn = true, error = null, info = null) }
+        viewModelScope.launch {
+            val result = authRepository.resendSignUpCode(s.pendingEmail)
+            _uiState.update {
+                when (result) {
+                    SignInResult.Success -> it.copy(signingIn = false, info = UiText.Res(R.string.login_code_resent))
+                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Raw(result.message))
+                    else -> it.copy(signingIn = false)
+                }
+            }
+        }
+    }
+
+    /** Leaves the code step, returning to the email/password form. */
+    fun onBackFromCode() = _uiState.update {
+        it.copy(awaitingCode = false, code = "", error = null, info = null)
     }
 
     /** Returns an error message if the form is invalid, else null. */
@@ -101,5 +175,6 @@ class LoginViewModel(
 
     private companion object {
         const val MIN_PASSWORD = 6
+        const val CODE_LENGTH = 6
     }
 }

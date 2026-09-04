@@ -11,6 +11,10 @@ import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import io.github.jan.supabase.auth.OtpType
+import io.github.jan.supabase.auth.OtpVerifyResult
+import io.github.jan.supabase.auth.exception.AuthErrorCode
+import io.github.jan.supabase.auth.exception.AuthRestException
 import io.github.jan.supabase.auth.SignOutScope
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
@@ -25,8 +29,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /** Signed-in user, as the app cares about it (derived from the Supabase session). */
 data class AuthUser(
@@ -53,6 +59,9 @@ sealed interface SignInResult {
 
     /** Email sign-up succeeded but the address must be confirmed before the first sign-in. */
     data object EmailConfirmationRequired : SignInResult
+
+    /** Sign-in was rejected because the email/password account still needs email confirmation. */
+    data object EmailNotConfirmed : SignInResult
     data class Error(val message: String) : SignInResult
 }
 
@@ -130,24 +139,53 @@ object AuthRepository {
             this.password = password
         }
         SignInResult.Success
+    } catch (e: AuthRestException) {
+        // An unconfirmed account → route the UI back to the code step instead of a dead-end error.
+        if (e.errorCode == AuthErrorCode.EmailNotConfirmed) SignInResult.EmailNotConfirmed
+        else SignInResult.Error(e.message ?: "Couldn't sign in")
     } catch (e: Exception) {
         SignInResult.Error(e.message ?: "Couldn't sign in")
     }
 
     /**
-     * Email + password sign-up. If the project auto-confirms (local dev), a session is created and
-     * this returns [SignInResult.Success]; if email confirmation is required (prod default), no
-     * session yet → [SignInResult.EmailConfirmationRequired].
+     * Email + password sign-up. [languageTag] ("en"/"vi") is the app's current language, stamped into
+     * user metadata so the confirmation email renders in that language (the template branches on
+     * `{{ .Data.lang }}`; it persists for resends too). If the project auto-confirms (local dev), a
+     * session is created and this returns [SignInResult.Success]; if email confirmation is required
+     * (prod default), no session yet → [SignInResult.EmailConfirmationRequired].
      */
-    suspend fun signUpWithEmail(email: String, password: String): SignInResult = try {
+    suspend fun signUpWithEmail(email: String, password: String, languageTag: String): SignInResult = try {
         client.auth.signUpWith(Email) {
             this.email = email.trim()
             this.password = password
+            data = buildJsonObject { put("lang", languageTag) }
         }
         if (client.auth.currentUserOrNull() != null) SignInResult.Success
         else SignInResult.EmailConfirmationRequired
     } catch (e: Exception) {
         SignInResult.Error(e.message ?: "Couldn't create account")
+    }
+
+    /**
+     * Confirms a new email/password sign-up with the 6-digit code from the confirmation email
+     * (OTP flow — mobile has no working web page for the emailed confirmation link). On success the
+     * session is imported automatically, so the app's [authState] flips to SignedIn and routes in.
+     */
+    suspend fun verifySignUpOtp(email: String, code: String): SignInResult = try {
+        when (client.auth.verifyEmailOtp(OtpType.Email.SIGNUP, email.trim(), code.trim())) {
+            is OtpVerifyResult.Authenticated -> SignInResult.Success
+            OtpVerifyResult.VerifiedNoSession -> SignInResult.Success
+        }
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't verify the code")
+    }
+
+    /** Re-sends the sign-up confirmation code to [email] (e.g. the first one expired or was missed). */
+    suspend fun resendSignUpCode(email: String): SignInResult = try {
+        client.auth.resendEmail(OtpType.Email.SIGNUP, email.trim())
+        SignInResult.Success
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't resend the code")
     }
 
     /** Clears the on-device session (LOCAL scope → no network; the server token just expires). */

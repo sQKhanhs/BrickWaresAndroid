@@ -78,9 +78,11 @@
     <!-- Sign-in messages -->
     <string name="login_err_no_google">No Google account available on this device</string>
     <string name="login_info_confirm_email">Check your email to confirm your account, then sign in.</string>
+    <string name="login_info_needs_confirm">This account isn\'t confirmed yet. Enter the code from your email, or resend below.</string>
     <string name="login_err_invalid_email">Enter a valid email address</string>
     <string name="login_err_password_short">Password must be at least %1$d characters</string>
     <string name="login_err_password_mismatch">Passwords don\'t match</string>
+    <string name="login_err_code_invalid">That code isn\'t right or has expired. Check it, or resend a new one.</string>
 
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Home</string>
@@ -256,6 +258,15 @@
     <string name="login_no_account">Don\'t have an account? </string>
     <string name="login_signup_link">Sign up</string>
     <string name="login_offline">No internet connection — connect to sign in.</string>
+    <!-- OTP email confirmation -->
+    <string name="login_confirm_title">Confirm your email</string>
+    <string name="login_confirm_sent">Enter the 6-digit code we sent to %1$s</string>
+    <string name="login_code_hint">6-digit code</string>
+    <string name="login_verify_action">Verify</string>
+    <string name="login_resend_prompt">Didn\'t get the code? </string>
+    <string name="login_resend_code">Resend</string>
+    <string name="login_code_resent">A new code is on the way.</string>
+    <string name="login_back">Back</string>
 
     <!-- ============ Add-to-collection sheet ============ -->
     <string name="sheet_edit_item">Edit Item</string>
