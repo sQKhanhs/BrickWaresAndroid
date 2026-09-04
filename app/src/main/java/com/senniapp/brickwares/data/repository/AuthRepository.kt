@@ -40,6 +40,9 @@ data class AuthUser(
     val email: String,
     val displayName: String,
     val avatarUrl: String?,
+    /** True when the account has a Google identity but no email/password one yet — so we can offer
+     *  to set a password (adding email+password sign-in to a Google-only account). */
+    val isGoogleOnly: Boolean = false,
 )
 
 /** Coarse auth state the UI observes. [Loading] covers the brief session-restore on launch. */
@@ -62,6 +65,17 @@ sealed interface SignInResult {
 
     /** Sign-in was rejected because the email/password account still needs email confirmation. */
     data object EmailNotConfirmed : SignInResult
+
+    /** Sign-in failed: wrong email or password. */
+    data object InvalidCredentials : SignInResult
+
+    /** Sign-up failed: an account with this email already exists. */
+    data object EmailAlreadyRegistered : SignInResult
+
+    /** The auth request was rate-limited (too many attempts / emails). */
+    data object TooManyRequests : SignInResult
+
+    /** Any other failure. The [message] is for logging, NOT display — the UI shows a generic string. */
     data class Error(val message: String) : SignInResult
 }
 
@@ -140,9 +154,13 @@ object AuthRepository {
         }
         SignInResult.Success
     } catch (e: AuthRestException) {
-        // An unconfirmed account → route the UI back to the code step instead of a dead-end error.
-        if (e.errorCode == AuthErrorCode.EmailNotConfirmed) SignInResult.EmailNotConfirmed
-        else SignInResult.Error(e.message ?: "Couldn't sign in")
+        when (e.errorCode) {
+            // An unconfirmed account → route the UI back to the code step, not a dead-end error.
+            AuthErrorCode.EmailNotConfirmed -> SignInResult.EmailNotConfirmed
+            AuthErrorCode.InvalidCredentials -> SignInResult.InvalidCredentials
+            AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
+            else -> SignInResult.Error(e.errorDescription)
+        }
     } catch (e: Exception) {
         SignInResult.Error(e.message ?: "Couldn't sign in")
     }
@@ -162,6 +180,12 @@ object AuthRepository {
         }
         if (client.auth.currentUserOrNull() != null) SignInResult.Success
         else SignInResult.EmailConfirmationRequired
+    } catch (e: AuthRestException) {
+        when (e.errorCode) {
+            AuthErrorCode.EmailExists, AuthErrorCode.UserAlreadyExists -> SignInResult.EmailAlreadyRegistered
+            AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
+            else -> SignInResult.Error(e.errorDescription)
+        }
     } catch (e: Exception) {
         SignInResult.Error(e.message ?: "Couldn't create account")
     }
@@ -184,8 +208,30 @@ object AuthRepository {
     suspend fun resendSignUpCode(email: String): SignInResult = try {
         client.auth.resendEmail(OtpType.Email.SIGNUP, email.trim())
         SignInResult.Success
+    } catch (e: AuthRestException) {
+        when (e.errorCode) {
+            AuthErrorCode.OverEmailSendRateLimit, AuthErrorCode.OverRequestRateLimit -> SignInResult.TooManyRequests
+            else -> SignInResult.Error(e.errorDescription)
+        }
     } catch (e: Exception) {
         SignInResult.Error(e.message ?: "Couldn't resend the code")
+    }
+
+    /**
+     * Sets (or changes) the current user's password. For a Google-only account this adds an
+     * email/password credential, so they can afterwards sign in with email + password too. Requires a
+     * live session (the user is already authenticated, so no takeover risk — unlike signing up again).
+     */
+    suspend fun setPassword(newPassword: String): SignInResult = try {
+        client.auth.updateUser { password = newPassword }
+        SignInResult.Success
+    } catch (e: AuthRestException) {
+        when (e.errorCode) {
+            AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
+            else -> SignInResult.Error(e.errorDescription)
+        }
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't set the password")
     }
 
     /** Clears the on-device session (LOCAL scope → no network; the server token just expires). */
@@ -201,11 +247,13 @@ private fun io.github.jan.supabase.auth.user.UserInfo.toAuthUser(): AuthUser {
     val name = meta.string("full_name")
         ?: meta.string("name")
         ?: email.substringBefore("@").ifBlank { "BrickWares user" }
+    val providers = identities.orEmpty().map { it.provider }
     return AuthUser(
         id = id,
         email = email,
         displayName = name,
         avatarUrl = meta.string("avatar_url") ?: meta.string("picture"),
+        isGoogleOnly = "google" in providers && "email" !in providers,
     )
 }
 

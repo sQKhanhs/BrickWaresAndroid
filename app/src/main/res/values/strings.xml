@@ -44,6 +44,7 @@
     <string name="action_owned">Owned</string>
     <string name="action_sign_in">Sign In</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
     <string name="action_delete">Delete</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Retry</string>
@@ -74,6 +75,8 @@
     <string name="toast_removed_wishlist">%1$s removed from Wishlist</string>
     <string name="toast_coming_soon">This isn\'t available in this preview yet</string>
     <string name="toast_delete_account_soon">Account deletion isn\'t available in this preview yet</string>
+    <string name="toast_password_set">Password set — you can now sign in with your email too.</string>
+    <string name="toast_password_failed">Couldn\'t set the password. Please try again.</string>
 
     <!-- Sign-in messages -->
     <string name="login_err_no_google">No Google account available on this device</string>
@@ -83,6 +86,10 @@
     <string name="login_err_password_short">Password must be at least %1$d characters</string>
     <string name="login_err_password_mismatch">Passwords don\'t match</string>
     <string name="login_err_code_invalid">That code isn\'t right or has expired. Check it, or resend a new one.</string>
+    <string name="login_err_invalid_credentials">Wrong email or password.</string>
+    <string name="login_err_email_exists">An account with this email already exists. Try signing in instead.</string>
+    <string name="login_err_too_many">Too many attempts. Please try again in a moment.</string>
+    <string name="login_err_generic">Something went wrong. Please try again.</string>
 
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Home</string>
@@ -113,6 +120,9 @@
     <string name="settings_change_avatar_cd">Change avatar</string>
     <string name="settings_sign_out">Sign Out</string>
     <string name="settings_offline">Offline</string>
+    <string name="settings_set_password">Set a password</string>
+    <string name="set_password_title">Set a password</string>
+    <string name="set_password_body">Add a password so you can also sign in with your email — not just Google.</string>
     <string name="settings_delete_account">Delete account</string>
     <string name="settings_delete_confirm_body">This permanently removes your account and all collection data. This can\'t be undone.</string>
     <string name="settings_sign_in">Sign in</string>
@@ -265,6 +275,8 @@
     <string name="login_verify_action">Verify</string>
     <string name="login_resend_prompt">Didn\'t get the code? </string>
     <string name="login_resend_code">Resend</string>
+    <string name="login_resend_in">Resend in %1$ds</string>
+    <string name="login_toggle_password">Show or hide password</string>
     <string name="login_code_resent">A new code is on the way.</string>
     <string name="login_back">Back</string>
 

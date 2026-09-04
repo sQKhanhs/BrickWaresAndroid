@@ -18,11 +18,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -45,6 +49,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,6 +94,9 @@ fun SettingsScreen(
         onRequestDelete = viewModel::onRequestDeleteAccount,
         onCancelDelete = viewModel::onCancelDeleteAccount,
         onConfirmDelete = viewModel::onConfirmDeleteAccount,
+        onOpenSetPassword = viewModel::onOpenSetPassword,
+        onCloseSetPassword = viewModel::onCloseSetPassword,
+        onSetPassword = viewModel::onSetPassword,
         // Persist the chosen language and recreate the activity so resources re-resolve to it.
         currentLanguage = currentLanguage,
         onLanguageChange = { lang ->
@@ -118,6 +128,9 @@ private fun SettingsContent(
     onRequestDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
+    onOpenSetPassword: () -> Unit,
+    onCloseSetPassword: () -> Unit,
+    onSetPassword: (String) -> Unit,
     currentLanguage: AppLanguage,
     onLanguageChange: (AppLanguage) -> Unit,
     onCurrencyChange: (AppCurrency) -> Unit,
@@ -167,6 +180,11 @@ private fun SettingsContent(
                         } else {
                             Text(stringResource(R.string.settings_offline), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         }
+                    }
+                    // Google-only account → offer to add a password so email + password sign-in works too.
+                    if (state.isGoogleOnly && isOnline) {
+                        RowDivider()
+                        NavRow(stringResource(R.string.settings_set_password), onClick = onOpenSetPassword)
                     }
                     RowDivider()
                     NavRow(stringResource(R.string.settings_delete_account), onClick = onRequestDelete, danger = true)
@@ -296,7 +314,93 @@ private fun SettingsContent(
             )
         }
 
+        if (state.showSetPassword) {
+            SetPasswordDialog(onConfirm = onSetPassword, onDismiss = onCloseSetPassword)
+        }
+
         BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
+    }
+}
+
+@Composable
+private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var visible by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<Int?>(null) }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = colors.brandYellow,
+        unfocusedBorderColor = colors.borderStrong,
+        focusedTextColor = colors.text,
+        unfocusedTextColor = colors.text,
+        cursorColor = colors.brandYellow,
+    )
+    val eye: @Composable () -> Unit = {
+        IconButton(onClick = { visible = !visible }) {
+            Icon(
+                painter = painterResource(if (visible) R.drawable.ic_bw_eye_off else R.drawable.ic_bw_eye),
+                contentDescription = stringResource(R.string.login_toggle_password),
+                tint = colors.textMuted,
+            )
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.set_password_title), style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.set_password_body), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    placeholder = { Text(stringResource(R.string.login_password)) },
+                    singleLine = true,
+                    visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = eye,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = fieldColors,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = confirm,
+                    onValueChange = { confirm = it; error = null },
+                    placeholder = { Text(stringResource(R.string.login_confirm_password)) },
+                    singleLine = true,
+                    visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = eye,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = fieldColors,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(it, 6), style = BwType.body.copy(fontSize = 12.sp), color = colors.error)
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinePill(stringResource(R.string.action_cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+                    Pill(
+                        text = stringResource(R.string.action_save),
+                        filled = true,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            when {
+                                password.length < 6 -> error = R.string.login_err_password_short
+                                password != confirm -> error = R.string.login_err_password_mismatch
+                                else -> onConfirm(password)
+                            }
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -428,10 +532,28 @@ private fun <T> DropdownRow(label: String, selectedLabel: String, options: List<
                 Text(selectedLabel, style = BwType.body.copy(fontSize = 12.sp), color = colors.textSecondary)
                 Text("▾", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                shape = RoundedCornerShape(12.dp),
+                containerColor = colors.card,
+                tonalElevation = 0.dp, // kill Material's tinted-surface (lavender) overlay
+                shadowElevation = 3.dp,
+                border = BorderStroke(1.dp, colors.borderSoft),
+            ) {
                 options.forEach { (value, optionLabel) ->
+                    val isSelected = optionLabel == selectedLabel
                     DropdownMenuItem(
-                        text = { Text(optionLabel, style = BwType.body.copy(fontSize = 13.sp), color = colors.text) },
+                        text = {
+                            Text(
+                                optionLabel,
+                                style = BwType.body.copy(
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                ),
+                                color = if (isSelected) colors.brandYellow else colors.text,
+                            )
+                        },
                         onClick = { onSelect(value); expanded = false },
                     )
                 }
@@ -458,16 +580,17 @@ private fun SegmentButton(label: String, selected: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun Pill(text: String, filled: Boolean, onClick: () -> Unit) {
+private fun Pill(text: String, filled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = BwTheme.colors
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             // Theme-stable dark fill (not colors.text, which flips to near-white in dark and left the
             // yellow label unreadable) so the pill stays dark with yellow text in both themes.
             .background(if (filled) colors.onYellow else colors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(text, style = BwType.pill.copy(fontSize = 12.sp), color = colors.brandYellow)
     }

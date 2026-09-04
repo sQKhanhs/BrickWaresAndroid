@@ -44,6 +44,7 @@
     <string name="action_owned">Đã sở hữu</string>
     <string name="action_sign_in">Đăng nhập</string>
     <string name="action_cancel">Hủy</string>
+    <string name="action_save">Lưu</string>
     <string name="action_delete">Xóa</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Thử lại</string>
@@ -74,6 +75,8 @@
     <string name="toast_removed_wishlist">Đã xóa %1$s khỏi danh sách mong muốn</string>
     <string name="toast_coming_soon">Tính năng này chưa có trong bản xem trước</string>
     <string name="toast_delete_account_soon">Xóa tài khoản chưa có trong bản xem trước</string>
+    <string name="toast_password_set">Đã đặt mật khẩu — giờ bạn có thể đăng nhập bằng email.</string>
+    <string name="toast_password_failed">Không thể đặt mật khẩu. Vui lòng thử lại.</string>
 
     <!-- Sign-in messages -->
     <string name="login_err_no_google">Không có tài khoản Google trên thiết bị này</string>
@@ -83,6 +86,10 @@
     <string name="login_err_password_short">Mật khẩu phải có ít nhất %1$d ký tự</string>
     <string name="login_err_password_mismatch">Mật khẩu không khớp</string>
     <string name="login_err_code_invalid">Mã không đúng hoặc đã hết hạn. Kiểm tra lại hoặc gửi lại mã mới.</string>
+    <string name="login_err_invalid_credentials">Email hoặc mật khẩu không đúng.</string>
+    <string name="login_err_email_exists">Email này đã có tài khoản. Hãy đăng nhập.</string>
+    <string name="login_err_too_many">Quá nhiều lần thử. Vui lòng thử lại sau giây lát.</string>
+    <string name="login_err_generic">Đã có lỗi xảy ra. Vui lòng thử lại.</string>
 
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Trang chủ</string>
@@ -112,6 +119,9 @@
     <string name="settings_change_avatar_cd">Đổi ảnh đại diện</string>
     <string name="settings_sign_out">Đăng xuất</string>
     <string name="settings_offline">Ngoại tuyến</string>
+    <string name="settings_set_password">Đặt mật khẩu</string>
+    <string name="set_password_title">Đặt mật khẩu</string>
+    <string name="set_password_body">Thêm mật khẩu để bạn có thể đăng nhập bằng email, không chỉ bằng Google.</string>
     <string name="settings_delete_account">Xóa tài khoản</string>
     <string name="settings_delete_confirm_body">Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu bộ sưu tập của bạn. Không thể hoàn tác.</string>
     <string name="settings_sign_in">Đăng nhập</string>
@@ -264,6 +274,8 @@
     <string name="login_verify_action">Xác nhận</string>
     <string name="login_resend_prompt">Chưa nhận được mã? </string>
     <string name="login_resend_code">Gửi lại</string>
+    <string name="login_resend_in">Gửi lại sau %1$ds</string>
+    <string name="login_toggle_password">Hiện hoặc ẩn mật khẩu</string>
     <string name="login_code_resent">Mã mới đang được gửi.</string>
     <string name="login_back">Quay lại</string>
 

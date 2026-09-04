@@ -21,13 +21,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -39,6 +46,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -77,6 +85,21 @@ fun LoginScreen(
     // Closing the modal resets the retained VM, so reopening starts on a fresh form rather than a
     // leftover OTP step. (Success paths are handled inside the VM via the auth-state observer.)
     val dismiss = { onDismiss(); viewModel.reset() }
+    // Seconds left on the Resend cooldown; re-keys and ticks whenever the cooldown window changes.
+    var resendSecondsLeft by remember { mutableStateOf(0) }
+    LaunchedEffect(state.resendCooldownUntil) {
+        while (true) {
+            val remaining = ((state.resendCooldownUntil - System.currentTimeMillis()) / 1000L).toInt()
+            resendSecondsLeft = remaining.coerceAtLeast(0)
+            if (resendSecondsLeft <= 0) break
+            delay(1000)
+        }
+    }
+    // Per-field show/hide password toggles (the eye button).
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmVisible by remember { mutableStateOf(false) }
+    // Switching Sign In / Sign Up (or leaving to the code step) hides the passwords again.
+    LaunchedEffect(state.mode, state.awaitingCode) { passwordVisible = false; confirmVisible = false }
 
     Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
@@ -170,18 +193,27 @@ fun LoginScreen(
                                 style = BwType.body.copy(fontSize = 13.sp),
                                 color = colors.textMuted,
                             )
-                            Text(
-                                stringResource(R.string.login_resend_code),
-                                style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                                color = colors.brandYellow,
-                                modifier = Modifier.clickable(enabled = enabled) { viewModel.onResendCode() },
-                            )
+                            Spacer(Modifier.width(4.dp))
+                            if (resendSecondsLeft > 0) {
+                                Text(
+                                    stringResource(R.string.login_resend_in, resendSecondsLeft),
+                                    style = BwType.body.copy(fontSize = 13.sp),
+                                    color = colors.textFaint,
+                                )
+                            } else {
+                                Text(
+                                    stringResource(R.string.login_resend_code),
+                                    style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.brandYellow,
+                                    modifier = Modifier.clickable(enabled = enabled) { viewModel.onResendCode() },
+                                )
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             stringResource(R.string.login_back),
-                            style = BwType.body.copy(fontSize = 13.sp),
-                            color = colors.textMuted,
+                            style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                            color = colors.textSecondary,
                             modifier = Modifier.clickable(enabled = !busy) { viewModel.onBackFromCode() },
                         )
                     } else {
@@ -226,7 +258,16 @@ fun LoginScreen(
                             placeholder = { Text(stringResource(R.string.login_password)) },
                             singleLine = true,
                             enabled = !busy,
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        painter = painterResource(if (passwordVisible) R.drawable.ic_bw_eye_off else R.drawable.ic_bw_eye),
+                                        contentDescription = stringResource(R.string.login_toggle_password),
+                                        tint = colors.textMuted,
+                                    )
+                                }
+                            },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             colors = fieldColors,
                             shape = RoundedCornerShape(10.dp),
@@ -240,7 +281,16 @@ fun LoginScreen(
                                 placeholder = { Text(stringResource(R.string.login_confirm_password)) },
                                 singleLine = true,
                                 enabled = !busy,
-                                visualTransformation = PasswordVisualTransformation(),
+                                visualTransformation = if (confirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { confirmVisible = !confirmVisible }) {
+                                        Icon(
+                                            painter = painterResource(if (confirmVisible) R.drawable.ic_bw_eye_off else R.drawable.ic_bw_eye),
+                                            contentDescription = stringResource(R.string.login_toggle_password),
+                                            tint = colors.textMuted,
+                                        )
+                                    }
+                                },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                                 colors = fieldColors,
                                 shape = RoundedCornerShape(10.dp),
@@ -270,6 +320,7 @@ fun LoginScreen(
                                 style = BwType.body.copy(fontSize = 13.sp),
                                 color = colors.textMuted,
                             )
+                            Spacer(Modifier.width(4.dp))
                             Text(
                                 stringResource(if (signUp) R.string.settings_sign_in else R.string.login_signup_link),
                                 style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),

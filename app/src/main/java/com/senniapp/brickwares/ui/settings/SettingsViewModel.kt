@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
+import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,12 +37,15 @@ class SettingsViewModel(
                             isLoggedIn = true,
                             userName = authState.user.displayName,
                             userEmail = authState.user.email,
+                            isGoogleOnly = authState.user.isGoogleOnly,
                         )
                         AuthState.SignedOut, AuthState.Loading -> it.copy(
                             isLoggedIn = false,
                             userName = "",
                             userEmail = "",
+                            isGoogleOnly = false,
                             showDeleteConfirm = false,
+                            showSetPassword = false,
                         )
                     }
                 }
@@ -53,6 +57,22 @@ class SettingsViewModel(
 
     fun onSignOut() {
         viewModelScope.launch { authRepository.signOut() }
+    }
+
+    // ---- Set a password (Google-only accounts, to add email+password sign-in) ----
+
+    fun onOpenSetPassword() = _uiState.update { it.copy(showSetPassword = true) }
+    fun onCloseSetPassword() = _uiState.update { it.copy(showSetPassword = false) }
+
+    /** Sets the password on the current (Google) account; closes the dialog and toasts the outcome. */
+    fun onSetPassword(newPassword: String) {
+        viewModelScope.launch {
+            val toast = when (authRepository.setPassword(newPassword)) {
+                SignInResult.Success -> UiText.Res(R.string.toast_password_set)
+                else -> UiText.Res(R.string.toast_password_failed)
+            }
+            _uiState.update { it.copy(showSetPassword = false, toastMessage = toast) }
+        }
     }
 
     // ---- Avatar ----

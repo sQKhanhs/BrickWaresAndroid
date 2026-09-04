@@ -31,6 +31,10 @@ data class SettingsUiState(
     val isLoggedIn: Boolean = false,
     val userName: String = "",
     val userEmail: String = "",
+    /** Signed in with Google but no password yet → offer "Set a password". */
+    val isGoogleOnly: Boolean = false,
+    /** Whether the "Set a password" dialog is open. */
+    val showSetPassword: Boolean = false,
     val currency: AppCurrency = AppCurrency.VND,
     val retirementAlerts: Boolean = true,
     val analyticsConsent: Boolean = false,

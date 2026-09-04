@@ -32,6 +32,11 @@ data class LoginUiState(
     /** The address being confirmed — shown on the code step and used to verify/resend. */
     val pendingEmail: String = "",
     val code: String = "",
+    /** Epoch-ms until which Resend is on cooldown (0 = available). Throttles confirmation-email spam. */
+    val resendCooldownUntil: Long = 0L,
+    /** Password typed in a sign-up awaiting confirmation; re-applied after OTP verify so the latest
+     *  attempt's password wins (GoTrue keeps the first password when an unconfirmed email is re-signed-up). */
+    val pendingPassword: String = "",
 )
 
 /**
@@ -63,21 +68,18 @@ class LoginViewModel(
     fun onConfirmPasswordChange(value: String) = _uiState.update { it.copy(confirmPassword = value, error = null) }
 
     fun onSwitchMode() = _uiState.update {
-        it.copy(
-            mode = if (it.mode == LoginMode.SIGN_IN) LoginMode.SIGN_UP else LoginMode.SIGN_IN,
-            error = null, info = null, confirmPassword = "",
-        )
+        // Switching between Sign In / Sign Up starts fresh — clear every field, error, and info.
+        LoginUiState(mode = if (it.mode == LoginMode.SIGN_IN) LoginMode.SIGN_UP else LoginMode.SIGN_IN)
     }
 
     fun onGoogleSignIn(context: Context) {
         if (_uiState.value.signingIn) return
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
-            val message: UiText? = when (val result = authRepository.signInWithGoogle(context)) {
+            val message: UiText? = when (authRepository.signInWithGoogle(context)) {
                 SignInResult.Success, SignInResult.Cancelled -> null
                 SignInResult.NoCredential -> UiText.Res(R.string.login_err_no_google)
-                is SignInResult.Error -> UiText.Raw(result.message)
-                SignInResult.EmailConfirmationRequired, SignInResult.EmailNotConfirmed -> null
+                else -> UiText.Res(R.string.login_err_generic)
             }
             _uiState.update { it.copy(signingIn = false, error = message) }
         }
@@ -103,15 +105,24 @@ class LoginViewModel(
                     SignInResult.EmailConfirmationRequired -> it.copy(
                         signingIn = false, awaitingCode = true, pendingEmail = s.email.trim(),
                         password = "", confirmPassword = "", code = "", info = null,
+                        // Remember the just-typed password so we can force it after the OTP verify.
+                        pendingPassword = s.password,
+                        // A code was just sent — start the cooldown so an immediate Resend can't spam.
+                        resendCooldownUntil = System.currentTimeMillis() + RESEND_COOLDOWN_MS,
                     )
                     // Signing in to an account that was never confirmed → open the code step (with the
-                    // Resend option right there) instead of a dead-end error.
+                    // Resend option right there) instead of a dead-end error. No email was sent on this
+                    // path, so Resend is available immediately (the old code may have expired). Don't
+                    // touch the password here (this is a sign-in, not a new password).
                     SignInResult.EmailNotConfirmed -> it.copy(
                         signingIn = false, awaitingCode = true, pendingEmail = s.email.trim(),
-                        password = "", confirmPassword = "", code = "",
-                        info = UiText.Res(R.string.login_info_needs_confirm),
+                        password = "", confirmPassword = "", code = "", resendCooldownUntil = 0L,
+                        pendingPassword = "", info = UiText.Res(R.string.login_info_needs_confirm),
                     )
-                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Raw(result.message))
+                    SignInResult.InvalidCredentials -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_invalid_credentials))
+                    SignInResult.EmailAlreadyRegistered -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_email_exists))
+                    SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
                     else -> it.copy(signingIn = false)
                 }
             }
@@ -132,6 +143,13 @@ class LoginViewModel(
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
             val result = authRepository.verifySignUpOtp(s.pendingEmail, s.code)
+            // The account is now confirmed + signed in. Force the password to the one typed in THIS
+            // sign-up: GoTrue keeps the FIRST password when an unconfirmed email is signed up again, so
+            // without this a second attempt's password would be silently ignored. Best-effort — the
+            // user is signed in regardless, and it's a no-op when it already matches.
+            if (result == SignInResult.Success && s.pendingPassword.isNotEmpty()) {
+                authRepository.setPassword(s.pendingPassword)
+            }
             _uiState.update {
                 when (result) {
                     SignInResult.Success -> it.copy(signingIn = false) // AuthGate routes to the app
@@ -142,17 +160,22 @@ class LoginViewModel(
         }
     }
 
-    /** Re-sends the confirmation code to the pending email. */
+    /** Re-sends the confirmation code to the pending email, then starts a 60s cooldown. */
     fun onResendCode() {
         val s = _uiState.value
         if (s.signingIn || s.pendingEmail.isBlank()) return
+        if (System.currentTimeMillis() < s.resendCooldownUntil) return // still cooling down
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
             val result = authRepository.resendSignUpCode(s.pendingEmail)
             _uiState.update {
                 when (result) {
-                    SignInResult.Success -> it.copy(signingIn = false, info = UiText.Res(R.string.login_code_resent))
-                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Raw(result.message))
+                    SignInResult.Success -> it.copy(
+                        signingIn = false, info = UiText.Res(R.string.login_code_resent),
+                        resendCooldownUntil = System.currentTimeMillis() + RESEND_COOLDOWN_MS,
+                    )
+                    SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                    is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
                     else -> it.copy(signingIn = false)
                 }
             }
@@ -176,5 +199,6 @@ class LoginViewModel(
     private companion object {
         const val MIN_PASSWORD = 6
         const val CODE_LENGTH = 6
+        const val RESEND_COOLDOWN_MS = 60_000L
     }
 }
