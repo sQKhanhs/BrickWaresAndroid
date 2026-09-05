@@ -221,16 +221,13 @@ fun releaseLabel(month: Int, year: Int): String {
 }
 
 /**
- * Localized retail-price label: the formatted amount, or a "no retail price" message when there's
- * none (VND shows a generic message; other currencies name themselves). The resource-backed,
- * translatable counterpart of the util `formatRetail`, whose null case was hardcoded English.
+ * Localized retail-price label: the formatted amount in the display [currency], or "No data" when the
+ * catalog has no retail figure. Retail is stored in ₫ and converts to any display currency, so there
+ * is no per-currency "unavailable" case — a null means the data is genuinely missing.
  */
 @Composable
-fun retailLabel(amount: Long?, currency: AppCurrency): String = when {
-    amount != null -> formatMoney(amount, currency)
-    currency == AppCurrency.VND -> stringResource(R.string.price_no_retail)
-    else -> stringResource(R.string.price_no_retail_currency, currency.name)
-}
+fun retailLabel(amount: Long?, currency: AppCurrency): String =
+    if (amount != null) formatMoney(amount, currency) else stringResource(R.string.price_no_retail)
 
 /**
  * A meta line (label + value). Uses [FlowRow] with a non-wrapping value so that when the

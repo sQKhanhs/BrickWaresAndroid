@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.data.local.CurrencyPrefs
+import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -50,7 +52,9 @@ class CollectionViewModel(
         // tiles recompute), mirroring the collection list.
         viewModelScope.launch {
             repository.getSoldItems().collect { sold ->
-                _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummaryOf(sold)) }
+                // Money is summed in the current display currency; the UI recomputes it reactively too
+                // (SalesStatsRow/ProfitBar) so a currency switch updates the tiles without a data change.
+                _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummaryOf(sold, CurrencyPrefs.current)) }
             }
         }
     }
@@ -197,7 +201,8 @@ class CollectionViewModel(
                 detailSetNumber = null, showAddSheet = true, addSheetPreselect = catalogFrom(sold),
                 editingCopy = Copy(
                     id = sold.id, condition = sold.condition, qty = sold.quantity,
-                    pricePaid = sold.pricePaid, dateAdded = sold.soldOn ?: "", note = sold.note,
+                    pricePaid = sold.pricePaid, currency = sold.currency,
+                    dateAdded = sold.soldOn ?: "", note = sold.note,
                 ),
                 editingSetNumber = null, editingSaleId = sold.id, editingSalePrice = sold.saleValue,
             )
@@ -209,7 +214,7 @@ class CollectionViewModel(
         val saleId = _uiState.value.editingSaleId
         val copy = item.copies.firstOrNull()
         if (saleId != null && copy != null) {
-            repository.updateSale(saleId, copy.qty, copy.condition, copy.pricePaid, salePrice, copy.dateAdded, copy.note)
+            repository.updateSale(saleId, copy.qty, copy.condition, copy.pricePaid, salePrice, copy.currency, copy.dateAdded, copy.note)
         }
         _uiState.update {
             it.copy(
@@ -230,13 +235,13 @@ class CollectionViewModel(
         _uiState.update { it.copy(sellSetNumber = null, sellCopyId = null) }
     }
 
-    fun onConfirmSell(quantity: Int, salePrice: Long, soldOn: String) {
+    fun onConfirmSell(quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String) {
         val state = _uiState.value
         val sn = state.sellSetNumber
         val cid = state.sellCopyId
         val name = state.sellTarget?.first?.name
         if (sn != null && cid != null) {
-            repository.sellCopy(sn, cid, quantity, salePrice, soldOn)
+            repository.sellCopy(sn, cid, quantity, salePrice, currency, soldOn)
         }
         _uiState.update {
             it.copy(

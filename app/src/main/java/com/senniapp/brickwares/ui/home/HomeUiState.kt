@@ -13,7 +13,7 @@ data class HomeUiState(
     /** Whether the auth session has resolved (SignedIn/SignedOut) — false while still Initializing. */
     val authReady: Boolean = false,
     val isLoggedIn: Boolean = false,
-    val currency: AppCurrency = AppCurrency.VND,
+    val currency: AppCurrency = AppCurrency.USD,
     val summary: CollectionSummary? = null,
     val themes: List<ThemeSummary> = emptyList(),
 ) {

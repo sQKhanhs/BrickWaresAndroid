@@ -305,7 +305,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
+            if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, BwTheme.currency))
             // Community value (Decision 17) with the "!" info bubble — for sets AND minifigs.
             ValuePriceLine(item.currentValueInfo)
             item.growthPercent?.let { GrowthPill(it) }

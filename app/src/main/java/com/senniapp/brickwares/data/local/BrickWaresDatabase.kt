@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.data.local
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 
@@ -16,8 +17,13 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [CollectionCopyEntity::class, WishlistEntity::class, SalesEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    // v2: add `currency` (default "USD") to collection_copies + sales — money is now stored in USD
+    // cents (or the entry's own currency). Retail/paid/sale values also switched unit; existing v1
+    // rows carry ₫ values, so a reseed/re-sync is expected (pre-launch), but the column add is a clean
+    // additive migration Room applies automatically.
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class BrickWaresDatabase : RoomDatabase() {
     abstract fun collectionDao(): CollectionDao

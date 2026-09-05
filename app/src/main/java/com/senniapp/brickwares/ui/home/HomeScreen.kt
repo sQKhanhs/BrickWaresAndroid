@@ -127,7 +127,7 @@ private fun HomeContent(
                 )
                 HeroCard(
                     summary = shown,
-                    currency = state.currency,
+                    currency = BwTheme.currency,
                     showGif = showHeroGif,
                     showNoValue = shown.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
                     onGifFinished = onGifFinished,
@@ -386,7 +386,7 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
                             color = colors.textMuted,
                         )
                         Text(
-                            formatMoney(theme.totalValue, AppCurrency.VND),
+                            formatMoney(theme.totalValue, BwTheme.currency),
                             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                             color = colors.text,
                         )

@@ -10,7 +10,7 @@ import com.senniapp.brickwares.ui.components.UiText
 
 /**
  * Immutable UI state for the Set Detail page. [set] is the catalog record; the ownership fields
- * ([isOwned]/[ownedCount]/[totalPaid]) and [isWishlisted] are derived live from the collection
+ * ([isOwned]/[ownedCount]/[ownedItem]) and [isWishlisted] are derived live from the collection
  * and wishlist so the page reflects adds made from here or elsewhere.
  */
 data class SetDetailUiState(
@@ -18,8 +18,8 @@ data class SetDetailUiState(
     val set: CatalogSet? = null,
     val isOwned: Boolean = false,
     val ownedCount: Int = 0,
-    val totalPaid: Long = 0L,
-    /** The hero set's owned collection item (with copies), when [isOwned]. */
+    /** The hero set's owned collection item (with copies), when [isOwned]. Its `totalPaidIn(display)`
+     *  gives the "Total paid" shown, exact in a single currency. */
     val ownedItem: CollectionItem? = null,
     /**
      * The set whose See-Details (copies) dialog is open — the hero set OR a recommended owned set —

@@ -17,7 +17,7 @@ data class CatalogSet(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
-    /** Retail in the display currency (VND), or null when no source price is available. */
+    /** Retail in **USD cents** (canonical base — LEGO retail is USD), or null when no source price. */
     val retailPrice: Long?,
     val status: Availability,
     /**

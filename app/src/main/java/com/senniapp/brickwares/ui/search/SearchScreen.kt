@@ -1010,7 +1010,7 @@ private fun ResultCard(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, BwTheme.currency))
             // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
             val valueRepo = ValueRepositoryProvider.instance
             val valueRev by valueRepo.revision.collectAsStateWithLifecycle()

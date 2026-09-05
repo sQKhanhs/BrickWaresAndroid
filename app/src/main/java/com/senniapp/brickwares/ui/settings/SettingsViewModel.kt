@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.SignInResult
@@ -50,6 +51,11 @@ class SettingsViewModel(
                     }
                 }
             }
+            .launchIn(viewModelScope)
+
+        // Reflect the persisted display currency (seeded at app start) and any later change.
+        CurrencyPrefs.currency
+            .onEach { currency -> _uiState.update { it.copy(currency = currency) } }
             .launchIn(viewModelScope)
     }
 
@@ -113,7 +119,9 @@ class SettingsViewModel(
     // initial selection is derived from the effective locale above — so there's no VM setter for it.
 
     fun onCurrencyChange(currency: AppCurrency) {
-        _uiState.update { it.copy(currency = currency) }
+        // Persist + broadcast; the CurrencyPrefs collector above updates our own UiState, and the
+        // theme's LocalAppCurrency recomposes every price across the app.
+        CurrencyPrefs.set(currency)
     }
 
     fun onToggleRetirementAlerts() {

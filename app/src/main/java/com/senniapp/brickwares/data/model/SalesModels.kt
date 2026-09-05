@@ -1,6 +1,12 @@
 package com.senniapp.brickwares.data.model
 
-/** A sold item, shown in Collection tab's Sales sub-mode. [id] is the sales row's client UUID. */
+import com.senniapp.brickwares.util.AppCurrency
+
+/**
+ * A sold item, shown in Collection tab's Sales sub-mode. [id] is the sales row's client UUID.
+ * [pricePaid]/[saleValue] are in [currency]'s own unit (the currency the sale was entered in);
+ * [retailPrice] is **USD cents** (catalog canonical).
+ */
 data class SoldItem(
     val id: String,
     val setNumber: String,
@@ -13,6 +19,8 @@ data class SoldItem(
     val retailPrice: Long,
     val pricePaid: Long,
     val saleValue: Long,
+    /** The currency [pricePaid] and [saleValue] were entered in (recorded, not converted). */
+    val currency: AppCurrency = AppCurrency.USD,
     val quantity: Int = 1,
     val condition: Condition = Condition.NEW,
     val soldOn: String? = null,
@@ -22,6 +30,7 @@ data class SoldItem(
     /** Community current value for the item, when shown (retired / promo / magazine sets). */
     val currentValueInfo: CurrentValue? = null,
 ) {
+    /** Profit in [currency]'s unit (sale and paid were entered together, so same currency). */
     val profit: Long get() = saleValue - pricePaid
     val profitPercent: Double
         get() = if (pricePaid == 0L) 0.0 else (profit.toDouble() / pricePaid) * 100.0

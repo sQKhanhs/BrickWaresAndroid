@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.senniapp.brickwares.R
@@ -49,6 +50,10 @@ import com.senniapp.brickwares.data.model.Condition
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.moneyFieldText
+import com.senniapp.brickwares.util.moneyInputToAmount
+import com.senniapp.brickwares.util.sanitizeMoneyInput
 import java.time.LocalDate
 
 /** Input caps for the numeric fields: 10 price digits (≈ 10B₫, above any real set) and 4 quantity
@@ -82,6 +87,12 @@ fun AddToCollectionSheet(
     onEditSale: (CollectionItem, Long) -> Unit = { _, _ -> },
 ) {
     val colors = BwTheme.colors
+    // The field always uses the current DISPLAY currency — a fresh add records it, and an edit re-bases
+    // the entry to it (the prefill converts from the entry's stored currency). So editing a USD entry
+    // while viewing ₫ shows ₫, and saving re-records the entry as ₫. Values store in this currency+tag.
+    val currency = BwTheme.currency
+    // The currency an edited entry was stored in — the prefill converts from it into the field currency.
+    val editFrom = initialCopy?.currency ?: AppCurrency.USD
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isEdit = initialCopy != null
     val isSaleEdit = isEdit && initialSalePrice != null
@@ -89,8 +100,20 @@ fun AddToCollectionSheet(
     var salesMode by remember { mutableStateOf(isSaleEdit || (initialSalesMode && !isEdit)) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(initialSet) }
-    var paid by remember { mutableStateOf(initialCopy?.pricePaid?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
-    var salePrice by remember { mutableStateOf(initialSalePrice?.toString() ?: initialSet?.retailPrice?.toString() ?: "") }
+    // Prefills convert into the field (display) currency: an edited copy/sale from its stored currency,
+    // a retail default from USD cents.
+    var paid by remember {
+        mutableStateOf(
+            if (initialCopy != null) moneyFieldText(initialCopy.pricePaid, editFrom, currency)
+            else moneyFieldText(initialSet?.retailPrice, AppCurrency.USD, currency),
+        )
+    }
+    var salePrice by remember {
+        mutableStateOf(
+            if (initialSalePrice != null) moneyFieldText(initialSalePrice, editFrom, currency)
+            else moneyFieldText(initialSet?.retailPrice, AppCurrency.USD, currency),
+        )
+    }
     var qty by remember { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
     var condition by remember { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
     var note by remember { mutableStateOf(initialCopy?.note ?: "") }
@@ -146,8 +169,8 @@ fun AddToCollectionSheet(
                             .clickable {
                                 selected = set
                                 query = ""
-                                if (paid.isBlank()) paid = set.retailPrice?.toString() ?: ""
-                                if (salePrice.isBlank()) salePrice = set.retailPrice?.toString() ?: ""
+                                if (paid.isBlank()) paid = moneyFieldText(set.retailPrice, AppCurrency.USD, currency)
+                                if (salePrice.isBlank()) salePrice = moneyFieldText(set.retailPrice, AppCurrency.USD, currency)
                             }
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                     ) {
@@ -181,15 +204,30 @@ fun AddToCollectionSheet(
                 }
             }
 
+            // Currency-aware money field decoration: ₫ suffix for VND, "$" prefix for USD (which also
+            // allows a decimal point). Shared by the Paid and Sale-price fields.
+            val moneyPrefix: (@Composable () -> Unit)? =
+                if (currency == AppCurrency.USD) ({ Text(AppCurrency.USD.symbol, color = colors.textMuted) }) else null
+            val moneySuffix: (@Composable () -> Unit)? =
+                if (currency == AppCurrency.USD) null else ({ Text(AppCurrency.VND.symbol, color = colors.textMuted) })
+            val moneyKeyboard = KeyboardOptions(
+                keyboardType = if (currency == AppCurrency.USD) KeyboardType.Decimal else KeyboardType.Number,
+            )
+            // Group ₫ digits into thousands live ("1000000" → "1.000.000"); USD keeps its own decimals.
+            val moneyTransformation: VisualTransformation =
+                if (currency == AppCurrency.VND) ThousandsSeparatorTransformation() else VisualTransformation.None
+
             FieldLabel(stringResource(R.string.sheet_field_paid))
             OutlinedTextField(
                 value = paid,
-                // Digits only, capped so a stray long number can't be entered (10 digits ≈ 10B₫).
-                onValueChange = { input -> paid = input.filter { it.isDigit() }.take(MAX_PRICE_DIGITS) },
+                // Filtered + capped for the currency (VND digits only; USD digits + 2 decimals).
+                onValueChange = { input -> paid = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                suffix = { Text("₫", color = colors.textMuted) },
+                keyboardOptions = moneyKeyboard,
+                visualTransformation = moneyTransformation,
+                prefix = moneyPrefix,
+                suffix = moneySuffix,
                 placeholder = { Text("0") },
             )
 
@@ -197,11 +235,13 @@ fun AddToCollectionSheet(
                 FieldLabel(stringResource(R.string.sheet_field_sale_price))
                 OutlinedTextField(
                     value = salePrice,
-                    onValueChange = { input -> salePrice = input.filter { it.isDigit() }.take(MAX_PRICE_DIGITS) },
+                    onValueChange = { input -> salePrice = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    suffix = { Text("₫", color = colors.textMuted) },
+                    keyboardOptions = moneyKeyboard,
+                    visualTransformation = moneyTransformation,
+                    prefix = moneyPrefix,
+                    suffix = moneySuffix,
                     placeholder = { Text("0") },
                 )
             }
@@ -286,14 +326,15 @@ fun AddToCollectionSheet(
                                 id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
                                 condition = condition,
                                 qty = qty.toIntOrNull() ?: 1,
-                                // Blank/invalid paid → fall back to the set's retail price.
-                                pricePaid = paid.toLongOrNull() ?: (set.retailPrice ?: 0L),
+                                // Parse the field into the field currency's own unit; store with its tag.
+                                pricePaid = moneyInputToAmount(paid, currency),
+                                currency = currency,
                                 dateAdded = dateAdded,
                                 note = note.ifBlank { null },
                             ),
                         ),
                     )
-                    val salePriceLong = salePrice.toLongOrNull() ?: (set.retailPrice ?: 0L)
+                    val salePriceLong = moneyInputToAmount(salePrice, currency)
                     when {
                         isSaleEdit -> onEditSale(item, salePriceLong)
                         salesMode -> onAddSale(item, salePriceLong)

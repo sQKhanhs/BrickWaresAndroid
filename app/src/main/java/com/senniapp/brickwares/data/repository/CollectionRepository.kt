@@ -8,6 +8,7 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -59,17 +60,19 @@ interface CollectionRepository {
     /**
      * Sells [quantity] units of an owned [copyId], moving them from the collection into Sales. The
      * copy's quantity (and prorated cost basis) is reduced by [quantity]; when nothing remains the
-     * copy is removed. [salePrice] is the total the units sold for.
+     * copy is removed. [salePrice] is the total the units sold for, in [currency] (the display currency
+     * at sell time; the copy's cost basis is converted into it so the sale row is single-currency).
      */
-    fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, soldOn: String?)
+    fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String?)
 
-    /** Edits an existing sale row (matched by [saleId]). */
+    /** Edits an existing sale row (matched by [saleId]). [pricePaid]/[salePrice] are in [currency]. */
     fun updateSale(
         saleId: String,
         quantity: Int,
         condition: Condition,
         pricePaid: Long,
         salePrice: Long,
+        currency: AppCurrency,
         soldOn: String?,
         note: String?,
     )

@@ -10,6 +10,7 @@ import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.senniapp.brickwares.data.local.AppGraph
+import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 
@@ -26,6 +27,7 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         LocalePrefs.init(this)
         ThemeFavoritesPrefs.init(this)
+        CurrencyPrefs.init(this)
         AppGraph.init(this)
     }
 

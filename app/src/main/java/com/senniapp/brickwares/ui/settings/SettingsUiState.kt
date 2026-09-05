@@ -35,7 +35,7 @@ data class SettingsUiState(
     val isGoogleOnly: Boolean = false,
     /** Whether the "Set a password" dialog is open. */
     val showSetPassword: Boolean = false,
-    val currency: AppCurrency = AppCurrency.VND,
+    val currency: AppCurrency = AppCurrency.USD,
     val retirementAlerts: Boolean = true,
     val analyticsConsent: Boolean = false,
     val showDeleteConfirm: Boolean = false,

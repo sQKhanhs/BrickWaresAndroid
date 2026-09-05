@@ -66,7 +66,7 @@ fun ValuePriceLine(value: CurrentValue?, alignEnd: Boolean = true) {
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            value?.amountVnd?.let { formatMoney(it, AppCurrency.VND) } ?: "----",
+            value?.amountUsdCents?.let { formatMoney(it, BwTheme.currency) } ?: "----",
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
             color = colors.text,
         )

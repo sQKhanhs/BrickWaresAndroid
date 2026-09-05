@@ -48,8 +48,10 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
-import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
+import com.senniapp.brickwares.util.formatIn
 import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatMoneyFrom
 
 /** Which sub-view of [ItemDetailsDialog] is showing. */
 enum class ItemDetailsTab { COLLECTION, SALES }
@@ -210,7 +212,7 @@ private fun ColumnScope.CollectionBody(
             Text(stringResource(if (copy.condition == Condition.NEW) R.string.sheet_condition_new else R.string.sheet_condition_used), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
             Text(copy.dateAdded, style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
             Text(copy.qty.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
-            Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
+            Text(formatMoneyFrom(copy.pricePaid, copy.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.5f))
             Row(modifier = Modifier.width(ACTION_COL_WIDTH), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(
                     painter = painterResource(R.drawable.ic_bw_note),
@@ -254,7 +256,7 @@ private fun ColumnScope.CollectionBody(
         Text(stringResource(R.string.sd_avg), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
         Spacer(Modifier.weight(1.3f))
         Text(item.totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
-        Text(formatMoney(item.avgPaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
+        Text(formatIn(item.avgPaidIn(BwTheme.currency), BwTheme.currency), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1.5f))
         Spacer(Modifier.width(ACTION_COL_WIDTH))
     }
 
@@ -294,8 +296,8 @@ private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) 
             Text(stringResource(if (sold.condition == Condition.NEW) R.string.sheet_condition_new else R.string.sheet_condition_used), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1f))
             Text(sold.soldOn ?: "—", style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
             Text(sold.quantity.toString(), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(0.5f))
-            Text(formatMoney(sold.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
-            Text(formatMoney(sold.saleValue, AppCurrency.VND), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.3f))
+            Text(formatMoneyFrom(sold.pricePaid, sold.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 11.sp), color = colors.textSecondary, modifier = Modifier.weight(1.3f))
+            Text(formatMoneyFrom(sold.saleValue, sold.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = colors.text, modifier = Modifier.weight(1.3f))
             Row(modifier = Modifier.width(66.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(
                     painter = painterResource(R.drawable.ic_bw_note),
@@ -329,9 +331,12 @@ private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) 
     }
 
     HorizontalDivider(color = colors.borderStrong)
-    // Footer mirrors the data columns: total quantity sold under Qty, total profit under Sale.
+    // Footer mirrors the data columns: total quantity sold under Qty, total profit under Sale. Profit is
+    // summed IN the display currency (each sale converted from its own) so a single-currency total is
+    // exact — matching the per-row figures — with no ₫→cents→₫ drift.
+    val display = BwTheme.currency
     val totalQty = sales.sumOf { it.quantity }
-    val totalProfit = sales.sumOf { it.profit }
+    val totalProfit = sales.sumOf { CurrencyConverter.convert(it.profit, it.currency, display) }
     val profitColor = if (totalProfit >= 0) colors.success else colors.error
     Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.sales_profit_label), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
@@ -339,7 +344,7 @@ private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) 
         Text(totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
         Spacer(Modifier.weight(1.3f)) // Paid column
         Text(
-            (if (totalProfit > 0) "+" else "") + formatMoney(totalProfit, AppCurrency.VND),
+            (if (totalProfit > 0) "+" else "") + formatIn(totalProfit, display),
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
             color = profitColor,
             modifier = Modifier.weight(1.3f), // Sale column

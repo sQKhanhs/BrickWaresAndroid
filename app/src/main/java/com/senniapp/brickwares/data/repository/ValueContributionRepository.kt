@@ -7,6 +7,8 @@ import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.model.ValueGuardTier
 import com.senniapp.brickwares.data.model.ValuePoint
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.CancellationException
@@ -18,6 +20,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.OffsetDateTime
+import kotlin.math.roundToLong
 
 /**
  * Reads the public `set_value_contributions` table and folds the rows into a displayed
@@ -83,10 +86,10 @@ class ValueContributionRepository(
      * derived from it) at once — without waiting for the sync round-trip that publishes the real
      * community contribution and re-[warm]s. [warm] later replaces this with the DB-accurate value.
      */
-    fun applyLocalPaid(setId: Long?, figNum: String?, paidVnd: Long, retail: Long?, tier: ValueGuardTier, isSale: Boolean) {
-        if (paidVnd <= 0L) return
+    fun applyLocalPaid(setId: Long?, figNum: String?, paidUsdCents: Long, retail: Long?, tier: ValueGuardTier, isSale: Boolean) {
+        if (paidUsdCents <= 0L) return
         val now = System.currentTimeMillis()
-        val point = ValuePoint(paidVnd.toDouble(), now, isSale)
+        val point = ValuePoint(paidUsdCents.toDouble(), now, isSale)
         when {
             setId != null -> {
                 val pts = setPoints[setId].orEmpty() + point
@@ -106,18 +109,18 @@ class ValueContributionRepository(
     /** Cached community value for a set id (synchronous overlay), or null when none is cached. */
     fun valueFor(setId: Long?): CurrentValue? = setId?.let { cache[it] }
 
-    /** Just the cached amount in ₫ for a set id, or null. Convenience for card overlays. */
-    fun amountFor(setId: Long?): Long? = valueFor(setId)?.amountVnd
+    /** Just the cached amount in USD cents for a set id, or null. Convenience for card overlays. */
+    fun amountFor(setId: Long?): Long? = valueFor(setId)?.amountUsdCents
 
     /** Cached community value for a minifig (synchronous overlay), or null when none is cached. */
     fun valueForFig(figNum: String?): CurrentValue? = figNum?.let { figCache[it] }
 
-    /** Just the cached minifig amount in ₫, or null. Convenience for card overlays. */
-    fun amountForFig(figNum: String?): Long? = valueForFig(figNum)?.amountVnd
+    /** Just the cached minifig amount in USD cents, or null. Convenience for card overlays. */
+    fun amountForFig(figNum: String?): Long? = valueForFig(figNum)?.amountUsdCents
 
-    /** Current value for one set (retail + the availability [tier] anchor the outlier guard). */
-    suspend fun forSet(setId: Long, retailVnd: Long?, tier: ValueGuardTier): CurrentValue =
-        aggregate(retailVnd, tier) {
+    /** Current value for one set (retail in USD cents + the availability [tier] anchor the guard). */
+    suspend fun forSet(setId: Long, retailUsdCents: Long?, tier: ValueGuardTier): CurrentValue =
+        aggregate(retailUsdCents, tier) {
             client.from(TABLE).select { filter { eq("set_id", setId) } }.decodeList<Row>()
         }
 
@@ -152,17 +155,23 @@ class ValueContributionRepository(
             .mapValues { (id, rs) -> ValueAggregator.aggregate(rs.toPoints(), retail[id], tiers[id] ?: ValueGuardTier.AVAILABLE, now) }
     }
 
-    private suspend fun aggregate(retailVnd: Long?, tier: ValueGuardTier, fetch: suspend () -> List<Row>): CurrentValue {
+    private suspend fun aggregate(retailUsdCents: Long?, tier: ValueGuardTier, fetch: suspend () -> List<Row>): CurrentValue {
         val rows = runCatching { withTimeout(TIMEOUT_MS) { fetch() } }.getOrElse {
             if (it is CancellationException) throw it
             Log.w(TAG, "value fetch failed", it)
             return CurrentValue.NONE
         }
-        return ValueAggregator.aggregate(rows.toPoints(), retailVnd, tier)
+        return ValueAggregator.aggregate(rows.toPoints(), retailUsdCents, tier)
     }
 
+    // Each contribution is recorded in its own currency (USD cents or whole ₫); normalize every point
+    // to USD cents so the median/guard compare like with like against the USD-cents retail anchor.
     private fun List<Row>.toPoints(): List<ValuePoint> =
-        map { ValuePoint(it.value, parseIso(it.submittedAt), it.source == "sale") }
+        map { r ->
+            val ccy = runCatching { AppCurrency.valueOf(r.currency ?: "USD") }.getOrDefault(AppCurrency.USD)
+            val usdCents = CurrencyConverter.usdCentsOf(r.value.roundToLong(), ccy)
+            ValuePoint(usdCents.toDouble(), parseIso(r.submittedAt), r.source == "sale")
+        }
 
     // PostgREST returns timestamptz as "…+00:00"; Instant.parse accepts that offset form only on newer
     // java.time (JDK 12+ / recent Android) — elsewhere it throws and every point would read as epoch 0
@@ -178,6 +187,8 @@ class ValueContributionRepository(
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
         val value: Double,
+        /** Currency the [value] was recorded in ("USD" cents / "VND" ₫); normalized to USD cents on read. */
+        val currency: String? = null,
         @SerialName("submitted_at") val submittedAt: String? = null,
         /** 'paid' or 'sale' — the available-tier floor is looser for a realized sale. */
         val source: String? = null,

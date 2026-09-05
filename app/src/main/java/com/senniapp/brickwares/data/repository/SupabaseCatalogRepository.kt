@@ -222,15 +222,16 @@ class SupabaseCatalogRepository(
         @SerialName("set_prices") val prices: List<PriceRow> = emptyList(),
     ) {
         /**
-         * Retail in ₫. Prefer the US price (Decision 12: global USD MSRP → ₫); if a set has no US
-         * price, fall back to any other region's price and cross-convert. Null if no price exists.
+         * Retail in **USD cents** (the canonical base — LEGO retail is USD). Prefer the US price
+         * (stored exact, × 100, no FX); if a set has no US price, fall back to any other region's price
+         * and cross-convert to USD. Null if no price exists (or the fallback region's rate isn't loaded).
          */
-        private fun retailVnd(): Long? {
+        private fun retailUsdCents(): Long? {
             val chosen = prices.firstOrNull { it.region == "US" && it.retailPrice != null }
                 ?: prices.firstOrNull { it.retailPrice != null }
                 ?: return null
             val currency = CurrencyConverter.currencyForRegion(chosen.region) ?: return null
-            return CurrencyConverter.toVnd(chosen.retailPrice!!, currency)
+            return CurrencyConverter.usdCentsFromRegion(chosen.retailPrice!!, currency)
         }
 
         private fun parseDate(s: String?): LocalDate? =
@@ -291,8 +292,8 @@ class SupabaseCatalogRepository(
             releaseMonth = releaseDate()?.monthValue ?: 0,
             pieces = pieces ?: 0,
             minifigs = minifigs ?: 0,
-            // Brickset has no VN retail — convert US (or fallback region) price to ₫; null if none.
-            retailPrice = retailVnd(),
+            // Retail as USD cents (US price exact; other regions cross-converted); null if none.
+            retailPrice = retailUsdCents(),
             status = deriveStatus(),
             // Retirement date shown on the detail page — only when the exit date is actually in the past.
             retiredYear = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,

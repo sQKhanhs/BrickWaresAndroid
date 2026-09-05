@@ -1,5 +1,8 @@
 package com.senniapp.brickwares.data.model
 
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
+
 /** Whether a collection entry is a set or a minifig (drives the All/Set/Minifig filter). */
 enum class ItemType { SET, MINIFIG }
 
@@ -17,15 +20,18 @@ data class Copy(
     val id: String,
     val condition: Condition,
     val qty: Int,
+    /** Total paid for this copy's qty, in [currency]'s own unit (USD cents / whole ₫). */
     val pricePaid: Long,
+    /** The currency this copy's [pricePaid] was entered in (recorded, not converted). */
+    val currency: AppCurrency = AppCurrency.USD,
     val dateAdded: String, // ISO yyyy-MM-dd
     val note: String? = null,
 )
 
 /**
- * An owned item (a set or minifig) plus its copies. Money is whole VND (Long) at the mock stage.
- * [currentValue]/[growthPercent] are nullable because "current value" is crowdsourced and often
- * absent — cards must render without them.
+ * An owned item (a set or minifig) plus its copies. [retailPrice]/[currentValue] are **USD cents**
+ * (the canonical base); each copy's paid price carries its own currency. [currentValue]/[growthPercent]
+ * are nullable because "current value" is crowdsourced and often absent — cards must render without them.
  */
 data class CollectionItem(
     val setNumber: String,
@@ -47,13 +53,24 @@ data class CollectionItem(
     val imageUrl: String? = null,
     val copies: List<Copy> = emptyList(),
 ) {
-    /** Total paid across all copies (the card's "Paid"). */
-    val totalPaid: Long get() = copies.sumOf { it.pricePaid }
+    /** Total paid across all copies, in **USD cents** (copies may carry different currencies, so each
+     *  is normalized before summing). For cross-item math (collection/sales stats); for a single item's
+     *  on-screen "Paid" use [totalPaidIn] so a same-currency item shows exactly, without a USD round-trip. */
+    val totalPaid: Long get() = copies.sumOf { CurrencyConverter.usdCentsOf(it.pricePaid, it.currency) }
 
     /** Total number of pieces/units owned across copies. */
     val totalQty: Int get() = copies.sumOf { it.qty }
 
-    /** Average paid per unit across all copies (shown in the See Details "Avg" row). Divides by total
-     *  quantity, not copy-row count, so it stays correct when identical copies merge into one row. */
-    val avgPaid: Long get() = if (totalQty == 0) 0L else copies.sumOf { it.pricePaid } / totalQty
+    /**
+     * Total paid across all copies expressed in [display]'s unit, converting each copy **from its own
+     * currency** — so a single-currency item shown in that currency is exact (no ₫→cents→₫ drift), while
+     * a mixed-currency item still sums consistently with the per-copy rows. Use for the card "Paid" and
+     * See-Details totals; format the result with `formatIn(_, display)`.
+     */
+    fun totalPaidIn(display: AppCurrency): Long =
+        copies.sumOf { CurrencyConverter.convert(it.pricePaid, it.currency, display) }
+
+    /** Average paid per **unit** in [display]'s unit (See-Details "Avg"): [totalPaidIn] / total qty. */
+    fun avgPaidIn(display: AppCurrency): Long =
+        if (totalQty == 0) 0L else totalPaidIn(display) / totalQty
 }

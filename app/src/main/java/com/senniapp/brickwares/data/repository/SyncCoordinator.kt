@@ -151,6 +151,7 @@ class SyncCoordinator(
                         row.setId?.let { put("p_set_id", it) }
                         row.figNum?.let { put("p_fig_num", it) }
                         put("p_value", row.pricePaid)
+                        put("p_currency", row.currency)
                         put("p_source", "paid")
                     },
                 )
@@ -175,6 +176,7 @@ class SyncCoordinator(
                         row.setId?.let { put("p_set_id", it) }
                         row.figNum?.let { put("p_fig_num", it) }
                         put("p_value", row.salePrice)
+                        put("p_currency", row.currency)
                         put("p_source", "sale")
                     },
                 )
@@ -231,6 +233,7 @@ class SyncCoordinator(
                 retailPrice = set?.retailPrice, status = (set?.status ?: Availability.AVAILABLE).name,
                 imageUrl = set?.imageUrl ?: fig?.imageUrl, quantity = r.quantity,
                 condition = r.condition ?: "new", pricePaid = (r.pricePaid ?: 0.0).toLong(),
+                currency = r.currency ?: "USD",
                 acquiredOn = r.acquiredOn, notes = r.notes,
                 deleted = r.deleted, updatedAt = remoteAt, dirty = false,
             ),
@@ -275,6 +278,7 @@ class SyncCoordinator(
                 imageUrl = set?.imageUrl ?: fig?.imageUrl, retailPrice = set?.retailPrice,
                 quantity = r.quantity, condition = r.condition ?: "new",
                 pricePaid = (r.pricePaid ?: 0.0).toLong(), salePrice = r.salePrice.toLong(),
+                currency = r.currency ?: "USD",
                 soldOn = r.soldOn, notes = r.notes, deleted = r.deleted, updatedAt = remoteAt, dirty = false,
             ),
         )
@@ -291,7 +295,7 @@ class SyncCoordinator(
         if (setId == null && figNum == null) return null
         return RemoteCopy(
             id = id, userId = uid, setId = setId, figNum = figNum, itemKind = itemKind, quantity = quantity,
-            condition = condition, pricePaid = pricePaid.toDouble(), acquiredOn = acquiredOn,
+            condition = condition, pricePaid = pricePaid.toDouble(), currency = currency, acquiredOn = acquiredOn,
             notes = notes, deleted = deleted, updatedAt = toIso(updatedAt),
         )
     }
@@ -311,7 +315,7 @@ class SyncCoordinator(
         return RemoteSale(
             id = id, userId = uid, setId = setId, figNum = figNum, itemKind = itemKind, quantity = quantity,
             condition = condition, pricePaid = pricePaid.toDouble(), salePrice = salePrice.toDouble(),
-            soldOn = soldOn, notes = notes, deleted = deleted, updatedAt = toIso(updatedAt),
+            currency = currency, soldOn = soldOn, notes = notes, deleted = deleted, updatedAt = toIso(updatedAt),
         )
     }
 
@@ -343,6 +347,7 @@ class SyncCoordinator(
         val quantity: Int = 1,
         val condition: String? = null,
         @SerialName("price_paid") val pricePaid: Double? = null,
+        val currency: String? = null,
         @SerialName("acquired_on") val acquiredOn: String? = null,
         val notes: String? = null,
         val deleted: Boolean = false,
@@ -373,6 +378,7 @@ class SyncCoordinator(
         val condition: String? = null,
         @SerialName("price_paid") val pricePaid: Double? = null,
         @SerialName("sale_price") val salePrice: Double,
+        val currency: String? = null,
         @SerialName("sold_on") val soldOn: String? = null,
         val notes: String? = null,
         val deleted: Boolean = false,

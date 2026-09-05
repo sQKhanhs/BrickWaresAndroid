@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -43,7 +44,10 @@ import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
-import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatMoneyFrom
+import com.senniapp.brickwares.util.moneyFieldText
+import com.senniapp.brickwares.util.moneyInputToAmount
+import com.senniapp.brickwares.util.sanitizeMoneyInput
 import java.time.LocalDate
 
 /**
@@ -58,12 +62,14 @@ fun SellCopyDialog(
     item: CollectionItem,
     copy: Copy,
     onDismiss: () -> Unit,
-    onConfirm: (quantity: Int, salePrice: Long, soldOn: String) -> Unit,
+    onConfirm: (quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String) -> Unit,
 ) {
     val colors = BwTheme.colors
+    // Display + input currency; the sale price is parsed back to stored ₫ on confirm.
+    val currency = BwTheme.currency
     val maxQty = copy.qty.coerceAtLeast(1)
     var qty by remember { mutableStateOf(maxQty.toString()) }
-    var salePrice by remember { mutableStateOf(item.retailPrice.takeIf { it > 0L }?.toString() ?: "") }
+    var salePrice by remember { mutableStateOf(moneyFieldText(item.retailPrice.takeIf { it > 0L }, AppCurrency.USD, currency)) }
     var soldOn by remember { mutableStateOf(LocalDate.now().toString()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -91,7 +97,7 @@ fun SellCopyDialog(
                 // Cost basis reference.
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.price_paid), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
-                    Text(formatMoney(copy.pricePaid, AppCurrency.VND), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
+                    Text(formatMoneyFrom(copy.pricePaid, copy.currency, currency), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
                 }
                 Spacer(Modifier.height(12.dp))
 
@@ -115,11 +121,16 @@ fun SellCopyDialog(
                 FieldLabel(stringResource(R.string.sheet_field_sale_price))
                 OutlinedTextField(
                     value = salePrice,
-                    onValueChange = { input -> salePrice = input.filter { it.isDigit() } },
+                    onValueChange = { input -> salePrice = sanitizeMoneyInput(input, currency) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    suffix = { Text("₫", color = colors.textMuted) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (currency == AppCurrency.USD) KeyboardType.Decimal else KeyboardType.Number,
+                    ),
+                    // Group ₫ digits into thousands live; USD keeps its own decimal formatting.
+                    visualTransformation = if (currency == AppCurrency.VND) ThousandsSeparatorTransformation() else VisualTransformation.None,
+                    prefix = if (currency == AppCurrency.USD) ({ Text(AppCurrency.USD.symbol, color = colors.textMuted) }) else null,
+                    suffix = if (currency == AppCurrency.USD) null else ({ Text(AppCurrency.VND.symbol, color = colors.textMuted) }),
                     placeholder = { Text("0") },
                 )
 
@@ -183,7 +194,7 @@ fun SellCopyDialog(
                             .clip(RoundedCornerShape(999.dp))
                             .background(if (enabled) colors.brandYellow else colors.track)
                             .clickable(enabled = enabled) {
-                                onConfirm(qty.toInt(), salePrice.toLongOrNull() ?: 0L, soldOn)
+                                onConfirm(qty.toInt(), moneyInputToAmount(salePrice, currency), currency, soldOn)
                             }
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center,

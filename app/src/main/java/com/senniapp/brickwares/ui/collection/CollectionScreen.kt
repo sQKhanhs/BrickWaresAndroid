@@ -60,6 +60,7 @@ import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.blinkAttention
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.components.rememberIsOnline
+import com.senniapp.brickwares.data.repository.salesSummaryOf
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
@@ -80,7 +81,9 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
+import com.senniapp.brickwares.util.formatIn
 import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatMoneyFrom
 import com.senniapp.brickwares.util.oneDecimal
 import com.senniapp.brickwares.ui.components.releaseLabel
 import kotlin.math.roundToInt
@@ -157,7 +160,7 @@ private fun CollectionContent(
     onEditCopy: (CollectionItem, Copy) -> Unit,
     onSellCopyRequest: (String, Copy) -> Unit,
     onDismissSell: () -> Unit,
-    onConfirmSell: (Int, Long, String) -> Unit,
+    onConfirmSell: (Int, Long, AppCurrency, String) -> Unit,
     onSaleDetail: (SoldItem) -> Unit,
     onEditSale: (SoldItem) -> Unit,
     onDeleteSale: (String) -> Unit,
@@ -271,8 +274,11 @@ private fun CollectionContent(
             } else {
                 // Always show the sales stats + profit block (zeros when empty), then either the
                 // sold-item list or the empty-state art below it.
-                state.salesSummary?.let { s ->
+                state.salesSummary?.let { _ ->
                     item {
+                        // Recompute in the display currency so a single-currency total is exact and a
+                        // currency switch updates the tiles (the guard just gates "sales loaded").
+                        val s = salesSummaryOf(state.soldItems, BwTheme.currency)
                         SalesStatsRow(s)
                         Spacer(Modifier.height(12.dp))
                         ProfitBar(s)
@@ -540,7 +546,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
         ) {
             if (isFig) {
                 // Minifig: Paid → community value → Growth (no retail; value always shown).
-                PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_paid), formatIn(item.totalPaidIn(BwTheme.currency), BwTheme.currency))
                 ValuePriceLine(item.currentValueInfo)
                 item.growthPercent?.let { GrowthPill(it) }
             } else {
@@ -548,9 +554,9 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 // divider, then Paid → Value → Growth. Otherwise just Retail → Paid → Growth (no value).
                 // Growth always shows (repo picks the reference: value when shown, else retail vs paid).
                 val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
-                PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, BwTheme.currency))
                 if (showValue) HorizontalDivider(color = colors.borderSoft)
-                PriceLine(stringResource(R.string.price_paid), formatMoney(item.totalPaid, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_paid), formatIn(item.totalPaidIn(BwTheme.currency), BwTheme.currency))
                 if (showValue) ValuePriceLine(item.currentValueInfo)
                 item.growthPercent?.let { GrowthPill(it) }
             }
@@ -573,8 +579,8 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
 
 // ---- Sales mode ----
 
-private fun signedMoney(v: Long): String =
-    (if (v > 0) "+" else "") + formatMoney(v, AppCurrency.VND)
+private fun signedMoney(v: Long, from: AppCurrency, to: AppCurrency): String =
+    (if (v > 0) "+" else "") + formatMoneyFrom(v, from, to)
 
 private fun signedPct(p: Double): String {
     // One decimal place (matches the growth pills), so sub-1% profit isn't rounded to "0%".
@@ -620,7 +626,8 @@ private fun SalesStatsRow(summary: SalesSummary) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                formatMoney(animatedNumber(summary.totalSaleValue, "sales_value"), AppCurrency.VND),
+                // summary money is already in the display currency (see the recompute at the call site).
+                formatIn(animatedNumber(summary.totalSaleValue, "sales_value"), BwTheme.currency),
                 style = BwType.statNumber.copy(fontSize = 22.sp),
                 color = colors.text,
             )
@@ -659,7 +666,8 @@ private fun ProfitBar(summary: SalesSummary) {
                 )
             }
             Text(
-                stringResource(R.string.sales_profit_prefix, signedMoney(animatedNumber(summary.totalProfit, "sales_profit"))),
+                // summary.totalProfit is already in the display currency (recomputed at the call site).
+                stringResource(R.string.sales_profit_prefix, signedMoney(animatedNumber(summary.totalProfit, "sales_profit"), BwTheme.currency, BwTheme.currency)),
                 style = BwType.body.copy(fontWeight = FontWeight.Bold),
                 color = color,
             )
@@ -715,17 +723,17 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
             // figures. Minifigs skip the retail/value/divider block.
             if (!isFig) {
                 val showValue = sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE
-                PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, AppCurrency.VND))
+                PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, BwTheme.currency))
                 if (showValue) ValuePriceLine(sold.currentValueInfo)
                 HorizontalDivider(color = colors.borderSoft)
             }
-            PriceLine(stringResource(R.string.price_paid), formatMoney(sold.pricePaid, AppCurrency.VND))
-            PriceLine(stringResource(R.string.price_sale), formatMoney(sold.saleValue, AppCurrency.VND))
+            PriceLine(stringResource(R.string.price_paid), formatMoneyFrom(sold.pricePaid, sold.currency, BwTheme.currency))
+            PriceLine(stringResource(R.string.price_sale), formatMoneyFrom(sold.saleValue, sold.currency, BwTheme.currency))
             val profitColor = if (sold.profit >= 0) colors.success else colors.error
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.sales_profit_label), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
                 Spacer(Modifier.width(6.dp))
-                Text(signedMoney(sold.profit), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
+                Text(signedMoney(sold.profit, sold.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
             }
             GrowthPill(sold.profitPercent)
             Row(

@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -30,13 +31,14 @@ data class CollectionCopyEntity(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
-    val retailPrice: Long?,             // VND; null = no retail price
+    val retailPrice: Long?,             // USD cents (catalog canonical); null = no retail price
     val status: String,                 // Availability name
     val imageUrl: String?,
     // Copy data.
     val quantity: Int,
     val condition: String,              // "new" | "used"
-    val pricePaid: Long,
+    val pricePaid: Long,                // total for qty, in [currency]'s unit (USD cents / whole ₫)
+    @ColumnInfo(defaultValue = "USD") val currency: String = "USD", // "USD" | "VND" — how pricePaid is read
     val acquiredOn: String?,            // yyyy-MM-dd
     val notes: String?,
     // Sync.
@@ -79,11 +81,12 @@ data class SalesEntity(
     val releaseYear: Int,
     val releaseMonth: Int,
     val imageUrl: String?,
-    val retailPrice: Long?,
+    val retailPrice: Long?,             // USD cents (catalog canonical)
     val quantity: Int,
     val condition: String,
-    val pricePaid: Long,
-    val salePrice: Long,
+    val pricePaid: Long,                // in [currency]'s unit (USD cents / whole ₫)
+    val salePrice: Long,                // in [currency]'s unit
+    @ColumnInfo(defaultValue = "USD") val currency: String = "USD", // how pricePaid/salePrice are read
     val soldOn: String?,
     val notes: String?,
     val deleted: Boolean,

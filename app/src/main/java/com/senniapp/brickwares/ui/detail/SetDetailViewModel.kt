@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.CurrentValue
@@ -126,7 +127,6 @@ class SetDetailViewModel(
                 offline = set == null && all.isEmpty(),
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
-                totalPaid = owned?.totalPaid ?: 0L,
                 ownedItem = owned,
                 isWishlisted = wishlist.any { w -> w.setNumber == sn },
                 isSold = soldItems.any { s -> s.setNumber == sn },
@@ -253,13 +253,13 @@ class SetDetailViewModel(
 
     fun onDismissSell() = _uiState.update { it.copy(sellCopy = null) }
 
-    fun onConfirmSell(quantity: Int, salePrice: Long, soldOn: String) {
+    fun onConfirmSell(quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String) {
         val state = _uiState.value
         val copy = state.sellCopy
         val sn = state.copiesSetNumber ?: state.set?.setNumber
         val name = state.copiesItem?.name ?: state.set?.name
         if (copy != null && sn != null) {
-            repository.sellCopy(sn, copy.id, quantity, salePrice, soldOn)
+            repository.sellCopy(sn, copy.id, quantity, salePrice, currency, soldOn)
         }
         _uiState.update {
             it.copy(

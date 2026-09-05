@@ -13,13 +13,14 @@ enum class ValueFreshness { FRESH, STALE, NONE }
  * Availability tier for the outlier guard's retail-relative bounds: an available set trades near
  * retail, a recently-retired one (< 2 years) has softened, and a long-retired one (>= 2 years) can sit
  * well below retail. NO_ANCHOR (promo / magazine / GWP, which have no real retail price) skips the
- * retail-relative band and uses the absolute ₫ sanity band instead. See [ValueAggregator.tierOf].
+ * retail-relative band and uses the absolute USD sanity band instead. See [ValueAggregator.tierOf].
  */
 enum class ValueGuardTier { AVAILABLE, RETIRED_RECENT, RETIRED_OLD, NO_ANCHOR }
 
 /**
- * One contributed value point for [ValueAggregator]: the amount, its submission time, and whether it
- * came from a realized **sale** (vs a paid price) — the available-tier floor is looser for a sale.
+ * One contributed value point for [ValueAggregator]: the amount **in USD cents** (each contribution is
+ * normalized from its recorded currency before aggregating), its submission time, and whether it came
+ * from a realized **sale** (vs a paid price) — the available-tier floor is looser for a sale.
  */
 data class ValuePoint(val value: Double, val submittedAtMs: Long, val isSale: Boolean = false)
 
@@ -27,13 +28,13 @@ data class ValuePoint(val value: Double, val submittedAtMs: Long, val isSale: Bo
  * The community "current value" for a set or minifig — a recency-tiered median over the public
  * `set_value_contributions` (each = one user's paid price, upserted so one row per user).
  *
- * @param amountVnd  the displayed median in ₫, or null when [freshness] is NONE.
+ * @param amountUsdCents  the displayed median in **USD cents** (canonical), or null when NONE.
  * @param contributionCount  distinct users backing the shown value (the honesty signal on the card).
  * @param freshness  FRESH (recent window), STALE (only older data), or NONE (nothing yet).
  * @param newestAgeDays  age of the most-recent contribution, for the STALE "last updated …" note.
  */
 data class CurrentValue(
-    val amountVnd: Long?,
+    val amountUsdCents: Long?,
     val contributionCount: Int,
     val freshness: ValueFreshness,
     val newestAgeDays: Int?,
@@ -74,12 +75,12 @@ object ValueAggregator {
     private const val OUTLIER_MAX_RETIRED_OLD = 20.0
     // Split between the two retired tiers: retired < / >= this many days.
     private const val RETIRED_RECENT_DAYS = 730L         // 2 years
-    // Absolute ₫ sanity band for items with NO retail anchor (promo/magazine/GWP, minifigs, no-price
-    // sets): with nothing to compare against, bound the raw value instead of accepting anything. The
-    // cap (~1B₫ ≈ $38k) clears the priciest sealed sets and all normal minifigs while rejecting
-    // fat-fingers and the gold-minifig one-offs (~$200k).
-    private const val ABS_MIN_VND = 10_000.0
-    private const val ABS_MAX_VND = 1_000_000_000.0
+    // Absolute USD-cents sanity band for items with NO retail anchor (promo/magazine/GWP, minifigs,
+    // no-price sets): with nothing to compare against, bound the raw value instead of accepting
+    // anything. The cap ($50k) clears the priciest sealed sets and all normal minifigs while rejecting
+    // fat-fingers and the gold-minifig one-offs (~$200k). Floor $0.50.
+    private const val ABS_MIN_USD_CENTS = 50.0
+    private const val ABS_MAX_USD_CENTS = 5_000_000.0
     private const val DAY_MS = 86_400_000L
 
     /**
@@ -108,17 +109,18 @@ object ValueAggregator {
     }
 
     /**
-     * @param points contributed value points (value, submittedAt, isSale).
-     * @param retailVnd retail anchor for the guard; null (or a NO_ANCHOR [tier]) uses the absolute band.
+     * @param points contributed value points, each **in USD cents** (value, submittedAt, isSale).
+     * @param retailUsdCents retail anchor (USD cents) for the guard; null (or NO_ANCHOR [tier]) uses
+     *        the absolute band.
      * @param tier availability tier setting the guard's bounds (see [tierOf]).
      */
     fun aggregate(
         points: List<ValuePoint>,
-        retailVnd: Long?,
+        retailUsdCents: Long?,
         tier: ValueGuardTier = ValueGuardTier.AVAILABLE,
         nowMs: Long = System.currentTimeMillis(),
     ): CurrentValue {
-        val anchored = retailVnd != null && retailVnd > 0 && tier != ValueGuardTier.NO_ANCHOR
+        val anchored = retailUsdCents != null && retailUsdCents > 0 && tier != ValueGuardTier.NO_ANCHOR
         val guarded = if (anchored) {
             val maxF = when (tier) {
                 ValueGuardTier.AVAILABLE -> OUTLIER_MAX_AVAILABLE
@@ -126,7 +128,7 @@ object ValueAggregator {
                 ValueGuardTier.RETIRED_OLD -> OUTLIER_MAX_RETIRED_OLD
                 ValueGuardTier.NO_ANCHOR -> 0.0 // unreachable (anchored is false)
             }
-            val hi = retailVnd!! * maxF
+            val hi = retailUsdCents!! * maxF
             points.filter { p ->
                 val minF = when (tier) {
                     // Available floor is looser for a realized sale than a paid price.
@@ -135,11 +137,11 @@ object ValueAggregator {
                     ValueGuardTier.RETIRED_OLD -> OUTLIER_MIN_RETIRED_OLD
                     ValueGuardTier.NO_ANCHOR -> 0.0
                 }
-                p.value in (retailVnd * minF)..hi
+                p.value in (retailUsdCents * minF)..hi
             }
         } else {
             // No retail to compare against → bound the raw value with the absolute sanity band.
-            points.filter { it.value in ABS_MIN_VND..ABS_MAX_VND }
+            points.filter { it.value in ABS_MIN_USD_CENTS..ABS_MAX_USD_CENTS }
         }
         if (guarded.isEmpty()) return CurrentValue.NONE
 
@@ -150,7 +152,7 @@ object ValueAggregator {
 
         val newestAgeDays = ((nowMs - guarded.maxOf { it.submittedAtMs }) / DAY_MS).toInt().coerceAtLeast(0)
         return CurrentValue(
-            amountVnd = roundToVnd(median(used.map { it.value })),
+            amountUsdCents = median(used.map { it.value }).roundToLong(),
             contributionCount = used.size,
             freshness = if (fresh) ValueFreshness.FRESH else ValueFreshness.STALE,
             newestAgeDays = newestAgeDays,
@@ -162,7 +164,4 @@ object ValueAggregator {
         val n = s.size
         return if (n % 2 == 1) s[n / 2] else (s[n / 2 - 1] + s[n / 2]) / 2.0
     }
-
-    /** Round to the nearest 1,000₫, matching the retail display (CurrencyConverter). */
-    private fun roundToVnd(v: Double): Long = (v / 1_000.0).roundToLong() * 1_000L
 }

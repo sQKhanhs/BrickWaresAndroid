@@ -8,8 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
+import com.senniapp.brickwares.data.local.CurrencyPrefs
+import com.senniapp.brickwares.util.AppCurrency
 
 /**
  * BrickWares' full colour token set. Material3's [androidx.compose.material3.ColorScheme]
@@ -104,12 +108,22 @@ private val DarkBwColors = BwColors(
 
 private val LocalBwColors = staticCompositionLocalOf { LightBwColors }
 
+/** The app-wide display currency, provided by [BrickWaresTheme] from [CurrencyPrefs] so a change in
+ *  Settings recomposes every price with no restart. Read via `BwTheme.currency`. */
+private val LocalAppCurrency = staticCompositionLocalOf { AppCurrency.USD }
+
 /** Accessor for BrickWares design tokens inside composables: `BwTheme.colors.text`. */
 object BwTheme {
     val colors: BwColors
         @Composable
         @ReadOnlyComposable
         get() = LocalBwColors.current
+
+    /** The chosen display currency for money formatting (`formatMoney(amountUsdCents, BwTheme.currency)`). */
+    val currency: AppCurrency
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalAppCurrency.current
 }
 
 // A minimal Material3 scheme so stock M3 components (ripples, dialogs) sit on-brand.
@@ -139,7 +153,8 @@ fun BrickWaresTheme(
     content: @Composable () -> Unit,
 ) {
     val bwColors = if (darkTheme) DarkBwColors else LightBwColors
-    CompositionLocalProvider(LocalBwColors provides bwColors) {
+    val currency by CurrencyPrefs.currency.collectAsState()
+    CompositionLocalProvider(LocalBwColors provides bwColors, LocalAppCurrency provides currency) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkMaterial else LightMaterial,
             typography = Typography,

@@ -17,6 +17,8 @@ import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.ValueAggregator
 import com.senniapp.brickwares.data.model.ValueGuardTier
 import com.senniapp.brickwares.data.model.WishlistItem
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -95,6 +97,7 @@ class RoomCollectionRepository(
                         ?: entity.imageUrl,
                     retailPrice = entity.retailPrice ?: 0L,
                     pricePaid = entity.pricePaid, saleValue = entity.salePrice,
+                    currency = entity.currency.toCurrency(),
                     quantity = entity.quantity,
                     condition = if (entity.condition == "used") Condition.USED else Condition.NEW,
                     soldOn = entity.soldOn, note = entity.notes,
@@ -124,9 +127,10 @@ class RoomCollectionRepository(
             val date = copy.dateAdded.ifBlank { null }
             // Match on per-unit paid (cross-multiply avoids integer-division rounding, and keeps
             // matching as the merged row's total grows) so a repeated identical add bumps quantity.
+            // Same currency required — amounts in different units aren't comparable/mergeable.
             val match = existingCopies.firstOrNull {
                 it.condition == cond && it.acquiredOn == date &&
-                    it.notes.orEmpty() == copy.note.orEmpty() &&
+                    it.notes.orEmpty() == copy.note.orEmpty() && it.currency == copy.currency.name &&
                     it.pricePaid * copy.qty == copy.pricePaid * it.quantity
             }
             if (match != null) {
@@ -150,7 +154,7 @@ class RoomCollectionRepository(
                         retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
                         status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
                         quantity = copy.qty, condition = cond,
-                        pricePaid = copy.pricePaid, acquiredOn = date,
+                        pricePaid = copy.pricePaid, currency = copy.currency.name, acquiredOn = date,
                         notes = copy.note, deleted = false, updatedAt = now, dirty = true,
                     ),
                 )
@@ -159,7 +163,7 @@ class RoomCollectionRepository(
         // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
         // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
         item.copies.lastOrNull()?.let { copy ->
-            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, isSale = false)
+            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
         }
     }
 
@@ -176,12 +180,13 @@ class RoomCollectionRepository(
         collectionDao.upsert(
             existing.copy(
                 quantity = copy.qty, condition = copy.condition.dbName(),
-                pricePaid = copy.pricePaid, acquiredOn = copy.dateAdded.ifBlank { null },
+                pricePaid = copy.pricePaid, currency = copy.currency.name,
+                acquiredOn = copy.dateAdded.ifBlank { null },
                 notes = copy.note, updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
         // Reflect the edited paid price in the community value cache immediately (Decision 17).
-        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, copy.pricePaid, isSale = false)
+        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, copy.pricePaid, copy.currency, isSale = false)
     }
 
     override fun addSale(item: CollectionItem, salePrice: Long) = write {
@@ -194,12 +199,15 @@ class RoomCollectionRepository(
         val cond = copy?.condition?.dbName() ?: "new"
         val qty = copy?.qty ?: 1
         val paid = copy?.pricePaid ?: 0L
+        // Paid + sale were entered together in one currency (recorded, not converted).
+        val currency = copy?.currency ?: AppCurrency.USD
         val soldOn = copy?.dateAdded?.ifBlank { null }
         val note = copy?.note
-        // An identical sale (condition, per-unit paid, per-unit sale price, date, note) merges into one
-        // row — bumps quantity and sums the paid/sale totals — instead of adding a duplicate row.
+        // An identical sale (condition, currency, per-unit paid, per-unit sale price, date, note) merges
+        // into one row — bumps quantity and sums the paid/sale totals — instead of adding a duplicate.
         val match = salesDao.activeForItem(item.setNumber, kind).firstOrNull {
             it.condition == cond && it.soldOn == soldOn && it.notes.orEmpty() == note.orEmpty() &&
+                it.currency == currency.name &&
                 it.pricePaid * qty == paid * it.quantity &&
                 it.salePrice * qty == salePrice * it.quantity
         }
@@ -222,30 +230,34 @@ class RoomCollectionRepository(
                     imageUrl = set?.imageUrl ?: item.imageUrl,
                     retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
                     quantity = qty, condition = cond,
-                    pricePaid = paid, salePrice = salePrice,
+                    pricePaid = paid, salePrice = salePrice, currency = currency.name,
                     soldOn = soldOn, notes = note, deleted = false,
                     updatedAt = now, dirty = true,
                 ),
             )
         }
         // A sale price is a community value point too (Decision 17) — reflect it locally at once.
-        contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, salePrice, isSale = true)
+        contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, salePrice, currency, isSale = true)
     }
 
-    override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, soldOn: String?) = write {
+    override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String?) = write {
         val copy = collectionDao.getById(copyId) ?: return@write
         val available = copy.quantity
         val sellQty = quantity.coerceIn(1, available)
         // Prorate the copy's paid cost so profit is a fair basis and paid stays conserved between
-        // the remaining copy and the sale (whole-copy sale → full cost basis).
-        val soldPaid = if (available <= 0) 0L else copy.pricePaid * sellQty / available
+        // the remaining copy and the sale (whole-copy sale → full cost basis). The sale price is typed
+        // in the current display [currency]; convert the copy's cost basis (in the copy's own currency)
+        // into it so the sale row is single-currency.
+        val soldPaidCopyCcy = if (available <= 0) 0L else copy.pricePaid * sellQty / available
+        val copyCurrency = runCatching { AppCurrency.valueOf(copy.currency) }.getOrDefault(AppCurrency.USD)
+        val soldPaid = convertAmount(soldPaidCopyCcy, copyCurrency, currency)
         val now = System.currentTimeMillis()
         val soldOnNorm = soldOn?.ifBlank { null }
-        // Selling identical copies one at a time (same condition, per-unit paid, per-unit sale, date,
-        // note) merges into one sales row instead of piling up duplicate rows — mirrors addSale.
+        // Selling identical copies one at a time (same condition, currency, per-unit paid, per-unit sale,
+        // date, note) merges into one sales row instead of piling up duplicate rows — mirrors addSale.
         val match = salesDao.activeForItem(copy.setNumber, copy.itemKind).firstOrNull {
             it.condition == copy.condition && it.soldOn == soldOnNorm &&
-                it.notes.orEmpty() == copy.notes.orEmpty() &&
+                it.notes.orEmpty() == copy.notes.orEmpty() && it.currency == currency.name &&
                 it.pricePaid * sellQty == soldPaid * it.quantity &&
                 it.salePrice * sellQty == salePrice * it.quantity
         }
@@ -267,7 +279,7 @@ class RoomCollectionRepository(
                     releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
                     imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
                     quantity = sellQty, condition = copy.condition,
-                    pricePaid = soldPaid, salePrice = salePrice,
+                    pricePaid = soldPaid, salePrice = salePrice, currency = currency.name,
                     soldOn = soldOnNorm, notes = copy.notes,
                     deleted = false, updatedAt = now, dirty = true,
                 ),
@@ -279,13 +291,13 @@ class RoomCollectionRepository(
             collectionDao.upsert(
                 copy.copy(
                     quantity = available - sellQty,
-                    pricePaid = copy.pricePaid - soldPaid,
+                    pricePaid = copy.pricePaid - soldPaidCopyCcy,
                     updatedAt = now, dirty = true,
                 ),
             )
         }
         // The sale price seeds the community value too (Decision 17).
-        contributeLocalValue(copy.setId, copy.figNum, copy.setNumber, salePrice, isSale = true)
+        contributeLocalValue(copy.setId, copy.figNum, copy.setNumber, salePrice, currency, isSale = true)
     }
 
     override fun updateSale(
@@ -294,6 +306,7 @@ class RoomCollectionRepository(
         condition: Condition,
         pricePaid: Long,
         salePrice: Long,
+        currency: AppCurrency,
         soldOn: String?,
         note: String?,
     ) = write {
@@ -301,13 +314,13 @@ class RoomCollectionRepository(
         salesDao.upsert(
             existing.copy(
                 quantity = quantity, condition = condition.dbName(),
-                pricePaid = pricePaid, salePrice = salePrice,
+                pricePaid = pricePaid, salePrice = salePrice, currency = currency.name,
                 soldOn = soldOn?.ifBlank { null }, notes = note,
                 updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
         // Reflect the edited sale price in the community value cache immediately (Decision 17).
-        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, salePrice, isSale = true)
+        contributeLocalValue(existing.setId, existing.figNum, existing.setNumber, salePrice, currency, isSale = true)
     }
 
     override fun removeSale(saleId: String) = write {
@@ -356,6 +369,11 @@ class RoomCollectionRepository(
     private fun ItemType.dbKind() = if (this == ItemType.MINIFIG) "minifig" else "set"
     private fun String.toItemType() = if (this == "minifig") ItemType.MINIFIG else ItemType.SET
     private fun Condition.dbName() = if (this == Condition.USED) "used" else "new"
+    private fun String.toCurrency() = runCatching { AppCurrency.valueOf(this) }.getOrDefault(AppCurrency.USD)
+
+    /** Convert [amount] from currency [from] to [to] (both in their own unit); identity when equal. */
+    private fun convertAmount(amount: Long, from: AppCurrency, to: AppCurrency): Long =
+        if (from == to) amount else CurrencyConverter.fromUsdCents(CurrencyConverter.usdCentsOf(amount, from), to)
 
     /**
      * The live catalog record for a user row (matched by set_id, else set number), or null when the
@@ -375,14 +393,17 @@ class RoomCollectionRepository(
      * real contribution and re-warms. Uses the live catalog retail/status so the outlier guard matches
      * what [ValueContributionRepository.warm] will later compute.
      */
-    private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, price: Long, isSale: Boolean) {
-        if (price <= 0L) return
+    private fun contributeLocalValue(setId: Long?, figNum: String?, setNumber: String, amount: Long, currency: AppCurrency, isSale: Boolean) {
+        if (amount <= 0L) return
+        // The value engine works in USD cents (retail anchor is USD cents), so normalize the entry.
+        val usdCents = CurrencyConverter.usdCentsOf(amount, currency)
+        if (usdCents <= 0L) return
         if (figNum != null) {
-            values.applyLocalPaid(null, figNum, price, null, ValueGuardTier.NO_ANCHOR, isSale)
+            values.applyLocalPaid(null, figNum, usdCents, null, ValueGuardTier.NO_ANCHOR, isSale)
         } else if (setId != null) {
             val cat = catalogFor(setId, setNumber)
             val tier = ValueAggregator.tierOf(cat?.status ?: Availability.AVAILABLE, cat?.retiredYear ?: 0, cat?.retiredMonth ?: 0)
-            values.applyLocalPaid(setId, null, price, cat?.retailPrice, tier, isSale)
+            values.applyLocalPaid(setId, null, usdCents, cat?.retailPrice, tier, isSale)
         }
     }
 
@@ -396,12 +417,13 @@ class RoomCollectionRepository(
         // The current value is shown for minifigs + retired/promo/magazine sets.
         val valueShown = isFig || status == Availability.RETIRED || status == Availability.PROMO || status == Availability.MAGAZINE
         val retail = head.retailPrice ?: 0L
-        // Growth vs what was paid, per unit (pricePaid is the total for a copy's qty). The reference is
-        // the current value when it's shown, otherwise retail (so a non-retired set compares retail vs
-        // paid). Every card gets a growth as long as something was paid.
+        // Growth vs what was paid, per unit — everything in USD cents (retail + value are USD cents;
+        // each copy's paid is converted from its own currency). The reference is the current value when
+        // shown, else retail. Every card gets a growth as long as something was paid.
         val totalQty = sumOf { it.quantity }
-        val unitPaid = if (totalQty > 0) sumOf { it.pricePaid }.toDouble() / totalQty else 0.0
-        val growthRef = (value?.amountVnd?.takeIf { valueShown }) ?: retail.takeIf { it > 0 }
+        val paidUsdCents = sumOf { CurrencyConverter.usdCentsOf(it.pricePaid, it.currency.toCurrency()) }
+        val unitPaid = if (totalQty > 0) paidUsdCents.toDouble() / totalQty else 0.0
+        val growthRef = (value?.amountUsdCents?.takeIf { valueShown }) ?: retail.takeIf { it > 0 }
         val growth = growthRef?.takeIf { unitPaid > 0 }?.let { ((it - unitPaid) / unitPaid) * 100.0 }
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
@@ -410,7 +432,7 @@ class RoomCollectionRepository(
             releaseMonth = cat?.releaseMonth ?: head.releaseMonth,
             pieces = head.pieces, minifigs = head.minifigs, minifigSetCount = fig?.setCount ?: 0,
             retailPrice = retail,
-            currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = growth,
+            currentValue = value?.amountUsdCents, currentValueInfo = value, growthPercent = growth,
             status = status,
             // Minifigs: overlay the catalog image (older rows were stored without it); sets keep theirs.
             imageUrl = fig?.imageUrl ?: head.imageUrl,
@@ -418,8 +440,8 @@ class RoomCollectionRepository(
                 Copy(
                     id = e.id,
                     condition = if (e.condition == "used") Condition.USED else Condition.NEW,
-                    qty = e.quantity, pricePaid = e.pricePaid, dateAdded = e.acquiredOn ?: "",
-                    note = e.notes,
+                    qty = e.quantity, pricePaid = e.pricePaid, currency = e.currency.toCurrency(),
+                    dateAdded = e.acquiredOn ?: "", note = e.notes,
                 )
             },
         )
@@ -433,7 +455,7 @@ class RoomCollectionRepository(
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
             releaseMonth = cat?.releaseMonth ?: releaseMonth,
             pieces = pieces, minifigs = minifigs,
-            retailPrice = retailPrice ?: 0L, currentValue = value?.amountVnd, currentValueInfo = value, growthPercent = null,
+            retailPrice = retailPrice ?: 0L, currentValue = value?.amountUsdCents, currentValueInfo = value, growthPercent = null,
             status = cat?.status ?: status.toAvailability(), imageUrl = minifigFor(figNum)?.imageUrl ?: imageUrl,
         )
     }

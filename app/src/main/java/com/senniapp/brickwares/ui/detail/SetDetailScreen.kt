@@ -86,6 +86,7 @@ import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.formatIn
 import com.senniapp.brickwares.util.formatMoney
 import kotlinx.coroutines.launch
 import com.senniapp.brickwares.ui.components.releaseLabel
@@ -178,7 +179,7 @@ private fun SetDetailContent(
     onAddSaleForSet: () -> Unit,
     onSellCopy: (Copy) -> Unit,
     onDismissSell: () -> Unit,
-    onConfirmSell: (Int, Long, String) -> Unit,
+    onConfirmSell: (Int, Long, AppCurrency, String) -> Unit,
     onToastShown: () -> Unit,
     onRetry: () -> Unit,
     showSearchFab: Boolean = false,
@@ -320,7 +321,7 @@ private fun SetDetailContent(
 
             // Pricing card.
             SectionCard(title = stringResource(R.string.detail_pricing)) {
-                DetailRow(stringResource(R.string.price_retail), retailLabel(set.retailPrice, AppCurrency.VND), strong = true)
+                DetailRow(stringResource(R.string.price_retail), retailLabel(set.retailPrice, BwTheme.currency), strong = true)
                 // Brickset availability/sourcing note (only ~11% of sets have one), italic under retail.
                 // Show the Vietnamese translation (translate-at-ingest, sets.notes_vi) when the app
                 // language is VI and a translation exists; otherwise the original English note.
@@ -342,7 +343,7 @@ private fun SetDetailContent(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(stringResource(R.string.detail_total_paid), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         Text(
-                            "${formatMoney(state.totalPaid, AppCurrency.VND)}  ×${state.ownedCount}",
+                            "${formatIn(state.ownedItem?.totalPaidIn(BwTheme.currency) ?: 0L, BwTheme.currency)}  ×${state.ownedCount}",
                             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                             color = colors.text,
                         )
@@ -636,7 +637,7 @@ private fun CurrentValueRow(value: CurrentValue, loading: Boolean) {
         Spacer(Modifier.width(10.dp))
         val amountText = when {
             loading -> "…"
-            value.amountVnd != null -> formatMoney(value.amountVnd, AppCurrency.VND)
+            value.amountUsdCents != null -> formatMoney(value.amountUsdCents, BwTheme.currency)
             else -> "----"
         }
         Text(

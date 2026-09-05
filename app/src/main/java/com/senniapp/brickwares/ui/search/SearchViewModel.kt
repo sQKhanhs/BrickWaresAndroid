@@ -228,7 +228,7 @@ class SearchViewModel(
     /** Community current value for a fig (₫); 0 when none. Snapshot at sort time (the value cache
      *  warms asynchronously — re-selecting the sort re-reads it). */
     private fun figValue(figNum: String): Long =
-        ValueRepositoryProvider.instance.valueForFig(figNum)?.amountVnd ?: 0L
+        ValueRepositoryProvider.instance.valueForFig(figNum)?.amountUsdCents ?: 0L
 
     private fun minifigSubthemesFor(theme: String): List<SubthemeCount> =
         minifigs.filter { theme in it.themes }

@@ -6,6 +6,8 @@ import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
 
 /**
  * Derives the collection [CollectionSummary] from the live item list, so the Home hero and the
@@ -48,14 +50,19 @@ fun collectionSummaryOf(
 
 /**
  * Aggregates the Sales stat tiles + profit bar from the live sold-item list, so the Sales sub-view
- * reads 0 when empty and updates as sales are recorded (mirrors [collectionSummaryOf]).
+ * reads 0 when empty and updates as sales are recorded (mirrors [collectionSummaryOf]). Money is summed
+ * **in [display]** (each sale converted from its own currency) so a single-currency total is exact —
+ * no ₫→cents→₫ drift — while a mixed-currency total stays consistent with the per-row figures. The
+ * percentages are ratios, so they're currency-independent. Recompute this in the display currency where
+ * it's rendered (it's cheap and reactive to a currency switch).
  */
-fun salesSummaryOf(sold: List<SoldItem>): SalesSummary {
-    val totalPaid = sold.sumOf { it.pricePaid }
-    val totalProfit = sold.sumOf { it.profit }
+fun salesSummaryOf(sold: List<SoldItem>, display: AppCurrency): SalesSummary {
+    val totalPaid = sold.sumOf { CurrencyConverter.convert(it.pricePaid, it.currency, display) }
+    val totalProfit = sold.sumOf { CurrencyConverter.convert(it.profit, it.currency, display) }
+    val totalSaleValue = sold.sumOf { CurrencyConverter.convert(it.saleValue, it.currency, display) }
     val avg = if (sold.isEmpty()) 0.0 else sold.map { it.profitPercent }.average()
     val overall = if (totalPaid == 0L) 0.0 else totalProfit.toDouble() / totalPaid * 100.0
-    return SalesSummary(sold.size, sold.sumOf { it.saleValue }, totalProfit, avg, overall)
+    return SalesSummary(sold.size, totalSaleValue, totalProfit, avg, overall)
 }
 
 /** Per-theme counts + value for the Home "Collection by Theme" card, highest value first. */
