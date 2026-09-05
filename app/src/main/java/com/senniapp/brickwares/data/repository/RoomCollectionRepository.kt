@@ -91,6 +91,7 @@ class RoomCollectionRepository(
                     itemType = entity.itemKind.toItemType(), theme = entity.theme,
                     releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: entity.releaseYear,
                     releaseMonth = cat?.releaseMonth ?: entity.releaseMonth,
+                    pieces = cat?.pieces ?: 0, minifigs = cat?.minifigs ?: 0,
                     // Recover the minifig image from the catalog: prefer fig_num, else the setNumber
                     // field (holds the fig_num for minifigs) so pre-fix sales without a fig_num recover.
                     imageUrl = minifigFor(entity.figNum ?: entity.setNumber.takeIf { entity.itemKind == "minifig" })?.imageUrl

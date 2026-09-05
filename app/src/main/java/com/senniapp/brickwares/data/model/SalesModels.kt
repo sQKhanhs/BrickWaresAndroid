@@ -15,6 +15,8 @@ data class SoldItem(
     val theme: String,
     val releaseYear: Int,
     val releaseMonth: Int,
+    val pieces: Int = 0,
+    val minifigs: Int = 0,
     val imageUrl: String? = null,
     val retailPrice: Long,
     val pricePaid: Long,

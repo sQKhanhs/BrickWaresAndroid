@@ -73,4 +73,18 @@ data class CollectionItem(
     /** Average paid per **unit** in [display]'s unit (See-Details "Avg"): [totalPaidIn] / total qty. */
     fun avgPaidIn(display: AppCurrency): Long =
         if (totalQty == 0) 0L else totalPaidIn(display) / totalQty
+
+    /**
+     * Per-unit "current worth" for the collection value + growth, in **USD cents**. Uses the crowdsourced
+     * community value only when it's actually shown for this item — minifigs and retired / promo / magazine
+     * sets — otherwise **retail** (an available set is still buyable at retail). Mirrors the card's
+     * value-vs-retail rule, so the hero "Collection Value" doesn't just echo the user's own paid price
+     * (for a single contributor the community value equals what they paid → Value == Paid, 0% growth).
+     */
+    val worthPerUnit: Long
+        get() {
+            val valueShown = itemType == ItemType.MINIFIG ||
+                status == Availability.RETIRED || status == Availability.PROMO || status == Availability.MAGAZINE
+            return (currentValue?.takeIf { valueShown }) ?: retailPrice
+        }
 }

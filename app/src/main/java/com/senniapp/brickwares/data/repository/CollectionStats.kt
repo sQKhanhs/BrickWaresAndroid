@@ -33,7 +33,10 @@ fun collectionSummaryOf(
             minifigCount += qty
         }
         pieceCount += item.pieces * qty
-        value += (item.currentValue ?: item.retailPrice) * qty
+        // Worth = community value only where it's shown (minifigs / retired / promo / magazine), else
+        // retail — so an available set counts at retail, not the user's own paid (which the single-user
+        // community value echoes). Keeps Value from trivially equalling Paid.
+        value += item.worthPerUnit * qty
         paid += item.totalPaid
     }
     val growth = if (paid > 0L) (value - paid).toDouble() / paid * 100.0 else 0.0
@@ -72,7 +75,7 @@ fun themeSummariesOf(items: List<CollectionItem>): List<ThemeSummary> =
             ThemeSummary(
                 theme = theme,
                 setCount = list.sumOf { it.totalQty },
-                totalValue = list.sumOf { (it.currentValue ?: it.retailPrice) * it.totalQty },
+                totalValue = list.sumOf { it.worthPerUnit * it.totalQty },
             )
         }
         .sortedByDescending { it.totalValue }
