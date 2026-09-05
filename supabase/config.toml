@@ -246,7 +246,7 @@ otp_expiry = 3600
 # The API key is a SECRET — put RESEND_API_KEY=re_... in the gitignored supabase/.env (auto-loaded
 # by the CLI), never here. If the local mailer errors on TLS, switch port to 587 (STARTTLS).
 [auth.email.smtp]
-enabled = true
+enabled = false
 host = "smtp.resend.com"
 port = 465
 user = "resend"
