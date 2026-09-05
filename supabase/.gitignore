@@ -11,5 +11,10 @@
 .env
 seed.sql
 
+# Local seed backups + ad-hoc test SQL (scratch, never committed)
+seed.backup.sql
+seed.prev.sql
+retired_test.sql
+
 # Studio scratch queries (local only)
 snippets/
