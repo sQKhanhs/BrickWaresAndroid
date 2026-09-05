@@ -21,6 +21,16 @@ val prodSupabaseAnonKey: String =
         ?: System.getenv("BRICKWARES_PROD_ANON_KEY")?.takeIf { it.isNotBlank() }
         ?: ""
 
+// Dev (local Supabase) URL. Defaults to 10.0.2.2 — the Android EMULATOR's alias for the host's
+// localhost. To test on a PHYSICAL device on the same Wi-Fi, override with
+// BRICKWARES_DEV_SUPABASE_URL=http://<your-PC-LAN-IP>:54321 in local.properties (or env); the phone
+// can't reach 10.0.2.2. Requires the local stack to bind 0.0.0.0 (config.toml [api].host) and the PC
+// firewall to allow TCP 54321. The emulator works with either value, so leaving it unset is fine.
+val devSupabaseUrl: String =
+    localProperties.getProperty("BRICKWARES_DEV_SUPABASE_URL")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("BRICKWARES_DEV_SUPABASE_URL")?.takeIf { it.isNotBlank() }
+        ?: "http://10.0.2.2:54321"
+
 android {
     namespace = "com.senniapp.brickwares"
     compileSdk {
@@ -65,9 +75,9 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             resValue("string", "app_name", "BrickWares Dev")
-            // Local Supabase (CLI + Docker). 10.0.2.2 is the Android emulator's alias for the
-            // host machine's localhost; a physical device would use the host's LAN IP instead.
-            buildConfigField("String", "SUPABASE_URL", "\"http://10.0.2.2:54321\"")
+            // Local Supabase (CLI + Docker). Defaults to the emulator's host alias (10.0.2.2); set
+            // BRICKWARES_DEV_SUPABASE_URL in local.properties to the host LAN IP for a physical device.
+            buildConfigField("String", "SUPABASE_URL", "\"$devSupabaseUrl\"")
             // Local dev publishable key is a SHARED default (identical on every machine, printed by
             // `supabase start`) — not a secret, safe to hardcode for zero-config dev.
             buildConfigField(
