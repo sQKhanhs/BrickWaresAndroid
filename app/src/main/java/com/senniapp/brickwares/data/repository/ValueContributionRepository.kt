@@ -17,6 +17,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.time.OffsetDateTime
 
 /**
  * Reads the public `set_value_contributions` table and folds the rows into a displayed
@@ -93,7 +94,9 @@ class ValueContributionRepository(
             }
             figNum != null -> {
                 val pts = figPoints[figNum].orEmpty() + point
-                figCache = figCache + (figNum to ValueAggregator.aggregate(pts, null, ValueGuardTier.AVAILABLE, now))
+                // Same tier the caller derived (NO_ANCHOR for figs) — [warm] uses it too, so the
+                // optimistic value and the post-sync value are computed identically.
+                figCache = figCache + (figNum to ValueAggregator.aggregate(pts, null, tier, now))
             }
             else -> return
         }
@@ -161,8 +164,14 @@ class ValueContributionRepository(
     private fun List<Row>.toPoints(): List<ValuePoint> =
         map { ValuePoint(it.value, parseIso(it.submittedAt), it.source == "sale") }
 
-    private fun parseIso(s: String?): Long =
-        s?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L
+    // PostgREST returns timestamptz as "…+00:00"; Instant.parse accepts that offset form only on newer
+    // java.time (JDK 12+ / recent Android) — elsewhere it throws and every point would read as epoch 0
+    // (all STALE). OffsetDateTime handles both "Z" and "+00:00".
+    private fun parseIso(s: String?): Long = s?.let { stamp ->
+        runCatching { OffsetDateTime.parse(stamp).toInstant().toEpochMilli() }
+            .recoverCatching { Instant.parse(stamp).toEpochMilli() }
+            .getOrNull()
+    } ?: 0L
 
     @Serializable
     private data class Row(
