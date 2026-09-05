@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -337,51 +339,63 @@ class SyncCoordinator(
         val serverUpdatedAt: String?
     }
 
+    // @EncodeDefault(ALWAYS) on the NOT-NULL-backed columns is required, not cosmetic: kotlinx omits a
+    // property that equals its default (encodeDefaults is off), and PostgREST builds the bulk ?columns=
+    // list from the UNION of keys across the batch. So in a mixed batch (e.g. one copy qty 2, another
+    // qty 1) the column lands in the INSERT while the defaulted row omits its value → PostgREST writes
+    // NULL for it → "null value in column violates not-null constraint" (hit on quantity 2026-09-06).
+    // Forcing these to always serialize keeps every row's value present. Same trap for item_kind
+    // (set vs minifig batch) and deleted (edit vs delete batch).
+    @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteCopy(
         val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
-        @SerialName("item_kind") val itemKind: String = "set",
-        val quantity: Int = 1,
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) @SerialName("item_kind") val itemKind: String = "set",
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) val quantity: Int = 1,
         val condition: String? = null,
         @SerialName("price_paid") val pricePaid: Double? = null,
         val currency: String? = null,
         @SerialName("acquired_on") val acquiredOn: String? = null,
         val notes: String? = null,
-        val deleted: Boolean = false,
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) val deleted: Boolean = false,
         @SerialName("updated_at") val updatedAt: String,
         @SerialName("server_updated_at") override val serverUpdatedAt: String? = null,
     ) : RemoteRow
 
+    // See RemoteCopy: force-encode NOT-NULL-backed defaulted columns for mixed-batch upserts.
+    @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteWish(
         val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
-        @SerialName("item_kind") val itemKind: String = "set",
-        val deleted: Boolean = false,
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) @SerialName("item_kind") val itemKind: String = "set",
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) val deleted: Boolean = false,
         @SerialName("updated_at") val updatedAt: String,
         @SerialName("server_updated_at") override val serverUpdatedAt: String? = null,
     ) : RemoteRow
 
+    // See RemoteCopy: force-encode NOT-NULL-backed defaulted columns for mixed-batch upserts.
+    @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteSale(
         val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
-        @SerialName("item_kind") val itemKind: String = "set",
-        val quantity: Int = 1,
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) @SerialName("item_kind") val itemKind: String = "set",
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) val quantity: Int = 1,
         val condition: String? = null,
         @SerialName("price_paid") val pricePaid: Double? = null,
         @SerialName("sale_price") val salePrice: Double,
         val currency: String? = null,
         @SerialName("sold_on") val soldOn: String? = null,
         val notes: String? = null,
-        val deleted: Boolean = false,
+        @EncodeDefault(EncodeDefault.Mode.ALWAYS) val deleted: Boolean = false,
         @SerialName("updated_at") val updatedAt: String,
         @SerialName("server_updated_at") override val serverUpdatedAt: String? = null,
     ) : RemoteRow
