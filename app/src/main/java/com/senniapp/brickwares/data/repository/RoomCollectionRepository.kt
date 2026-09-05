@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -58,16 +59,18 @@ class RoomCollectionRepository(
     // catalog-derived status (e.g. RETIRED) is re-overlaid onto rows whose stored status is stale
     // (it was denormalized at add-time). Room stays the source of truth for user data; status is
     // reference data, so the live catalog value wins when available, falling back to the stored one.
+    // The mapping runs on Dispatchers.Default (flowOn): combine's transform otherwise executes in the
+    // collector's coroutine — every ViewModel's viewModelScope, i.e. the main thread.
 
     override fun getCollectionItems(): Flow<List<CollectionItem>> =
         combine(collectionDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.groupBy { it.setNumber }.map { (_, group) -> group.toCollectionItem() }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override fun getWishlistItems(): Flow<List<WishlistItem>> =
         combine(wishlistDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.map { it.toWishlistItem() }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override suspend fun getCollectionSummary(): CollectionSummary =
         collectionSummaryOf(getCollectionItems().first())
@@ -99,7 +102,7 @@ class RoomCollectionRepository(
                     currentValueInfo = value,
                 )
             }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override fun searchCatalog(query: String): List<CatalogSet> = catalog.search(query)
 
@@ -347,7 +350,7 @@ class RoomCollectionRepository(
 
     private suspend fun resolveCatalog(setNumber: String): CatalogSet? {
         catalog.refresh()
-        return catalog.all().firstOrNull { it.setNumber == setNumber }
+        return catalog.setByNumber(setNumber)
     }
 
     private fun ItemType.dbKind() = if (this == ItemType.MINIFIG) "minifig" else "set"
@@ -361,13 +364,10 @@ class RoomCollectionRepository(
      * month 0 before ingestion derived it) refresh to the current catalog value.
      */
     private fun catalogFor(setId: Long?, setNumber: String): CatalogSet? =
-        catalog.all().firstOrNull { c ->
-            (setId != null && c.setId == setId) || c.setNumber == setNumber
-        }
+        setId?.let { catalog.setById(it) } ?: catalog.setByNumber(setNumber)
 
     /** The catalog minifig for a fig_num (for the image + set-count overlay), or null. */
-    private fun minifigFor(figNum: String?) =
-        figNum?.let { fn -> catalog.allMinifigs().firstOrNull { it.figNum == fn } }
+    private fun minifigFor(figNum: String?) = figNum?.let { catalog.minifigByNum(it) }
 
     /**
      * Reflect a just-written paid price in the community value cache immediately (Decision 17), so the

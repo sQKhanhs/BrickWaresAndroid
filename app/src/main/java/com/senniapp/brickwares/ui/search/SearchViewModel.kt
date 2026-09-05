@@ -103,7 +103,7 @@ class SearchViewModel(
                 query = query,
                 submittedQuery = null,
                 // Live set suggestions (the dropdown); minifigs fold into the submitted global results.
-                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query).take(6),
+                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query, limit = 6),
             )
         }
     }

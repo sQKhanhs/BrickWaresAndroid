@@ -16,12 +16,15 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
@@ -34,8 +37,9 @@ import java.time.Instant
  * UUID (idempotent); pull = remote rows changed since the [SyncStateStore.lastSyncedAt] cursor,
  * merged last-write-wins by `updated_at`; deletes ride the `deleted` tombstone. Guards against an
  * account switch: a *different* account signing in over existing local data raises [pendingSwitch]
- * instead of silently mixing data.
+ * instead of silently mixing data. Write-triggered syncs are debounced (see [syncRequests]).
  */
+@OptIn(FlowPreview::class) // Flow.debounce
 class SyncCoordinator(
     private val client: SupabaseClient,
     private val catalog: CatalogRepository,
@@ -48,6 +52,13 @@ class SyncCoordinator(
     private val salesDao = db.salesDao()
     private val mutex = Mutex()
 
+    // Write-triggered sync requests are coalesced: a burst of edits (sell, edit, delete, …) yields ONE
+    // sync once the burst settles, instead of one full push + pull + value-cache warm per write (the
+    // warm re-fetches the whole contributions table). Room keeps each row's dirty flag until the sync
+    // actually runs, so nothing is lost by waiting. A Channel (not a SharedFlow) buffers a request
+    // made before the collector below has attached.
+    private val syncRequests = Channel<Unit>(Channel.CONFLATED)
+
     init {
         AuthRepository.authState
             .onEach { state -> if (state is AuthState.SignedIn) onSignedIn(state.user) }
@@ -59,14 +70,15 @@ class SyncCoordinator(
             .filter { it }
             .onEach { requestSync() }
             .launchIn(scope)
+        syncRequests.receiveAsFlow()
+            .debounce(SYNC_DEBOUNCE_MS)
+            .onEach { client.auth.currentUserOrNull()?.id?.let { sync(it) } }
+            .launchIn(scope)
     }
 
-    /** Debounced-ish sync request after a local write (no-op if signed out). */
+    /** Requests a sync after a local write (no-op if signed out). Debounced — see [syncRequests]. */
     fun requestSync() {
-        scope.launch {
-            val uid = client.auth.currentUserOrNull()?.id ?: return@launch
-            sync(uid)
-        }
+        syncRequests.trySend(Unit)
     }
 
     private suspend fun onSignedIn(user: AuthUser) {
@@ -83,7 +95,9 @@ class SyncCoordinator(
 
     private suspend fun sync(uid: String) = mutex.withLock {
         runCatching {
+            // Both catalogs must be loaded before pull() reconstructs rows from set_id / fig_num.
             catalog.refresh()
+            catalog.refreshMinifigs()
             push(uid)
             pull()
             syncState.setLastAccountId(uid)
@@ -186,8 +200,8 @@ class SyncCoordinator(
         val local = collectionDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins
         // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
-        val set = r.setId?.let { catalogById()[it] }
-        val fig = if (set == null) r.figNum?.let { minifigByNum()[it] } else null
+        val set = r.setId?.let { catalog.setById(it) }
+        val fig = if (set == null) r.figNum?.let { catalog.minifigByNum(it) } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
         collectionDao.upsert(
             CollectionCopyEntity(
@@ -210,8 +224,8 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return
-        val set = r.setId?.let { catalogById()[it] }
-        val fig = if (set == null) r.figNum?.let { minifigByNum()[it] } else null
+        val set = r.setId?.let { catalog.setById(it) }
+        val fig = if (set == null) r.figNum?.let { catalog.minifigByNum(it) } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
         wishlistDao.upsert(
             WishlistEntity(
@@ -229,7 +243,7 @@ class SyncCoordinator(
 
     private suspend fun applySale(r: RemoteSale) {
         val remoteAt = parseIso(r.updatedAt)
-        val set = r.setId?.let { catalogById()[it] } ?: return
+        val set = r.setId?.let { catalog.setById(it) } ?: return
         salesDao.upsert(
             SalesEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
@@ -243,16 +257,6 @@ class SyncCoordinator(
     }
 
     // ---- helpers ----
-
-    private suspend fun catalogById(): Map<Long, com.senniapp.brickwares.data.model.CatalogSet> {
-        catalog.refresh()
-        return catalog.all().mapNotNull { s -> s.setId?.let { it to s } }.toMap()
-    }
-
-    private suspend fun minifigByNum(): Map<String, com.senniapp.brickwares.data.model.Minifig> {
-        catalog.refreshMinifigs()
-        return catalog.allMinifigs().associateBy { it.figNum }
-    }
 
     private suspend fun clearLocal() {
         collectionDao.clearAll(); wishlistDao.clearAll(); salesDao.clearAll()
@@ -333,5 +337,7 @@ class SyncCoordinator(
 
     private companion object {
         const val TAG = "SyncCoordinator"
+        /** Quiet period after the last local write before the coalesced sync runs. */
+        const val SYNC_DEBOUNCE_MS = 750L
     }
 }

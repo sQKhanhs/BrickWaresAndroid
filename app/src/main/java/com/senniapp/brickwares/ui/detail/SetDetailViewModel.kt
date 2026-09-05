@@ -305,7 +305,7 @@ class SetDetailViewModel(
         val sn = copiesSetNumber ?: return null
         return set?.takeIf { it.setNumber == sn }
             ?: related.firstOrNull { it.setNumber == sn }
-            ?: catalogRepo.all().firstOrNull { it.setNumber == sn }
+            ?: catalogRepo.setByNumber(sn)
     }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)

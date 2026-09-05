@@ -34,8 +34,21 @@ interface CatalogRepository {
     /** Snapshot of the cached catalog (empty until [refresh] has completed at least once). */
     fun all(): List<CatalogSet>
 
-    /** Substring (LIKE-style) match over the cache on set number, name, or theme. */
-    fun search(query: String): List<CatalogSet>
+    /**
+     * Substring (LIKE-style) match over the cache on set number, name, or theme. [limit] stops the
+     * scan after that many hits (the live-suggestion dropdown wants 6) instead of walking the whole
+     * catalog and truncating afterwards.
+     */
+    fun search(query: String, limit: Int = Int.MAX_VALUE): List<CatalogSet>
+
+    /** O(1) lookup by catalog primary key (`sets.set_id`); null when unknown or not yet loaded. */
+    fun setById(setId: Long): CatalogSet?
+
+    /**
+     * O(1) lookup by set number; null when unknown or not yet loaded. When several sets share a
+     * number (CMF series variants) the lowest variant wins, so the pick is deterministic.
+     */
+    fun setByNumber(setNumber: String): CatalogSet?
 
     /** Loads the minifig catalog (with each fig's set-count + themes) into memory, if not already. */
     suspend fun refreshMinifigs()
@@ -45,6 +58,9 @@ interface CatalogRepository {
 
     /** Substring (LIKE-style) match over the minifig cache on fig number or name. */
     fun searchMinifigs(query: String): List<Minifig>
+
+    /** O(1) lookup of a minifig by fig_num; null when unknown or not yet loaded. */
+    fun minifigByNum(figNum: String): Minifig?
 
     /** The catalog sets a minifig appears in (resolved from the in-memory caches), newest first. */
     fun setsForMinifig(figNum: String): List<CatalogSet>

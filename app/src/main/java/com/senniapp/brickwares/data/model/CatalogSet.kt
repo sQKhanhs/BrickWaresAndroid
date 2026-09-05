@@ -55,4 +55,12 @@ data class CatalogSet(
      * for list keys and detail navigation, never [setNumber] on its own.
      */
     val id: String get() = "$setNumber-$numberVariant"
+
+    /**
+     * Pre-lowercased "number name theme" key for substring search, computed once at construction.
+     * A per-keystroke search is then a single [String.contains] per set with no allocation — vs
+     * lowercasing three fields per set per key press (~66k String allocations at the full ~22k
+     * catalog, on the main thread). Matching across the field boundary ("75192 mill") is a bonus.
+     */
+    val searchKey: String = "$setNumber $name $theme".lowercase()
 }

@@ -73,7 +73,7 @@ class MinifigDetailViewModel(
 
     private fun rebuild() {
         val fn = figNum ?: return
-        val fig = catalogRepo.allMinifigs().firstOrNull { it.figNum == fn }
+        val fig = catalogRepo.minifigByNum(fn)
         val owned = collectionItems.find { it.itemType == ItemType.MINIFIG && it.setNumber == fn }
         val appearsIn = if (fig == null) emptyList() else catalogRepo.setsForMinifig(fn)
         // Two-state availability from the fig's sets: Retail while any containing set is still

@@ -94,7 +94,7 @@ class CollectionViewModel(
         val sn = _uiState.value.detailSetNumber ?: return null
         _uiState.value.items.find { it.setNumber == sn }?.let { return catalogFrom(it) }
         _uiState.value.soldItems.find { it.setNumber == sn }?.let { return catalogFrom(it) }
-        return catalogRepo.all().firstOrNull { it.setNumber == sn }
+        return catalogRepo.setByNumber(sn)
     }
 
     /** From the merged modal's Collection tab (add-another-copy or empty-state): open the Add sheet. */
@@ -301,7 +301,7 @@ class CollectionViewModel(
 
     /** Resolve the full catalog record for a sale (for the edit sheet), falling back to sale data. */
     private fun catalogFrom(sold: SoldItem): CatalogSet =
-        catalogRepo.all().firstOrNull { it.setNumber == sold.setNumber }
+        catalogRepo.setByNumber(sold.setNumber)
             ?: CatalogSet(
                 setNumber = sold.setNumber, name = sold.name, itemType = sold.itemType,
                 theme = sold.theme, releaseYear = sold.releaseYear, releaseMonth = sold.releaseMonth,

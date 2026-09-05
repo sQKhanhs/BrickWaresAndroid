@@ -52,7 +52,6 @@ class ValueContributionRepository(
      */
     suspend fun warm() {
         catalog.refresh()
-        val setsById = catalog.all().mapNotNull { s -> s.setId?.let { it to s } }.toMap()
         val rows = runCatching {
             withTimeout(TIMEOUT_MS) { client.from(TABLE).select().decodeList<Row>() }
         }.getOrElse {
@@ -68,7 +67,7 @@ class ValueContributionRepository(
         setPoints = bySet.mapValues { (_, rs) -> rs.toPoints() }
         figPoints = byFig.mapValues { (_, rs) -> rs.toPoints() }
         cache = bySet.mapValues { (id, rs) ->
-            val set = setsById[id]
+            val set = catalog.setById(id)
             val tier = ValueAggregator.tierOf(set?.status ?: Availability.AVAILABLE, set?.retiredYear ?: 0, set?.retiredMonth ?: 0, now)
             ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, tier, now)
         }

@@ -29,17 +29,44 @@ import java.time.LocalDate
 
 /**
  * Supabase-backed catalog. Fetches the `sets` table once, maps rows to [CatalogSet], and caches
- * the result in memory; subsequent [all]/[search] serve from the cache with no further network.
+ * the result in memory together with its lookup indexes; subsequent [all]/[search]/[setById]/
+ * [setByNumber] serve from the cache with no further network.
  */
 class SupabaseCatalogRepository(
     private val client: SupabaseClient,
 ) : CatalogRepository {
 
-    @Volatile
-    private var cache: List<CatalogSet> = emptyList()
+    /**
+     * The loaded set catalog plus its lookup indexes, built ONCE per load. Per-row consumers (the
+     * collection/wishlist/sales overlays, the sync pull, detail pages) resolve a set in O(1) instead
+     * of scanning the list — that scan was O(rows × catalog) on every flow emission. One immutable
+     * holder so the list and its indexes always swap together.
+     */
+    private class SetIndex(val all: List<CatalogSet>) {
+        val byId: Map<Long, CatalogSet> = all.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        // Lowest variant wins when several sets share a number (CMF series), so the pick is deterministic.
+        val byNumber: Map<String, CatalogSet> = HashMap<String, CatalogSet>(all.size).also { m ->
+            all.sortedBy { it.numberVariant }.forEach { m.putIfAbsent(it.setNumber, it) }
+        }
+
+        companion object {
+            val EMPTY = SetIndex(emptyList())
+        }
+    }
+
+    private class MinifigIndex(val all: List<Minifig>) {
+        val byNum: Map<String, Minifig> = all.associateBy { it.figNum }
+
+        companion object {
+            val EMPTY = MinifigIndex(emptyList())
+        }
+    }
 
     @Volatile
-    private var minifigCache: List<Minifig> = emptyList()
+    private var sets: SetIndex = SetIndex.EMPTY
+
+    @Volatile
+    private var figs: MinifigIndex = MinifigIndex.EMPTY
     private val minifigMutex = Mutex()
     private val loadMutex = Mutex()
     private val _revision = MutableStateFlow(0)
@@ -67,9 +94,9 @@ class SupabaseCatalogRepository(
     }
 
     override suspend fun refresh() {
-        if (cache.isNotEmpty()) return
+        if (sets.all.isNotEmpty()) return
         loadMutex.withLock {
-            if (cache.isNotEmpty()) return
+            if (sets.all.isNotEmpty()) return
             try {
                 // Bound the fetch so a dropped connection fails fast (instead of the UI hanging on
                 // "loading") and releases the mutex promptly so a retry isn't blocked.
@@ -86,9 +113,11 @@ class SupabaseCatalogRepository(
                     // don't scatter search/browse — they'll show once Brickset actually names them.
                     // distinctBy(id) guards against a duplicate row for the same number+variant in the
                     // catalog: [CatalogSet.id] is the key for every list, and a dup crashes LazyColumn.
-                    cache = rows.map { it.toCatalogSet() }
-                        .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-                        .distinctBy { it.id }
+                    sets = SetIndex(
+                        rows.map { it.toCatalogSet() }
+                            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+                            .distinctBy { it.id },
+                    )
                 }
                 _loadError.value = false
                 // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
@@ -107,22 +136,24 @@ class SupabaseCatalogRepository(
         }
     }
 
-    override fun all(): List<CatalogSet> = cache
+    override fun all(): List<CatalogSet> = sets.all
 
-    override fun search(query: String): List<CatalogSet> {
+    override fun search(query: String, limit: Int): List<CatalogSet> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
-        return cache.filter {
-            it.setNumber.lowercase().contains(q) ||
-                it.name.lowercase().contains(q) ||
-                it.theme.lowercase().contains(q)
-        }
+        // One contains() per set against the pre-lowercased key (zero allocations), and the sequence
+        // stops at [limit] hits rather than scanning the whole catalog and truncating afterwards.
+        return sets.all.asSequence().filter { q in it.searchKey }.take(limit).toList()
     }
 
+    override fun setById(setId: Long): CatalogSet? = sets.byId[setId]
+
+    override fun setByNumber(setNumber: String): CatalogSet? = sets.byNumber[setNumber]
+
     override suspend fun refreshMinifigs() {
-        if (minifigCache.isNotEmpty()) return
+        if (figs.all.isNotEmpty()) return
         minifigMutex.withLock {
-            if (minifigCache.isNotEmpty()) return
+            if (figs.all.isNotEmpty()) return
             try {
                 withTimeout(LOAD_TIMEOUT_MS) {
                     // Each fig + the sets it's in (for the set-count, theme browse, and the detail's
@@ -132,7 +163,7 @@ class SupabaseCatalogRepository(
                         .decodeList<MinifigRow>()
                     // distinctBy(figNum) for the same reason as sets: figNum is the list key, and a
                     // duplicate minifig row would crash the LazyColumn/grid that renders them.
-                    minifigCache = rows.map { it.toMinifig() }.distinctBy { it.figNum }
+                    figs = MinifigIndex(rows.map { it.toMinifig() }.distinctBy { it.figNum })
                 }
                 _loadError.value = false
                 _revision.value += 1
@@ -148,25 +179,24 @@ class SupabaseCatalogRepository(
         }
     }
 
-    override fun allMinifigs(): List<Minifig> = minifigCache
+    override fun allMinifigs(): List<Minifig> = figs.all
 
     override fun searchMinifigs(query: String): List<Minifig> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
-        return minifigCache.filter {
-            it.figNum.lowercase().contains(q) || it.name.lowercase().contains(q)
-        }
+        return figs.all.filter { q in it.searchKey }
     }
 
+    override fun minifigByNum(figNum: String): Minifig? = figs.byNum[figNum]
+
     override fun setsForMinifig(figNum: String): List<CatalogSet> {
-        val fig = minifigCache.firstOrNull { it.figNum == figNum } ?: return emptyList()
-        val byId = cache.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
-        return fig.setIds.mapNotNull { byId[it] }.sortedByDescending { it.releaseYear }
+        val fig = figs.byNum[figNum] ?: return emptyList()
+        return fig.setIds.mapNotNull { sets.byId[it] }.sortedByDescending { it.releaseYear }
     }
 
     override fun minifigsForSet(setId: Long?): List<Minifig> {
         if (setId == null) return emptyList()
-        return minifigCache.filter { setId in it.setIds }.sortedBy { it.figNum }
+        return figs.all.filter { setId in it.setIds }.sortedBy { it.figNum }
     }
 
     /** Row shape for the `sets` table columns we read (unknown columns are ignored by the decoder). */

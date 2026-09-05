@@ -20,4 +20,7 @@ data class Minifig(
 ) {
     /** Distinct themes this fig belongs to. */
     val themes: List<String> get() = themeSubthemes.map { it.first }.distinct()
+
+    /** Pre-lowercased "fig_num name" key for substring search (see [CatalogSet.searchKey]). */
+    val searchKey: String = "$figNum $name".lowercase()
 }
