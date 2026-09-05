@@ -11,9 +11,9 @@ enum class ValueFreshness { FRESH, STALE, NONE }
 
 /**
  * Availability tier for the outlier guard's retail-relative bounds: an available set trades near
- * retail, a recently-retired one (< 1 year) has softened, and a long-retired one (>= 1 year) can sit
+ * retail, a recently-retired one (< 2 years) has softened, and a long-retired one (>= 2 years) can sit
  * well below retail. NO_ANCHOR (promo / magazine / GWP, which have no real retail price) skips the
- * guard entirely. See [ValueAggregator.tierOf].
+ * retail-relative band and uses the absolute ₫ sanity band instead. See [ValueAggregator.tierOf].
  */
 enum class ValueGuardTier { AVAILABLE, RETIRED_RECENT, RETIRED_OLD, NO_ANCHOR }
 

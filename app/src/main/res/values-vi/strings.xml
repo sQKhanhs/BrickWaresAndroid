@@ -33,7 +33,7 @@
     <string name="price_paid">Đã trả</string>
     <string name="price_value">Giá trị</string>
     <string name="price_no_retail">Không có</string>
-    <string name="price_no_retail_currency">Không có giá bán lẻ cho %1$s</string>
+    <string name="price_no_retail_currency">Không có</string>
     <string name="item_details_empty">Chưa có gì ở đây — thêm mới</string>
 
     <string name="action_add">Thêm</string>

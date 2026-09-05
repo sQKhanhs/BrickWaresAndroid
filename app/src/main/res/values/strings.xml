@@ -32,8 +32,8 @@
     <string name="price_retail">Retail</string>
     <string name="price_paid">Paid</string>
     <string name="price_value">Value</string>
-    <string name="price_no_retail">No retail price</string>
-    <string name="price_no_retail_currency">No retail price for %1$s</string>
+    <string name="price_no_retail">No data</string>
+    <string name="price_no_retail_currency">No data</string>
     <string name="item_details_empty">Nothing here yet — add something</string>
 
     <string name="action_add">Add</string>

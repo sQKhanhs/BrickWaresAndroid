@@ -238,6 +238,12 @@ class SupabaseCatalogRepository(
             }
             val retire = retirementDate()
             if (retire != null && retire.isBefore(LocalDate.now())) return Availability.RETIRED
+            // A legacy set with NO LEGO.com date data at all — no launch/date-first-available AND no
+            // exit/date-last-available (e.g. 4002 Riptide Racer, 1996: empty LEGOCom, no exitDate) —
+            // can't be dated, so its raw availability ("Retail") would wrongly read AVAILABLE forever.
+            // Fall back to the release year: a set from a past year with no date tracking is retired.
+            // Modern sets keep their LEGO.com dates, so this only catches old catalog entries.
+            if (releaseDate() == null && (year ?: 0) in 1 until LocalDate.now().year) return Availability.RETIRED
             return when {
                 availability.equals("LEGO exclusive", ignoreCase = true) -> Availability.EXCLUSIVE
                 availability.equals("LEGO Gift with Purchase", ignoreCase = true) -> Availability.GWP
