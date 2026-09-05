@@ -45,6 +45,8 @@
     <string name="action_sign_in">Sign In</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
+    <string name="action_go">Go</string>
+    <string name="pagination_go_title">Go to page</string>
     <string name="action_delete">Delete</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Retry</string>
@@ -232,6 +234,7 @@
     <string name="search_minifig_count">%1$d minifigs</string>
     <string name="search_minifig_sets">In %1$d sets</string>
     <string name="search_minifig_empty">No minifigs in the catalog yet</string>
+    <string name="search_no_favorite_themes">No favorite themes yet — tap the star on a theme to add it.</string>
     <string name="search_mark_favorite_cd">Mark favorite</string>
     <string name="search_all_subthemes">All Subthemes</string>
     <string name="search_sort_label">Sort</string>

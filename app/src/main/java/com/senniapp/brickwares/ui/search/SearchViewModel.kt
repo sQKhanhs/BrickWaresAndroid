@@ -14,6 +14,7 @@ import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
+import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +35,14 @@ class SearchViewModel(
 
     private var catalog: List<CatalogSet> = emptyList()
     private var minifigs: List<Minifig> = emptyList()
-    private val _uiState = MutableStateFlow(SearchUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(
+        // Seed favorites from disk so bookmarked themes survive an app restart.
+        SearchUiState(
+            isLoading = true,
+            favoriteThemes = ThemeFavoritesPrefs.setThemes,
+            favoriteMinifigThemes = ThemeFavoritesPrefs.minifigThemes,
+        ),
+    )
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
@@ -45,7 +53,7 @@ class SearchViewModel(
             catalogRepo.revision.collect {
                 catalog = catalogRepo.all()
                 if (catalog.isNotEmpty()) {
-                    _uiState.update { it.copy(themes = buildThemes(), isLoading = false) }
+                    _uiState.update { it.copy(themes = buildThemes(), isLoading = false).withReorderedThemes() }
                 }
             }
         }
@@ -146,7 +154,7 @@ class SearchViewModel(
         viewModelScope.launch {
             catalogRepo.refreshMinifigs()
             minifigs = catalogRepo.allMinifigs()
-            _uiState.update { it.copy(minifigThemes = buildMinifigThemes(), minifigsLoading = false) }
+            _uiState.update { it.copy(minifigThemes = buildMinifigThemes(), minifigsLoading = false).withReorderedThemes() }
         }
     }
 
@@ -367,29 +375,41 @@ class SearchViewModel(
                 // Minifig browse home too (keep the current mode).
                 minifigThemeDetail = null,
                 minifigItems = emptyList(),
+                // Re-entering Search lands on page 1 (with favorites pinned on top).
+                themePage = 1,
+                minifigThemePage = 1,
                 // Signal the screen to scroll the browse list back to the top.
                 homeScrollTick = it.homeScrollTick + 1,
-            )
+            ).withReorderedThemes() // re-pin favorites now that we're back on the main browse page
         }
     }
+
+    /** Freeze the current desired theme order into the paginated browse snapshot (favorites pinned).
+     *  Called on browse (re)entry — never on a favorite toggle, so bookmarking doesn't reorder live. */
+    private fun SearchUiState.withReorderedThemes(): SearchUiState =
+        copy(orderedThemes = sortedThemes, orderedMinifigThemes = sortedMinifigThemes)
 
     fun onThemeSortChange(sort: ThemeSort) {
-        _uiState.update { it.copy(themeSort = sort) }
+        // Reset to page 1 (the Favorites filter changes the list length) and re-freeze the order.
+        _uiState.update { it.copy(themeSort = sort, themePage = 1, minifigThemePage = 1).withReorderedThemes() }
     }
 
+    fun onThemePageChange(page: Int) = _uiState.update { it.copy(themePage = page) }
+    fun onMinifigThemePageChange(page: Int) = _uiState.update { it.copy(minifigThemePage = page) }
+
     fun onToggleFavorite(theme: String) {
-        _uiState.update {
-            val next = if (theme in it.favoriteThemes) it.favoriteThemes - theme else it.favoriteThemes + theme
-            it.copy(favoriteThemes = next)
-        }
+        val cur = _uiState.value.favoriteThemes
+        val next = if (theme in cur) cur - theme else cur + theme
+        ThemeFavoritesPrefs.setThemes = next // persist across restarts
+        _uiState.update { it.copy(favoriteThemes = next) }
     }
 
     /** Favorite toggle for the MINIFIG theme browse — independent of the set-theme favorites. */
     fun onToggleMinifigFavorite(theme: String) {
-        _uiState.update {
-            val next = if (theme in it.favoriteMinifigThemes) it.favoriteMinifigThemes - theme else it.favoriteMinifigThemes + theme
-            it.copy(favoriteMinifigThemes = next)
-        }
+        val cur = _uiState.value.favoriteMinifigThemes
+        val next = if (theme in cur) cur - theme else cur + theme
+        ThemeFavoritesPrefs.minifigThemes = next
+        _uiState.update { it.copy(favoriteMinifigThemes = next) }
     }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)

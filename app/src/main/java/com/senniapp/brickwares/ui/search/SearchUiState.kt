@@ -68,6 +68,11 @@ data class SearchUiState(
     val suggestions: List<CatalogSet> = emptyList(),
     val themes: List<ThemeGroup> = emptyList(),
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
+    /** 1-based current page for the theme browse grid (10/page). */
+    val themePage: Int = 1,
+    /** Frozen display order for the set theme browse — favorites pinned. Recomputed only when the
+     *  browse is (re)entered, NOT on a favorite toggle, so bookmarking doesn't reorder the list live. */
+    val orderedThemes: List<ThemeGroup> = emptyList(),
     /** Favorited SET themes (separate from minifig favorites — the two browses are independent). */
     val favoriteThemes: Set<String> = emptySet(),
     /** Favorited MINIFIG themes (kept apart from [favoriteThemes]). */
@@ -93,6 +98,10 @@ data class SearchUiState(
     val minifigsLoading: Boolean = false,
     /** Theme cards for the minifig browse (same shape as the set themes, so ThemeCard is reused). */
     val minifigThemes: List<ThemeGroup> = emptyList(),
+    /** 1-based page for the minifig theme browse grid (10/page). */
+    val minifigThemePage: Int = 1,
+    /** Frozen display order for the minifig theme browse (see [orderedThemes]). */
+    val orderedMinifigThemes: List<ThemeGroup> = emptyList(),
     /** Open minifig theme (its figs are in [minifigItems]); null = the theme browse. */
     val minifigThemeDetail: String? = null,
     /** Selected subtheme filter inside the minifig theme-detail (ALL_SUBTHEMES = no filter). */
@@ -141,21 +150,34 @@ data class SearchUiState(
     val themeDetailPageItems: List<CatalogSet>
         get() = themeDetailResults.drop((themeDetailCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
-    /** Themes ordered by the active [themeSort] (favorites-first for the favorite sort). */
+    /** The desired theme order right now (favorites pinned first; the Favorites option filters to only
+     *  favorites). The ViewModel SNAPSHOTS this into [orderedThemes] on browse entry — the browse grid
+     *  paginates the frozen snapshot, so favoriting doesn't reorder the list under the user's finger. */
     val sortedThemes: List<ThemeGroup> get() = themes.sortedByThemeSort(themeSort, favoriteThemes)
+    val themePageCount: Int get() = ((orderedThemes.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+    val themeCurrentPage: Int get() = themePage.coerceIn(1, themePageCount)
+    val themePageItems: List<ThemeGroup> get() = orderedThemes.drop((themeCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
-    /** Minifig-browse themes ordered by the same [themeSort], using the minifig favorites. */
+    /** Minifig-browse desired order (snapshotted into [orderedMinifigThemes], using minifig favorites). */
     val sortedMinifigThemes: List<ThemeGroup> get() = minifigThemes.sortedByThemeSort(themeSort, favoriteMinifigThemes)
+    val minifigThemePageCount: Int get() = ((orderedMinifigThemes.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+    val minifigThemeCurrentPage: Int get() = minifigThemePage.coerceIn(1, minifigThemePageCount)
+    val minifigThemePageItems: List<ThemeGroup> get() = orderedMinifigThemes.drop((minifigThemeCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     companion object {
         const val MAX_RESULTS = 20
     }
 }
 
-/** Shared ordering for the set + minifig theme browsers. */
+/**
+ * Shared ordering for the set + minifig theme browsers. Alphabetical / Count pin favorites to the top
+ * (so bookmarks lead the browse); Favorites is a filter — only favorited themes, alphabetically.
+ */
 private fun List<ThemeGroup>.sortedByThemeSort(sort: ThemeSort, favorites: Set<String>): List<ThemeGroup> =
     when (sort) {
-        ThemeSort.ALPHABETICAL -> sortedBy { it.theme }
-        ThemeSort.COUNT -> sortedWith(compareByDescending<ThemeGroup> { it.setCount }.thenBy { it.theme })
-        ThemeSort.FAVORITE -> sortedWith(compareByDescending<ThemeGroup> { it.theme in favorites }.thenBy { it.theme })
+        ThemeSort.ALPHABETICAL ->
+            sortedWith(compareByDescending<ThemeGroup> { it.theme in favorites }.thenBy { it.theme })
+        ThemeSort.COUNT ->
+            sortedWith(compareByDescending<ThemeGroup> { it.theme in favorites }.thenByDescending { it.setCount }.thenBy { it.theme })
+        ThemeSort.FAVORITE -> filter { it.theme in favorites }.sortedBy { it.theme }
     }

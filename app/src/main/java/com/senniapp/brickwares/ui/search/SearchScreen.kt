@@ -37,8 +37,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +109,8 @@ fun SearchScreen(
         onThemeClick = viewModel::onThemeClick,
         onSubthemeClick = viewModel::onSubthemeClick,
         onThemeSortChange = viewModel::onThemeSortChange,
+        onThemePageChange = viewModel::onThemePageChange,
+        onMinifigThemePageChange = viewModel::onMinifigThemePageChange,
         onToggleFavorite = viewModel::onToggleFavorite,
         onToggleMinifigFavorite = viewModel::onToggleMinifigFavorite,
         onThemeDetailBack = viewModel::onThemeDetailBack,
@@ -146,6 +150,8 @@ private fun SearchContent(
     onThemeClick: (String) -> Unit,
     onSubthemeClick: (String, String) -> Unit,
     onThemeSortChange: (ThemeSort) -> Unit,
+    onThemePageChange: (Int) -> Unit,
+    onMinifigThemePageChange: (Int) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onToggleMinifigFavorite: (String) -> Unit,
     onThemeDetailBack: () -> Unit,
@@ -175,6 +181,7 @@ private fun SearchContent(
     val colors = BwTheme.colors
     var showSearchModal by remember { mutableStateOf(false) }
     val browseListState = rememberLazyListState()
+    val browseScope = rememberCoroutineScope() // scroll the browse list to top on a theme page change
     // Scroll the browse list to the top when the tab resets to its browse home (mode toggle, a mode
     // switch from a detail page, or the Search-nav tap) — signalled by [homeScrollTick]. Guarded by a
     // saved last-seen tick so back-navigation (which doesn't bump the tick) keeps its prior scroll.
@@ -332,34 +339,62 @@ private fun SearchContent(
                             ThemeSortSelector(selected = state.themeSort, onSelect = onThemeSortChange)
                             Spacer(Modifier.height(12.dp))
                         }
-                        items(state.sortedMinifigThemes, key = { it.theme }) { group ->
-                            ThemeCard(
-                                group = group,
-                                isFavorite = group.theme in state.favoriteMinifigThemes,
-                                onClick = { onMinifigThemeClick(group.theme) },
-                                onToggleFavorite = { onToggleMinifigFavorite(group.theme) },
-                                onSubthemeClick = { sub -> onMinifigSubthemeClick(group.theme, sub) },
-                            )
-                            Spacer(Modifier.height(12.dp))
+                        if (state.minifigThemePageItems.isEmpty()) {
+                            item { SectionLabel(stringResource(R.string.search_no_favorite_themes)) }
+                        } else {
+                            items(state.minifigThemePageItems, key = { it.theme }) { group ->
+                                ThemeCard(
+                                    group = group,
+                                    isFavorite = group.theme in state.favoriteMinifigThemes,
+                                    onClick = { onMinifigThemeClick(group.theme) },
+                                    onToggleFavorite = { onToggleMinifigFavorite(group.theme) },
+                                    onSubthemeClick = { sub -> onMinifigSubthemeClick(group.theme, sub) },
+                                )
+                                Spacer(Modifier.height(12.dp))
+                            }
+                            item {
+                                PaginationBar(
+                                    currentPage = state.minifigThemeCurrentPage,
+                                    totalPages = state.minifigThemePageCount,
+                                    onPageSelected = { page ->
+                                        onMinifigThemePageChange(page)
+                                        browseScope.launch { browseListState.scrollToItem(0) }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
 
-                // Set theme browse home (mode = Sets).
+                // Set theme browse home (mode = Sets). Paginated 10/page; favorites pinned on top.
                 else -> {
                     item {
                         ThemeSortSelector(selected = state.themeSort, onSelect = onThemeSortChange)
                         Spacer(Modifier.height(12.dp))
                     }
-                    items(state.sortedThemes, key = { it.theme }) { group ->
-                        ThemeCard(
-                            group = group,
-                            isFavorite = group.theme in state.favoriteThemes,
-                            onClick = { onThemeClick(group.theme) },
-                            onToggleFavorite = { onToggleFavorite(group.theme) },
-                            onSubthemeClick = { sub -> onSubthemeClick(group.theme, sub) },
-                        )
-                        Spacer(Modifier.height(12.dp))
+                    if (state.themePageItems.isEmpty()) {
+                        item { SectionLabel(stringResource(R.string.search_no_favorite_themes)) }
+                    } else {
+                        items(state.themePageItems, key = { it.theme }) { group ->
+                            ThemeCard(
+                                group = group,
+                                isFavorite = group.theme in state.favoriteThemes,
+                                onClick = { onThemeClick(group.theme) },
+                                onToggleFavorite = { onToggleFavorite(group.theme) },
+                                onSubthemeClick = { sub -> onSubthemeClick(group.theme, sub) },
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        item {
+                            PaginationBar(
+                                currentPage = state.themeCurrentPage,
+                                totalPages = state.themePageCount,
+                                onPageSelected = { page ->
+                                    onThemePageChange(page)
+                                    browseScope.launch { browseListState.scrollToItem(0) }
+                                },
+                            )
+                        }
                     }
                 }
             }

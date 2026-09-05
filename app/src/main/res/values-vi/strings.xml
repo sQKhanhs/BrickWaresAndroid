@@ -45,6 +45,8 @@
     <string name="action_sign_in">Đăng nhập</string>
     <string name="action_cancel">Hủy</string>
     <string name="action_save">Lưu</string>
+    <string name="action_go">Đến</string>
+    <string name="pagination_go_title">Đến trang</string>
     <string name="action_delete">Xóa</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Thử lại</string>
@@ -231,6 +233,7 @@
     <string name="search_minifig_count">%1$d minifig</string>
     <string name="search_minifig_sets">Có trong %1$d bộ</string>
     <string name="search_minifig_empty">Chưa có minifig trong danh mục</string>
+    <string name="search_no_favorite_themes">Chưa có chủ đề yêu thích — chạm ngôi sao trên một chủ đề để thêm.</string>
     <string name="search_mark_favorite_cd">Đánh dấu yêu thích</string>
     <string name="search_all_subthemes">Tất cả chủ đề phụ</string>
     <string name="search_sort_label">Sắp xếp</string>
