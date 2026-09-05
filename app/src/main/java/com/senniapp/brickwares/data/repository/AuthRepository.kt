@@ -33,6 +33,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.security.MessageDigest
+import java.util.UUID
 
 /** Signed-in user, as the app cares about it (derived from the Supabase session). */
 data class AuthUser(
@@ -110,11 +112,20 @@ object AuthRepository {
     /**
      * Launches the native Google account picker and establishes a Supabase session from the returned
      * ID token. Requires an Activity [context] (Credential Manager anchors its UI to the activity).
-     * Nonce is intentionally omitted — the Supabase Google provider runs with skip-nonce-check
-     * (required for the local dev stack; set on the prod dashboard too).
+     *
+     * The ID token is **nonce-bound** (OIDC replay protection): Google gets the SHA-256 of a fresh
+     * random nonce and embeds it in the token's `nonce` claim; Supabase gets the raw nonce, re-hashes
+     * it and compares — so a token captured anywhere else (logs, another surface sharing this client
+     * id, e.g. the future iOS app) can't be replayed to mint a session. Prod enforces this ("Skip nonce
+     * checks" OFF on the dashboard). The local stack keeps `skip_nonce_check = true` for dev
+     * convenience (see `supabase/config.toml`), so a nonce bug here only shows against prod — verify
+     * once with a prodDebug sign-in after touching this.
      */
     suspend fun signInWithGoogle(context: Context): SignInResult {
-        val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID).build()
+        val rawNonce = UUID.randomUUID().toString()
+        val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+            .setNonce(sha256Hex(rawNonce))
+            .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
 
         val idToken = try {
@@ -139,6 +150,7 @@ object AuthRepository {
             client.auth.signInWith(IDToken) {
                 this.idToken = idToken
                 provider = Google
+                nonce = rawNonce // raw; Supabase hashes it and compares with the token's claim
             }
             SignInResult.Success
         } catch (e: Exception) {
@@ -259,3 +271,7 @@ private fun io.github.jan.supabase.auth.user.UserInfo.toAuthUser(): AuthUser {
 
 private fun JsonObject?.string(key: String): String? =
     this?.get(key)?.jsonPrimitive?.contentOrNull
+
+/** Lowercase hex SHA-256 — the encoding Supabase compares the ID token's `nonce` claim against. */
+private fun sha256Hex(s: String): String =
+    MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
