@@ -207,7 +207,7 @@
     <!-- Community current value (Arch Decision 17) -->
     <string name="current_value">Current value</string>
     <string name="value_contribute">Contribute your value</string>
-    <string name="value_note_fresh">Based on %1$d price contribution(s).</string>
+    <string name="value_note_fresh">Current value based on %1$d price contribution(s).</string>
     <string name="value_note_stale">Old price data — last updated %1$s ago.</string>
     <string name="value_note_none">No current value for this set yet.</string>
     <string name="value_age_days">%1$d days</string>
@@ -232,7 +232,10 @@
     <string name="search_unmark_favorite_cd">Unmark favorite</string>
     <string name="search_toggle_minifigs_cd">Toggle set / minifig search</string>
     <string name="search_minifig_count">%1$d minifigs</string>
-    <string name="search_minifig_sets">In %1$d sets</string>
+    <plurals name="search_minifig_sets">
+        <item quantity="one">In %1$d set</item>
+        <item quantity="other">In %1$d sets</item>
+    </plurals>
     <string name="search_minifig_empty">No minifigs in the catalog yet</string>
     <string name="search_no_favorite_themes">No favorite themes yet — tap the star on a theme to add it.</string>
     <string name="search_mark_favorite_cd">Mark favorite</string>

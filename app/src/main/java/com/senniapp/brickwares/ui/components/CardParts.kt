@@ -109,9 +109,11 @@ fun SetThumb(
             // a soft gray outline provides the border.
             .background(Color.White)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(corner))
-            // Image tap → full-screen gallery (when the caller supplies images); else the caller's
-            // own [modifier] (which may carry a navigation click) applies.
-            .then(if (galleryImages.isNotEmpty()) Modifier.clickable { showGallery = true } else Modifier)
+            // Image tap → full-screen gallery, but only while a thumbnail is actually showing. A
+            // no-image / failed-to-load thumbnail renders the placeholder, and tapping it must do
+            // nothing — its URLs (if any) 404, so the gallery would just be a black screen. Else the
+            // caller's own [modifier] (which may carry a navigation click) applies.
+            .then(if (galleryImages.isNotEmpty() && !failed) Modifier.clickable { showGallery = true } else Modifier)
             .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -322,6 +324,11 @@ fun PriceLine(label: String, value: String) {
             value,
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
             color = colors.text,
+            // Take the remaining width, right-aligned on one line, so a long ₫ amount never wraps its
+            // trailing "₫" to a second line.
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            maxLines = 1,
         )
     }
 }

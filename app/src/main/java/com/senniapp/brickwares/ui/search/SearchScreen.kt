@@ -72,6 +72,8 @@ import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
+import com.senniapp.brickwares.ui.components.StatusBadgeWithValueInfo
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.ErrorScreen
@@ -885,12 +887,13 @@ private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpe
             Text(fig.figNum, style = BwType.micro, color = colors.textMuted)
             Text(fig.name, style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpen))
             if (fig.setCount > 0) {
-                Text(stringResource(R.string.search_minifig_sets, fig.setCount), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                MinifigSetsWithValueInfo(fig.setCount, currentValue)
             }
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.width(118.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            ValuePriceLine(currentValue)
+            // Bubble sits beside "in N sets" (above) when shown; a set-less minifig keeps it on this line.
+            ValuePriceLine(currentValue, showBubble = fig.setCount == 0)
             if (owned) {
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
@@ -975,6 +978,11 @@ private fun ResultCard(
     val isLoggedIn = rememberIsLoggedIn()
     val add = { if (isLoggedIn) onAddCollection() else SignInController.request() }
     val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
+    // Community value (Decision 17), read once so the meta column's "!" freshness bubble (beside the
+    // status badge) and the price column's amount share it.
+    val valueRepo = ValueRepositoryProvider.instance
+    val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
+    val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
     // Prefer the box shot; fall back to the render. The card shows immediately; the thumbnail fills
     // in with a crossfade (no whole-card gating, so a list scrolls smoothly and in order).
     val boxUrl = set.boxImageUrl
@@ -1002,7 +1010,7 @@ private fun ResultCard(
             MetaLine(stringResource(R.string.meta_theme), set.theme)
             MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
             MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
-            StatusBadge(set.status)
+            StatusBadgeWithValueInfo(set.status, currentValue)
         }
         Spacer(Modifier.width(10.dp))
         Column(
@@ -1011,11 +1019,8 @@ private fun ResultCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, BwTheme.currency))
-            // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
-            val valueRepo = ValueRepositoryProvider.instance
-            val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
-            val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
-            ValuePriceLine(currentValue)
+            // Value amount (Decision 17); its "!" freshness bubble sits beside the status badge above.
+            ValuePriceLine(currentValue, showBubble = false)
             if (owned) {
                 // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
                 Row(

@@ -65,6 +65,11 @@ fun SetResultCard(
     val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
     // Wishlisted → remove (if the caller supports it); not wishlisted → add. Null = not tappable.
     val wishClick: (() -> Unit)? = if (wishlisted) onRemoveWishlist else wish
+    // Community value (Decision 17), read once so both the meta column (the "!" freshness bubble next
+    // to the status badge) and the price column (the amount) share it.
+    val valueRepo = ValueRepositoryProvider.instance
+    val valueRev by valueRepo.revision.collectAsState()
+    val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -88,7 +93,7 @@ fun SetResultCard(
             MetaLine(stringResource(R.string.meta_theme), set.theme)
             MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
             MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
-            StatusBadge(set.status)
+            StatusBadgeWithValueInfo(set.status, currentValue)
         }
         Spacer(Modifier.width(10.dp))
         Column(
@@ -97,11 +102,8 @@ fun SetResultCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, BwTheme.currency))
-            // Community value (Decision 17) with the "!" info bubble, overlaid from the shared cache.
-            val valueRepo = ValueRepositoryProvider.instance
-            val valueRev by valueRepo.revision.collectAsState()
-            val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
-            ValuePriceLine(currentValue)
+            // Value amount (Decision 17); its "!" freshness bubble sits beside the status badge above.
+            ValuePriceLine(currentValue, showBubble = false)
             if (owned) {
                 // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
                 Row(

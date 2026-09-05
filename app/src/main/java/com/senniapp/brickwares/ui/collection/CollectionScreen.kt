@@ -70,6 +70,8 @@ import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
+import com.senniapp.brickwares.ui.components.StatusBadgeWithValueInfo
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.animatedNumber
 import com.senniapp.brickwares.ui.components.StatCardRow
@@ -485,6 +487,9 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
     val isFig = item.itemType == ItemType.MINIFIG
     // Sets: box shot first, falling back to the render. Minifigs: their stored Rebrickable image.
     val thumbUrl = if (isFig) item.imageUrl else CatalogImages.boxUrl(item.setNumber)
+    // Sets show a community value only when retired/promo/magazine; its "!" bubble then sits beside the
+    // status badge (below), keeping it off the narrow value line where a long ₫ amount clipped.
+    val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -520,7 +525,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                     modifier = Modifier.clickable(onClick = onOpenDetail),
                 )
                 if (item.minifigSetCount > 0) {
-                    Text(stringResource(R.string.search_minifig_sets, item.minifigSetCount), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                    MinifigSetsWithValueInfo(item.minifigSetCount, item.currentValueInfo)
                 }
             } else {
                 Text(
@@ -532,7 +537,7 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
                 MetaLine(stringResource(R.string.meta_theme), item.theme)
                 MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
                 MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
-                StatusBadge(item.status)
+                if (showValue) StatusBadgeWithValueInfo(item.status, item.currentValueInfo) else StatusBadge(item.status)
             }
         }
 
@@ -547,17 +552,17 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             if (isFig) {
                 // Minifig: Paid → community value → Growth (no retail; value always shown).
                 PriceLine(stringResource(R.string.price_paid), formatIn(item.totalPaidIn(BwTheme.currency), BwTheme.currency))
-                ValuePriceLine(item.currentValueInfo)
+                // Bubble sits beside "in N sets" (above) when shown; a set-less minifig keeps it here.
+                ValuePriceLine(item.currentValueInfo, showBubble = item.minifigSetCount == 0)
                 item.growthPercent?.let { GrowthPill(it) }
             } else {
-                // Set: the current value shows only for retired / promo / magazine sets — Retail, a
-                // divider, then Paid → Value → Growth. Otherwise just Retail → Paid → Growth (no value).
-                // Growth always shows (repo picks the reference: value when shown, else retail vs paid).
-                val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
+                // Set: the current value shows only for retired / promo / magazine sets ([showValue],
+                // hoisted above) — Retail, a divider, then Paid → Value → Growth. Otherwise just
+                // Retail → Paid → Growth (no value). Growth always shows (repo picks the reference).
                 PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, BwTheme.currency))
                 if (showValue) HorizontalDivider(color = colors.borderSoft)
                 PriceLine(stringResource(R.string.price_paid), formatIn(item.totalPaidIn(BwTheme.currency), BwTheme.currency))
-                if (showValue) ValuePriceLine(item.currentValueInfo)
+                if (showValue) ValuePriceLine(item.currentValueInfo, showBubble = false)
                 item.growthPercent?.let { GrowthPill(it) }
             }
             Row(
@@ -687,6 +692,9 @@ private fun ProfitBar(summary: SalesSummary) {
 private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     val isFig = sold.itemType == ItemType.MINIFIG
+    // Value shows only for retired/promo/magazine sets; its "!" bubble then sits beside the status
+    // badge (below), off the narrow value line where a long ₫ amount clipped.
+    val showValue = !isFig && (sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE)
     val thumbUrl = if (isFig) sold.imageUrl else CatalogImages.boxUrl(sold.setNumber)
     Row(
         modifier = Modifier
@@ -714,7 +722,8 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
                 Text("${sold.setNumber} ${sold.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
                 MetaLine(stringResource(R.string.meta_theme), sold.theme)
                 MetaLine(stringResource(R.string.meta_release), releaseLabel(sold.releaseMonth, sold.releaseYear))
-                StatusBadge(sold.status)
+                MetaLine(stringResource(R.string.meta_pieces_minifigs), "${sold.pieces} / ${sold.minifigs}")
+                if (showValue) StatusBadgeWithValueInfo(sold.status, sold.currentValueInfo) else StatusBadge(sold.status)
             }
         }
         Spacer(Modifier.width(10.dp))
@@ -722,9 +731,8 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
             // Set: Retail (+ current Value for retired/promo/magazine) then a divider, then the sale
             // figures. Minifigs skip the retail/value/divider block.
             if (!isFig) {
-                val showValue = sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE
                 PriceLine(stringResource(R.string.price_retail), formatMoney(sold.retailPrice, BwTheme.currency))
-                if (showValue) ValuePriceLine(sold.currentValueInfo)
+                if (showValue) ValuePriceLine(sold.currentValueInfo, showBubble = false)
                 HorizontalDivider(color = colors.borderSoft)
             }
             PriceLine(stringResource(R.string.price_paid), formatMoneyFrom(sold.pricePaid, sold.currency, BwTheme.currency))
@@ -733,7 +741,7 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.sales_profit_label), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
                 Spacer(Modifier.width(6.dp))
-                Text(signedMoney(sold.profit, sold.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor)
+                Text(signedMoney(sold.profit, sold.currency, BwTheme.currency), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = profitColor, modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1)
             }
             GrowthPill(sold.profitPercent)
             Row(

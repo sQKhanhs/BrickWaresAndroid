@@ -345,7 +345,9 @@ private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) 
         Spacer(Modifier.weight(1.3f)) // Paid column
         Text(
             (if (totalProfit > 0) "+" else "") + formatIn(totalProfit, display),
-            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            // 11sp (matching the per-row Sale cells that already fit this weight-1.3 column) instead of
+            // 12sp, so a long ₫ total no longer overflows and wraps its trailing "₫" onto a 2nd line.
+            style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
             color = profitColor,
             modifier = Modifier.weight(1.3f), // Sale column
         )

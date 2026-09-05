@@ -54,6 +54,7 @@ import com.senniapp.brickwares.ui.components.GrowthPill
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.PriceLine
+import com.senniapp.brickwares.ui.components.StatusBadgeWithValueInfo
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
@@ -293,7 +294,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             } else {
                 MetaLine(stringResource(R.string.meta_release), releaseLabel(item.releaseMonth, item.releaseYear))
                 MetaLine(stringResource(R.string.meta_pieces_minifigs), "${item.pieces} / ${item.minifigs}")
-                StatusBadge(item.status)
+                StatusBadgeWithValueInfo(item.status, item.currentValueInfo)
             }
         }
 
@@ -306,8 +307,9 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             if (!isFig) PriceLine(stringResource(R.string.price_retail), formatMoney(item.retailPrice, BwTheme.currency))
-            // Community value (Decision 17) with the "!" info bubble — for sets AND minifigs.
-            ValuePriceLine(item.currentValueInfo)
+            // Community value (Decision 17). Sets show its "!" bubble beside the status badge above
+            // (showBubble = false); minifigs have no badge, so they keep the bubble on this line.
+            ValuePriceLine(item.currentValueInfo, showBubble = isFig)
             item.growthPercent?.let { GrowthPill(it) }
             // Move to collection — full-width yellow button (matches design).
             Row(

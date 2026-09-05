@@ -25,8 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -37,6 +39,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueFreshness
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -46,30 +49,73 @@ import com.senniapp.brickwares.util.formatMoney
 import kotlin.math.roundToInt
 
 /**
- * The card "Value" line (Arch Decision 17): the label, an "!" info bubble explaining the value's
- * freshness, and the amount (or `----`). Used across the collection / wishlist / search /
- * recommendation cards so they all show the community value consistently. The bubble opens toward
- * the left ([alignEnd]) because the value line lives in the narrow right-hand price column.
+ * The card "Value" line (Arch Decision 17): the label, the amount (or `----`), and — only when
+ * [showBubble] — the "!" freshness bubble. Item cards pass `showBubble = false` and render the bubble
+ * beside the status badge (see [StatusBadgeWithValueInfo]) so it doesn't narrow this row and clip a
+ * long ₫ amount's trailing symbol; detail pages keep it here (they have room). The bubble opens toward
+ * the left ([alignEnd]) when it lives in the narrow right-hand price column.
  */
 @Composable
-fun ValuePriceLine(value: CurrentValue?, alignEnd: Boolean = true) {
+fun ValuePriceLine(value: CurrentValue?, alignEnd: Boolean = true, showBubble: Boolean = true) {
     val colors = BwTheme.colors
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.price_value), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+        Text(stringResource(R.string.price_value), style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
+        if (showBubble) {
             Spacer(Modifier.width(4.dp))
             ValueInfoBubble(note = currentValueNote(value ?: CurrentValue.NONE), alignEnd = alignEnd)
         }
         Spacer(Modifier.width(6.dp))
         Text(
             value?.amountUsdCents?.let { formatMoney(it, BwTheme.currency) } ?: "----",
+            // Remaining width, right-aligned, one line. With the bubble moved off this row (item cards),
+            // the value has the same room as the Retail line, so a long ₫ amount no longer clips.
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
             color = colors.text,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            maxLines = 1,
         )
+    }
+}
+
+/**
+ * A [StatusBadge] with the value-freshness "!" bubble beside it. Item cards render the bubble here
+ * instead of on the narrow Value price line (where a long ₫ amount clipped its trailing symbol). The
+ * bubble opens rightward (there's room in the left-hand meta column). Only used where a value is
+ * actually shown; detail pages keep the bubble on the value line and don't use this.
+ */
+@Composable
+fun StatusBadgeWithValueInfo(status: Availability, value: CurrentValue?) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        StatusBadge(status)
+        ValueInfoBubble(note = currentValueNote(value ?: CurrentValue.NONE), alignEnd = false)
+    }
+}
+
+/**
+ * The minifig "in N sets" meta line with the value-freshness "!" bubble beside it. Minifig cards have
+ * no status badge, so they park the bubble here instead of on the narrow value line. Callers render
+ * this only when [setCount] > 0; a minifig in no sets keeps the bubble on the value line instead.
+ */
+@Composable
+fun MinifigSetsWithValueInfo(setCount: Int, value: CurrentValue?) {
+    val colors = BwTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            pluralStringResource(R.plurals.search_minifig_sets, setCount, setCount),
+            style = BwType.body.copy(fontSize = 12.sp),
+            color = colors.textMuted,
+        )
+        ValueInfoBubble(note = currentValueNote(value ?: CurrentValue.NONE), alignEnd = false)
     }
 }
 
@@ -150,7 +196,10 @@ fun ValueInfoBubble(note: String, alignEnd: Boolean = false) {
             ) {
                 Box(
                     modifier = Modifier
-                        .widthIn(max = 240.dp)
+                        // 180dp (was 240): at 240 a long note filled line 1 and left the short last
+                        // line a big empty gap on the right; narrower wraps into balanced lines that
+                        // hug the bubble, matching how a short note already looks.
+                        .widthIn(max = 180.dp)
                         .background(fill, bubbleShape)
                         .border(outlineWidth, outline, bubbleShape)
                         .padding(start = 12.dp, end = 12.dp, top = 17.dp, bottom = 10.dp),

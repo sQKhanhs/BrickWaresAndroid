@@ -29,7 +29,7 @@
         <item>T12</item>
     </string-array>
 
-    <string name="price_retail">Giá bán lẻ</string>
+    <string name="price_retail">Bán lẻ</string>
     <string name="price_paid">Đã trả</string>
     <string name="price_value">Giá trị</string>
     <string name="price_no_retail">Không có</string>
@@ -206,7 +206,7 @@
     <!-- Community current value (Arch Decision 17) -->
     <string name="current_value">Giá trị hiện tại</string>
     <string name="value_contribute">Đóng góp giá của bạn</string>
-    <string name="value_note_fresh">Dựa trên %1$d giá đóng góp.</string>
+    <string name="value_note_fresh">Giá trị dựa trên %1$d đóng góp giá.</string>
     <string name="value_note_stale">Dữ liệu giá cũ — cập nhật gần nhất %1$s trước.</string>
     <string name="value_note_none">Chưa có giá trị hiện tại cho bộ này.</string>
     <string name="value_age_days">%1$d ngày</string>
@@ -231,7 +231,9 @@
     <string name="search_unmark_favorite_cd">Bỏ yêu thích</string>
     <string name="search_toggle_minifigs_cd">Chuyển tìm bộ / minifig</string>
     <string name="search_minifig_count">%1$d minifig</string>
-    <string name="search_minifig_sets">Có trong %1$d bộ</string>
+    <plurals name="search_minifig_sets">
+        <item quantity="other">Có trong %1$d bộ</item>
+    </plurals>
     <string name="search_minifig_empty">Chưa có minifig trong danh mục</string>
     <string name="search_no_favorite_themes">Chưa có chủ đề yêu thích — chạm ngôi sao trên một chủ đề để thêm.</string>
     <string name="search_mark_favorite_cd">Đánh dấu yêu thích</string>
