@@ -52,9 +52,19 @@ const {
   BRICKSET_RETIRED_THEMES = "Star Wars,Technic,City,Ninjago,Creator Expert,Architecture,Ideas,Marvel Super Heroes,Harry Potter,Speed Champions",
   BRICKSET_RETIRED_PAGESIZE = "40",
   BRICKSET_RETIRED_MAX = "200",
+  // "Full picture" coverage — fetch a small SAMPLE (BRICKSET_ALL_THEMES_SAMPLE, default 1) of sets for
+  // EVERY Brickset theme (via getThemes), so all ~173 themes appear in the theme browse. Runs on every
+  // fetch so new themes stay covered; catalog-only (no minifig fetch). "0" disables.
+  BRICKSET_ALL_THEMES = "1",
+  BRICKSET_ALL_THEMES_SAMPLE = "1",
+  // Fast focused mode: fetch ONLY the theme samples and merge them into the existing seed (skips the
+  // primary/full/retired/minifig/translate passes). Implies append — fills in missing themes without
+  // re-running the whole ingest.
+  BRICKSET_SAMPLES_ONLY = "",
 } = process.env;
 
-const APPEND = BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
+const SAMPLES_ONLY = BRICKSET_SAMPLES_ONLY === "1" || BRICKSET_SAMPLES_ONLY.toLowerCase() === "true";
+const APPEND = SAMPLES_ONLY || BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
 
 if (!BRICKSET_API_KEY) {
   console.error("Missing BRICKSET_API_KEY — put it in supabase/.env.local (see .env.example).");
@@ -251,6 +261,26 @@ async function fetchFullThemes(userHash) {
   return out;
 }
 
+// Full-picture pass — fetch a small sample (sampleSize) of sets for EVERY Brickset theme (getThemes),
+// so every theme (~173) has at least one set and shows up in the theme browse. Catalog-only (deduped
+// downstream by setID, and a richer pass wins the tie). getThemes needs only the apiKey (public data).
+async function fetchThemeSamples(userHash, sampleSize) {
+  const tj = await post("getThemes", { apiKey: BRICKSET_API_KEY });
+  if (tj.status !== "success") { console.error(`  getThemes: ${tj.message}`); return []; }
+  const allThemes = (tj.themes || []).map((t) => t.theme).filter(Boolean);
+  console.log(`Fetching ${sampleSize} sample set(s) for each of ${allThemes.length} themes (full-picture coverage)...`);
+  const out = [];
+  for (const theme of allThemes) {
+    const params = JSON.stringify({ theme, pageSize: sampleSize, orderBy: "YearFromDESC", extendedData: true });
+    const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
+    if (j.status !== "success") { console.error(`  sample ${theme}: ${j.message}`); continue; }
+    out.push(...(j.sets || []));
+    await sleep(120); // gentle pacing across ~173 themes
+  }
+  console.log(`  theme samples: ${out.length} sets across ${allThemes.length} themes.`);
+  return out;
+}
+
 // Translate-at-ingest: machine-translate English set notes to Vietnamese via MyMemory (free, no key).
 // Deduped (each distinct note once); failures/quota are skipped and the app falls back to English.
 // Returns a Map of englishNote -> vietnameseNote.
@@ -289,54 +319,62 @@ async function main() {
   const themes = BRICKSET_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
   const fullThemes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
   const pageSize = Number(BRICKSET_PAGESIZE);
+  const enableAllThemes = SAMPLES_ONLY || BRICKSET_ALL_THEMES === "1" || BRICKSET_ALL_THEMES.toLowerCase() === "true";
+  const sampleSize = Math.max(1, Number(BRICKSET_ALL_THEMES_SAMPLE) || 1);
 
-  console.log(`Fetching newest ${pageSize} sets each for: ${themes.join(", ")}`);
-  const collected = [];
-  for (const theme of themes) {
-    // Brickset's orderBy field is "YearFrom" (not "Year"); "YearDESC" is silently ignored and you
-    // get default (set-number) order. "YearFromDESC" gives genuinely newest-first.
-    // extendedData:true is REQUIRED for Brickset to return extendedData.notes (the availability note
-    // shown on the detail page). Without it the field is absent even for sets that have a note.
-    const p = { theme, pageSize, orderBy: "YearFromDESC", extendedData: true };
-    if (BRICKSET_YEAR) p.year = BRICKSET_YEAR;
-    if (BRICKSET_SUBTHEME) p.subtheme = BRICKSET_SUBTHEME;
-    const params = JSON.stringify(p);
-    const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
-    if (j.status !== "success") {
-      console.error(`  getSets(${theme}) failed: ${j.message}`);
-      continue;
+  let primarySets = [];
+  let fullSets = [];
+  let retiredSets = [];
+  if (!SAMPLES_ONLY) {
+    console.log(`Fetching newest ${pageSize} sets each for: ${themes.join(", ")}`);
+    const collected = [];
+    for (const theme of themes) {
+      // Brickset's orderBy field is "YearFrom" (not "Year"); "YearDESC" is silently ignored and you
+      // get default (set-number) order. "YearFromDESC" gives genuinely newest-first.
+      // extendedData:true is REQUIRED for Brickset to return extendedData.notes (the availability note
+      // shown on the detail page). Without it the field is absent even for sets that have a note.
+      const p = { theme, pageSize, orderBy: "YearFromDESC", extendedData: true };
+      if (BRICKSET_YEAR) p.year = BRICKSET_YEAR;
+      if (BRICKSET_SUBTHEME) p.subtheme = BRICKSET_SUBTHEME;
+      const params = JSON.stringify(p);
+      const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
+      if (j.status !== "success") {
+        console.error(`  getSets(${theme}) failed: ${j.message}`);
+        continue;
+      }
+      console.log(`  ${theme}: ${j.sets?.length ?? 0}`);
+      collected.push(...(j.sets || []));
     }
-    console.log(`  ${theme}: ${j.sets?.length ?? 0}`);
-    collected.push(...(j.sets || []));
+    // Primary newest-N sets, deduped by setID (a set can match more than one query).
+    primarySets = [...new Map(collected.map((s) => [s.setID, s])).values()];
+    // Full-theme pass — every set in BRICKSET_FULL_THEMES (all pages, retired included).
+    fullSets = await fetchFullThemes(userHash);
+    // Extra retired-sets pass (catalog only — NOT sent to the Rebrickable minifig fetch, to avoid its
+    // rate limits). For exercising the retired badge/value flows across a spread of themes/years.
+    const enableRetired = BRICKSET_RETIRED !== "0" && BRICKSET_RETIRED.toLowerCase() !== "false";
+    retiredSets = enableRetired ? await fetchRetiredSets(userHash) : [];
+  } else {
+    console.log("SAMPLES_ONLY — skipping primary/full/retired passes (theme samples + append only).");
   }
 
-  // Primary newest-N sets, deduped by setID (a set can match more than one query).
-  const primarySets = [...new Map(collected.map((s) => [s.setID, s])).values()];
+  // Full-picture pass — one sample set per Brickset theme so every theme shows up in the browse.
+  const themeSampleSets = enableAllThemes ? await fetchThemeSamples(userHash, sampleSize) : [];
 
-  // Full-theme pass — every set in BRICKSET_FULL_THEMES (all pages, retired included).
-  const fullSets = await fetchFullThemes(userHash);
-
-  // Extra retired-sets pass (catalog only — NOT sent to the Rebrickable minifig fetch, to avoid its
-  // rate limits). For exercising the retired badge/value flows across a spread of themes/years.
-  const enableRetired = BRICKSET_RETIRED !== "0" && BRICKSET_RETIRED.toLowerCase() !== "false";
-  const retiredSets = enableRetired ? await fetchRetiredSets(userHash) : [];
-
-  // Sets that go through the Rebrickable minifig fetch: always the primary pass; the full-theme pass
-  // too only when BRICKSET_FULL_MINIFIGS is on (a whole theme is many sets → slow, so catalog-only by
-  // default). Retired-test sets never fetch minifigs.
+  // Sets that go through the Rebrickable minifig fetch: the primary pass (+ full-theme when
+  // BRICKSET_FULL_MINIFIGS is on). Never the retired or theme-sample passes; none in SAMPLES_ONLY.
   const fullMinifigs = BRICKSET_FULL_MINIFIGS === "1" || BRICKSET_FULL_MINIFIGS.toLowerCase() === "true";
-  const minifigSets = fullMinifigs
+  const minifigSets = SAMPLES_ONLY ? [] : (fullMinifigs
     ? [...new Map([...primarySets, ...fullSets].map((s) => [s.setID, s])).values()]
-    : primarySets;
+    : primarySets);
 
-  // Full catalog written to seed.sql (primary + full-theme + retired), deduped; a primary/full set
-  // wins a set_id tie over the retired pass.
-  const catalogSets = [...new Map([...retiredSets, ...fullSets, ...primarySets].map((s) => [s.setID, s])).values()];
+  // Full catalog written to seed.sql (primary + full-theme + retired + theme-samples), deduped; a
+  // richer pass wins a set_id tie over the single-sample coverage pass.
+  const catalogSets = [...new Map([...themeSampleSets, ...retiredSets, ...fullSets, ...primarySets].map((s) => [s.setID, s])).values()];
   if (catalogSets.length === 0) {
     console.error("No sets returned — check your key/hash and theme names.");
     process.exit(1);
   }
-  console.log(`Catalog: ${primarySets.length} primary + ${fullSets.length} full-theme + ${retiredSets.length} retired -> ${catalogSets.length} unique.`);
+  console.log(`Catalog: ${primarySets.length} primary + ${fullSets.length} full-theme + ${retiredSets.length} retired + ${themeSampleSets.length} theme-samples -> ${catalogSets.length} unique.`);
 
   // Minifigs (Rebrickable): fig list per set → the `minifigs` catalog + `set_minifigs` join.
   const { figs, setFigs } = REBRICKABLE_API_KEY
@@ -353,7 +391,7 @@ async function main() {
 
   // Vietnamese note translations (translate-at-ingest) — emitted as a separate UPDATE block keyed by
   // set_id (not a column in the sets INSERT), so it stays append-compatible with older seeds.
-  const noteViMap = await translateNotes(catalogSets.map((s) => s.extendedData?.notes));
+  const noteViMap = SAMPLES_ONLY ? new Map() : await translateNotes(catalogSets.map((s) => s.extendedData?.notes));
   let noteViRowList = catalogSets
     .filter((s) => s.extendedData?.notes && noteViMap.has(s.extendedData.notes.trim()))
     .map((s) => `(${num(s.setID)}, ${q(noteViMap.get(s.extendedData.notes.trim()))})`);
