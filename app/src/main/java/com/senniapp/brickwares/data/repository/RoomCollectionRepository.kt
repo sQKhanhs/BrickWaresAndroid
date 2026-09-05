@@ -113,22 +113,45 @@ class RoomCollectionRepository(
         val isFig = kind == "minifig"
         val set = if (isFig) null else resolveCatalog(item.setNumber)
         val now = System.currentTimeMillis()
+        // Existing copies of this item — a newly-added copy identical in condition, paid price, date and
+        // note merges into one (bumps its quantity) instead of adding a duplicate row.
+        val existingCopies = collectionDao.activeForItem(item.setNumber, kind)
         item.copies.forEach { copy ->
-            collectionDao.upsert(
-                CollectionCopyEntity(
-                    id = UUID.randomUUID().toString(),
-                    setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
-                    setNumber = item.setNumber, name = item.name, theme = item.theme,
-                    subtheme = set?.subtheme ?: "General",
-                    releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
-                    pieces = item.pieces, minifigs = item.minifigs,
-                    retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                    status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
-                    quantity = copy.qty, condition = copy.condition.dbName(),
-                    pricePaid = copy.pricePaid, acquiredOn = copy.dateAdded.ifBlank { null },
-                    notes = copy.note, deleted = false, updatedAt = now, dirty = true,
-                ),
-            )
+            val cond = copy.condition.dbName()
+            val date = copy.dateAdded.ifBlank { null }
+            // Match on per-unit paid (cross-multiply avoids integer-division rounding, and keeps
+            // matching as the merged row's total grows) so a repeated identical add bumps quantity.
+            val match = existingCopies.firstOrNull {
+                it.condition == cond && it.acquiredOn == date &&
+                    it.notes.orEmpty() == copy.note.orEmpty() &&
+                    it.pricePaid * copy.qty == copy.pricePaid * it.quantity
+            }
+            if (match != null) {
+                // pricePaid is the total for a copy's qty, so sum it alongside the quantity.
+                collectionDao.upsert(
+                    match.copy(
+                        quantity = match.quantity + copy.qty,
+                        pricePaid = match.pricePaid + copy.pricePaid,
+                        updatedAt = now, dirty = true,
+                    ),
+                )
+            } else {
+                collectionDao.upsert(
+                    CollectionCopyEntity(
+                        id = UUID.randomUUID().toString(),
+                        setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                        setNumber = item.setNumber, name = item.name, theme = item.theme,
+                        subtheme = set?.subtheme ?: "General",
+                        releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
+                        pieces = item.pieces, minifigs = item.minifigs,
+                        retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
+                        status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
+                        quantity = copy.qty, condition = cond,
+                        pricePaid = copy.pricePaid, acquiredOn = date,
+                        notes = copy.note, deleted = false, updatedAt = now, dirty = true,
+                    ),
+                )
+            }
         }
         // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
         // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
@@ -164,22 +187,44 @@ class RoomCollectionRepository(
         val isFig = kind == "minifig"
         val set = if (isFig) null else resolveCatalog(item.setNumber)
         val copy = item.copies.firstOrNull()
-        salesDao.upsert(
-            SalesEntity(
-                id = UUID.randomUUID().toString(),
-                setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
-                setNumber = item.setNumber, name = item.name, theme = item.theme,
-                releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
-                imageUrl = set?.imageUrl ?: item.imageUrl,
-                retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                quantity = copy?.qty ?: 1,
-                condition = copy?.condition?.dbName() ?: "new",
-                pricePaid = copy?.pricePaid ?: 0L, salePrice = salePrice,
-                soldOn = copy?.dateAdded?.ifBlank { null },
-                notes = copy?.note, deleted = false,
-                updatedAt = System.currentTimeMillis(), dirty = true,
-            ),
-        )
+        val now = System.currentTimeMillis()
+        val cond = copy?.condition?.dbName() ?: "new"
+        val qty = copy?.qty ?: 1
+        val paid = copy?.pricePaid ?: 0L
+        val soldOn = copy?.dateAdded?.ifBlank { null }
+        val note = copy?.note
+        // An identical sale (condition, per-unit paid, per-unit sale price, date, note) merges into one
+        // row — bumps quantity and sums the paid/sale totals — instead of adding a duplicate row.
+        val match = salesDao.activeForItem(item.setNumber, kind).firstOrNull {
+            it.condition == cond && it.soldOn == soldOn && it.notes.orEmpty() == note.orEmpty() &&
+                it.pricePaid * qty == paid * it.quantity &&
+                it.salePrice * qty == salePrice * it.quantity
+        }
+        if (match != null) {
+            salesDao.upsert(
+                match.copy(
+                    quantity = match.quantity + qty,
+                    pricePaid = match.pricePaid + paid,
+                    salePrice = match.salePrice + salePrice,
+                    updatedAt = now, dirty = true,
+                ),
+            )
+        } else {
+            salesDao.upsert(
+                SalesEntity(
+                    id = UUID.randomUUID().toString(),
+                    setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                    setNumber = item.setNumber, name = item.name, theme = item.theme,
+                    releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
+                    imageUrl = set?.imageUrl ?: item.imageUrl,
+                    retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
+                    quantity = qty, condition = cond,
+                    pricePaid = paid, salePrice = salePrice,
+                    soldOn = soldOn, notes = note, deleted = false,
+                    updatedAt = now, dirty = true,
+                ),
+            )
+        }
         // A sale price is a community value point too (Decision 17) — reflect it locally at once.
         contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, salePrice, isSale = true)
     }
@@ -192,19 +237,39 @@ class RoomCollectionRepository(
         // the remaining copy and the sale (whole-copy sale → full cost basis).
         val soldPaid = if (available <= 0) 0L else copy.pricePaid * sellQty / available
         val now = System.currentTimeMillis()
-        salesDao.upsert(
-            SalesEntity(
-                id = UUID.randomUUID().toString(),
-                setId = copy.setId, figNum = copy.figNum, itemKind = copy.itemKind,
-                setNumber = copy.setNumber, name = copy.name, theme = copy.theme,
-                releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
-                imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
-                quantity = sellQty, condition = copy.condition,
-                pricePaid = soldPaid, salePrice = salePrice,
-                soldOn = soldOn?.ifBlank { null }, notes = copy.notes,
-                deleted = false, updatedAt = now, dirty = true,
-            ),
-        )
+        val soldOnNorm = soldOn?.ifBlank { null }
+        // Selling identical copies one at a time (same condition, per-unit paid, per-unit sale, date,
+        // note) merges into one sales row instead of piling up duplicate rows — mirrors addSale.
+        val match = salesDao.activeForItem(copy.setNumber, copy.itemKind).firstOrNull {
+            it.condition == copy.condition && it.soldOn == soldOnNorm &&
+                it.notes.orEmpty() == copy.notes.orEmpty() &&
+                it.pricePaid * sellQty == soldPaid * it.quantity &&
+                it.salePrice * sellQty == salePrice * it.quantity
+        }
+        if (match != null) {
+            salesDao.upsert(
+                match.copy(
+                    quantity = match.quantity + sellQty,
+                    pricePaid = match.pricePaid + soldPaid,
+                    salePrice = match.salePrice + salePrice,
+                    updatedAt = now, dirty = true,
+                ),
+            )
+        } else {
+            salesDao.upsert(
+                SalesEntity(
+                    id = UUID.randomUUID().toString(),
+                    setId = copy.setId, figNum = copy.figNum, itemKind = copy.itemKind,
+                    setNumber = copy.setNumber, name = copy.name, theme = copy.theme,
+                    releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
+                    imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
+                    quantity = sellQty, condition = copy.condition,
+                    pricePaid = soldPaid, salePrice = salePrice,
+                    soldOn = soldOnNorm, notes = copy.notes,
+                    deleted = false, updatedAt = now, dirty = true,
+                ),
+            )
+        }
         if (sellQty >= available) {
             collectionDao.markDeleted(copyId, now)
         } else {

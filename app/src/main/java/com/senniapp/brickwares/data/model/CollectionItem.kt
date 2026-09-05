@@ -53,6 +53,7 @@ data class CollectionItem(
     /** Total number of pieces/units owned across copies. */
     val totalQty: Int get() = copies.sumOf { it.qty }
 
-    /** Average paid per copy (shown in the See Details "Avg" row). */
-    val avgPaid: Long get() = if (copies.isEmpty()) 0L else copies.sumOf { it.pricePaid } / copies.size
+    /** Average paid per unit across all copies (shown in the See Details "Avg" row). Divides by total
+     *  quantity, not copy-row count, so it stays correct when identical copies merge into one row. */
+    val avgPaid: Long get() = if (totalQty == 0) 0L else copies.sumOf { it.pricePaid } / totalQty
 }

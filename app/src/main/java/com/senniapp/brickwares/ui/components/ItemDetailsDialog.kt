@@ -5,14 +5,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -99,11 +104,14 @@ fun ItemDetailsDialog(
         )
     }
 
+    // Cap the dialog height so a long copies list scrolls inside it (pinned header + footer) rather
+    // than growing past the screen and pushing the Add button out of reach.
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.85f).dp
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             shape = RoundedCornerShape(18.dp),
             color = colors.card,
-            modifier = Modifier.fillMaxWidth(0.92f),
+            modifier = Modifier.fillMaxWidth(0.92f).heightIn(max = maxHeight),
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 // Header
@@ -171,7 +179,7 @@ private fun ToggleChip(label: String, selected: Boolean, modifier: Modifier = Mo
 }
 
 @Composable
-private fun CollectionBody(
+private fun ColumnScope.CollectionBody(
     item: CollectionItem,
     onDeleteCopy: (String, String) -> Unit,
     onEditCopy: (Copy) -> Unit,
@@ -191,6 +199,9 @@ private fun CollectionBody(
     }
     HorizontalDivider(color = colors.borderSoft)
 
+    // Copies scroll in a weighted area so the Avg row + Add button below stay pinned and reachable
+    // no matter how many copies there are.
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
     item.copies.forEachIndexed { index, copy ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
@@ -236,6 +247,7 @@ private fun CollectionBody(
         }
         if (index < item.copies.lastIndex) HorizontalDivider(color = colors.borderSoft)
     }
+    }
 
     HorizontalDivider(color = colors.borderStrong)
     Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -258,7 +270,7 @@ private fun CollectionBody(
 }
 
 @Composable
-private fun SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onDeleteSale: (String) -> Unit, editable: Boolean, onAdd: () -> Unit) {
+private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onDeleteSale: (String) -> Unit, editable: Boolean, onAdd: () -> Unit) {
     val colors = BwTheme.colors
     val expanded = remember { mutableStateListOf<String>() }
     // Column header
@@ -272,6 +284,8 @@ private fun SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onD
     }
     HorizontalDivider(color = colors.borderSoft)
 
+    // Sales scroll in a weighted area so the profit row + Add button below stay pinned and reachable.
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
     sales.forEachIndexed { index, sold ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
@@ -312,17 +326,25 @@ private fun SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onD
         }
         if (index < sales.lastIndex) HorizontalDivider(color = colors.borderSoft)
     }
+    }
 
     HorizontalDivider(color = colors.borderStrong)
+    // Footer mirrors the data columns: total quantity sold under Qty, total profit under Sale.
+    val totalQty = sales.sumOf { it.quantity }
     val totalProfit = sales.sumOf { it.profit }
     val profitColor = if (totalProfit >= 0) colors.success else colors.error
     Row(modifier = Modifier.fillMaxWidth().padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.sales_profit_label), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(1f))
+        Spacer(Modifier.weight(1.3f)) // Date column
+        Text(totalQty.toString(), style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = colors.text, modifier = Modifier.weight(0.5f))
+        Spacer(Modifier.weight(1.3f)) // Paid column
         Text(
             (if (totalProfit > 0) "+" else "") + formatMoney(totalProfit, AppCurrency.VND),
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
             color = profitColor,
+            modifier = Modifier.weight(1.3f), // Sale column
         )
+        Spacer(Modifier.width(66.dp)) // action column
     }
 
     Spacer(Modifier.height(16.dp))

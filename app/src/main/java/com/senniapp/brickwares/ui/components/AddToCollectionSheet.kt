@@ -51,6 +51,11 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import java.time.LocalDate
 
+/** Input caps for the numeric fields: 10 price digits (≈ 10B₫, above any real set) and 4 quantity
+ *  digits — so a stray very long number can't be typed. */
+private const val MAX_PRICE_DIGITS = 10
+private const val MAX_QTY_DIGITS = 4
+
 /**
  * The Add-to-Collection bottom sheet. Shared by the Collection tab (add/edit a copy), the Wishlist
  * tab (move a wishlisted set into the collection), Search and Set Detail. When [initialSet] is
@@ -179,7 +184,8 @@ fun AddToCollectionSheet(
             FieldLabel(stringResource(R.string.sheet_field_paid))
             OutlinedTextField(
                 value = paid,
-                onValueChange = { input -> paid = input.filter { it.isDigit() } },
+                // Digits only, capped so a stray long number can't be entered (10 digits ≈ 10B₫).
+                onValueChange = { input -> paid = input.filter { it.isDigit() }.take(MAX_PRICE_DIGITS) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -191,7 +197,7 @@ fun AddToCollectionSheet(
                 FieldLabel(stringResource(R.string.sheet_field_sale_price))
                 OutlinedTextField(
                     value = salePrice,
-                    onValueChange = { input -> salePrice = input.filter { it.isDigit() } },
+                    onValueChange = { input -> salePrice = input.filter { it.isDigit() }.take(MAX_PRICE_DIGITS) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -203,7 +209,7 @@ fun AddToCollectionSheet(
             FieldLabel(stringResource(R.string.sheet_field_qty))
             OutlinedTextField(
                 value = qty,
-                onValueChange = { input -> qty = input.filter { it.isDigit() } },
+                onValueChange = { input -> qty = input.filter { it.isDigit() }.take(MAX_QTY_DIGITS) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

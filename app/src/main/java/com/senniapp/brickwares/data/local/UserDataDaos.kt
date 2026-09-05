@@ -25,6 +25,11 @@ interface CollectionDao {
     @Query("SELECT * FROM collection_copies WHERE id = :id")
     suspend fun getById(id: String): CollectionCopyEntity?
 
+    /** Active copies of one item (set number, or fig_num stored in setNumber for minifigs), for merging
+     *  a newly-added identical copy into an existing row instead of duplicating it. */
+    @Query("SELECT * FROM collection_copies WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber")
+    suspend fun activeForItem(setNumber: String, kind: String): List<CollectionCopyEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: CollectionCopyEntity)
 
@@ -90,6 +95,11 @@ interface SalesDao {
 
     @Query("SELECT * FROM sales WHERE id = :id")
     suspend fun getById(id: String): SalesEntity?
+
+    /** Active sales of one item (set number, or fig_num stored in setNumber for minifigs), for merging
+     *  a newly-recorded identical sale into an existing row instead of duplicating it. */
+    @Query("SELECT * FROM sales WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber")
+    suspend fun activeForItem(setNumber: String, kind: String): List<SalesEntity>
 
     @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
     suspend fun markDeleted(id: String, ts: Long)
