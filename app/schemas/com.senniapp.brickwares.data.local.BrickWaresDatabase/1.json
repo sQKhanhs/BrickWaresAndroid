@@ -1,0 +1,399 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "e33ea8f66ba552079d6b5c2d7cb1bcb0",
+    "entities": [
+      {
+        "tableName": "collection_copies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `setId` INTEGER, `figNum` TEXT, `itemKind` TEXT NOT NULL, `setNumber` TEXT NOT NULL, `name` TEXT NOT NULL, `theme` TEXT NOT NULL, `subtheme` TEXT NOT NULL, `releaseYear` INTEGER NOT NULL, `releaseMonth` INTEGER NOT NULL, `pieces` INTEGER NOT NULL, `minifigs` INTEGER NOT NULL, `retailPrice` INTEGER, `status` TEXT NOT NULL, `imageUrl` TEXT, `quantity` INTEGER NOT NULL, `condition` TEXT NOT NULL, `pricePaid` INTEGER NOT NULL, `acquiredOn` TEXT, `notes` TEXT, `deleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setId",
+            "columnName": "setId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "figNum",
+            "columnName": "figNum",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "itemKind",
+            "columnName": "itemKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setNumber",
+            "columnName": "setNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtheme",
+            "columnName": "subtheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "releaseYear",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseMonth",
+            "columnName": "releaseMonth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pieces",
+            "columnName": "pieces",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minifigs",
+            "columnName": "minifigs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retailPrice",
+            "columnName": "retailPrice",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "condition",
+            "columnName": "condition",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pricePaid",
+            "columnName": "pricePaid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acquiredOn",
+            "columnName": "acquiredOn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "wishlist_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `setId` INTEGER, `figNum` TEXT, `itemKind` TEXT NOT NULL, `setNumber` TEXT NOT NULL, `name` TEXT NOT NULL, `theme` TEXT NOT NULL, `subtheme` TEXT NOT NULL, `releaseYear` INTEGER NOT NULL, `releaseMonth` INTEGER NOT NULL, `pieces` INTEGER NOT NULL, `minifigs` INTEGER NOT NULL, `retailPrice` INTEGER, `status` TEXT NOT NULL, `imageUrl` TEXT, `deleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setId",
+            "columnName": "setId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "figNum",
+            "columnName": "figNum",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "itemKind",
+            "columnName": "itemKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setNumber",
+            "columnName": "setNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtheme",
+            "columnName": "subtheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "releaseYear",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseMonth",
+            "columnName": "releaseMonth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pieces",
+            "columnName": "pieces",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minifigs",
+            "columnName": "minifigs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retailPrice",
+            "columnName": "retailPrice",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "sales",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `setId` INTEGER, `figNum` TEXT, `itemKind` TEXT NOT NULL, `setNumber` TEXT NOT NULL, `name` TEXT NOT NULL, `theme` TEXT NOT NULL, `releaseYear` INTEGER NOT NULL, `releaseMonth` INTEGER NOT NULL, `imageUrl` TEXT, `retailPrice` INTEGER, `quantity` INTEGER NOT NULL, `condition` TEXT NOT NULL, `pricePaid` INTEGER NOT NULL, `salePrice` INTEGER NOT NULL, `soldOn` TEXT, `notes` TEXT, `deleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setId",
+            "columnName": "setId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "figNum",
+            "columnName": "figNum",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "itemKind",
+            "columnName": "itemKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setNumber",
+            "columnName": "setNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "releaseYear",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseMonth",
+            "columnName": "releaseMonth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retailPrice",
+            "columnName": "retailPrice",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "condition",
+            "columnName": "condition",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pricePaid",
+            "columnName": "pricePaid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "salePrice",
+            "columnName": "salePrice",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "soldOn",
+            "columnName": "soldOn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e33ea8f66ba552079d6b5c2d7cb1bcb0')"
+    ]
+  }
+}

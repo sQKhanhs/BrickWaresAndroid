@@ -90,6 +90,15 @@ android {
     }
 }
 
+// Room writes each @Database version's schema to app/schemas/<db class>/<version>.json at compile
+// time (exportSchema = true on BrickWaresDatabase). Commit those files: the JSON is the baseline that
+// AutoMigration diffs against and MigrationTestHelper rebuilds the old-version DB from — without v1's
+// file, neither can work once v1 is on users' phones. Both flavors emit identical JSON, so one shared
+// directory is fine.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
