@@ -12,8 +12,14 @@ val localProperties = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-// Prod publishable (anon) key — put BRICKWARES_PROD_ANON_KEY=... in local.properties.
-val prodSupabaseAnonKey: String = localProperties.getProperty("BRICKWARES_PROD_ANON_KEY", "")
+// Prod publishable (anon) key — BRICKWARES_PROD_ANON_KEY=... in local.properties, or an environment
+// variable of the same name (CI / another build machine). It is the HOSTED project's key (dashboard →
+// Project Settings → API Keys), NOT the local `sb_publishable_ACJW…` default, which only the Docker
+// stack accepts. Not a secret (it ships in the APK; RLS is the security layer) — just per-machine.
+val prodSupabaseAnonKey: String =
+    localProperties.getProperty("BRICKWARES_PROD_ANON_KEY")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("BRICKWARES_PROD_ANON_KEY")?.takeIf { it.isNotBlank() }
+        ?: ""
 
 android {
     namespace = "com.senniapp.brickwares"
@@ -74,7 +80,8 @@ android {
             dimension = "environment"
             resValue("string", "app_name", "BrickWares")
             buildConfigField("String", "SUPABASE_URL", "\"https://thntvdpsixepidwvrxxj.supabase.co\"")
-            // Real prod publishable key is injected from local.properties (not committed).
+            // Real prod publishable key is injected from local.properties / env (not committed). Blank →
+            // the preProd*Build guard below fails the build instead of shipping a key-less APK.
             buildConfigField("String", "SUPABASE_ANON_KEY", "\"$prodSupabaseAnonKey\"")
         }
     }
@@ -87,6 +94,18 @@ android {
         compose = true
         buildConfig = true
         resValues = true
+    }
+}
+
+// Fail fast instead of shipping a prod build with no API key: an empty key compiles fine and then EVERY
+// Supabase call fails at runtime with "No API key found in request" — sign-in included (cost an hour on
+// 2026-09-05). Hooks only the prod variants' preBuild, so a fresh clone still builds devDebug.
+if (prodSupabaseAnonKey.isBlank()) {
+    val message = "BRICKWARES_PROD_ANON_KEY is not set — add it to local.properties (or export it as an " +
+        "environment variable). Prod variants need the HOSTED project's publishable key; without it every " +
+        "Supabase request fails at runtime with \"No API key found in request\"."
+    tasks.matching { it.name.startsWith("preProd") && it.name.endsWith("Build") }.configureEach {
+        doFirst { throw GradleException(message) }
     }
 }
 
