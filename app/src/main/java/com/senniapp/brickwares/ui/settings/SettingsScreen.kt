@@ -41,6 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +72,29 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.ui.theme.ThemeMode
 import com.senniapp.brickwares.util.AppCurrency
+
+// Public legal pages, hosted on the web (brickwares.app) rather than baked into the app, so the text
+// can be updated without an app release. Paths match the hosted files (privacy-policy.html /
+// terms-of-service.html). Google Play also requires the privacy URL in the store listing, and the
+// answers on the Play Data Safety form must match what the policy states.
+private const val PRIVACY_POLICY_URL = "https://brickwares.app/privacy-policy"
+private const val TERMS_OF_SERVICE_URL = "https://brickwares.app/terms-of-service"
+
+/**
+ * Opens [url] in a Chrome Custom Tab — an in-app browser overlay, so the user returns to Settings with
+ * one tap (the tab's close/back button) instead of task-switching to a separate browser app. Falls
+ * back to the default browser if no Custom Tabs provider is available.
+ */
+private fun openUrl(context: Context, url: String) {
+    val uri = Uri.parse(url)
+    runCatching {
+        CustomTabsIntent.Builder().build().launchUrl(context, uri)
+    }.onFailure {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+}
 
 @Composable
 fun SettingsScreen(
@@ -142,6 +169,7 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    val context = LocalContext.current
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         Column(
             modifier = Modifier
@@ -267,9 +295,9 @@ private fun SettingsContent(
 
             // ---- Privacy ----
             Section(stringResource(R.string.settings_section_privacy)) {
-                NavRow(stringResource(R.string.settings_privacy_policy), onClick = { onComingSoon("Privacy Policy") })
+                NavRow(stringResource(R.string.settings_privacy_policy), onClick = { openUrl(context, PRIVACY_POLICY_URL) })
                 RowDivider()
-                NavRow(stringResource(R.string.settings_terms), onClick = { onComingSoon("Terms of Service") })
+                NavRow(stringResource(R.string.settings_terms), onClick = { openUrl(context, TERMS_OF_SERVICE_URL) })
                 RowDivider()
                 ToggleRow(
                     stringResource(R.string.settings_usage_analytics),
