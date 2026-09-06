@@ -76,7 +76,8 @@
     <string name="toast_removed_collection">Đã xóa %1$s khỏi bộ sưu tập</string>
     <string name="toast_removed_wishlist">Đã xóa %1$s khỏi danh sách mong muốn</string>
     <string name="toast_coming_soon">Tính năng này chưa có trong bản xem trước</string>
-    <string name="toast_delete_account_soon">Xóa tài khoản chưa có trong bản xem trước</string>
+    <string name="toast_account_deleted">Đã xóa tài khoản và dữ liệu của bạn</string>
+    <string name="toast_delete_account_failed">Không thể xóa tài khoản. Vui lòng thử lại.</string>
     <string name="toast_password_set">Đã đặt mật khẩu — giờ bạn có thể đăng nhập bằng email.</string>
     <string name="toast_password_failed">Không thể đặt mật khẩu. Vui lòng thử lại.</string>
 

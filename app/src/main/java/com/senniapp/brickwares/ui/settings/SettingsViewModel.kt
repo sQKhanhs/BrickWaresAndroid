@@ -104,13 +104,15 @@ class SettingsViewModel(
     }
 
     fun onConfirmDeleteAccount() {
-        // Real account deletion needs a server-side (admin) call that isn't built yet — the client
-        // anon key can't delete an auth user. Surface that honestly instead of faking it.
-        _uiState.update {
-            it.copy(
-                showDeleteConfirm = false,
-                toastMessage = UiText.Res(R.string.toast_delete_account_soon),
-            )
+        // Deletes the account + all its data via the SECURITY DEFINER RPC, wipes the local mirror and
+        // drops the session (see AuthRepository.deleteAccount). authState → SignedOut then routes out.
+        viewModelScope.launch {
+            _uiState.update { it.copy(showDeleteConfirm = false) }
+            val toast = when (authRepository.deleteAccount()) {
+                SignInResult.Success -> UiText.Res(R.string.toast_account_deleted)
+                else -> UiText.Res(R.string.toast_delete_account_failed)
+            }
+            _uiState.update { it.copy(toastMessage = toast) }
         }
     }
 

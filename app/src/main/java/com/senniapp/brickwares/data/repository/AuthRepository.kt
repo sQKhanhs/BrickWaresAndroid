@@ -8,6 +8,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.senniapp.brickwares.BuildConfig
+import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -21,6 +22,7 @@ import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -249,6 +251,30 @@ object AuthRepository {
     /** Clears the on-device session (LOCAL scope → no network; the server token just expires). */
     suspend fun signOut() {
         runCatching { client.auth.signOut(SignOutScope.LOCAL) }
+    }
+
+    /**
+     * Permanently deletes the current account and all of its data (right to erasure — Play requires
+     * in-app deletion for account apps). Server-side the SECURITY DEFINER `delete_current_user` RPC
+     * removes this auth user; every user-data table FKs auth.users ON DELETE CASCADE, so the
+     * collection / wishlist / sales / value contributions go with it (the client key can't touch
+     * auth.users directly — hence the RPC). On success it wipes the on-device mirror + sync cursors so
+     * nothing lingers for the next account, then drops the local session ([authState] → SignedOut,
+     * which routes the UI out). On failure the user stays signed in with their data intact.
+     */
+    suspend fun deleteAccount(): SignInResult = try {
+        client.postgrest.rpc("delete_current_user")
+        runCatching {
+            AppGraph.database.collectionDao().clearAll()
+            AppGraph.database.wishlistDao().clearAll()
+            AppGraph.database.salesDao().clearAll()
+            AppGraph.syncState.clearPullCursors()
+            AppGraph.syncState.setLastAccountId("")
+        }
+        client.auth.signOut(SignOutScope.LOCAL)
+        SignInResult.Success
+    } catch (e: Exception) {
+        SignInResult.Error(e.message ?: "Couldn't delete the account")
     }
 }
 
