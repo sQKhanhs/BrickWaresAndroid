@@ -35,6 +35,7 @@ import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatMoney
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
@@ -79,7 +80,9 @@ fun SetResultCard(
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = set.boxImageUrl,
+            // The re-hosted box shot (our Storage, reliable) when captured, else the Rebrickable render.
+            // Both are reliable CDNs — never BrickLink, which rate-limits the burst a scrolling list makes.
+            imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
             fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
             itemType = set.itemType,
             size = 72.dp,

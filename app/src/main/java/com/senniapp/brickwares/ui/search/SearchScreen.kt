@@ -60,6 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.Minifig
@@ -1023,10 +1024,8 @@ private fun ResultCard(
     val valueRepo = ValueRepositoryProvider.instance
     val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
     val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
-    // Prefer the box shot; fall back to the render. The card shows immediately; the thumbnail fills
-    // in with a crossfade (no whole-card gating, so a list scrolls smoothly and in order).
-    val boxUrl = set.boxImageUrl
-    val renderUrl = set.thumbnailUrl ?: set.imageUrl
+    // The re-hosted box shot (our Storage) when captured, else the Rebrickable render — both reliable
+    // CDNs, never BrickLink (which rate-limits the burst a scrolling list makes).
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1036,8 +1035,8 @@ private fun ResultCard(
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = boxUrl,
-            fallbackUrl = renderUrl,
+            imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
+            fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,

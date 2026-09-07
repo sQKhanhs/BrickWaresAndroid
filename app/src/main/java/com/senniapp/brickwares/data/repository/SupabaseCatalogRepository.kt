@@ -207,6 +207,8 @@ class SupabaseCatalogRepository(
         @SerialName("number_variant") val numberVariant: Int? = null,
         val name: String? = null,
         @SerialName("item_type") val itemType: String? = null,
+        /** Box packaging image re-hosted in our Storage at ingest (reliable); null when none captured. */
+        @SerialName("box_image_url") val boxImageUrl: String? = null,
         val theme: String? = null,
         val subtheme: String? = null,
         val year: Int? = null,
@@ -299,11 +301,12 @@ class SupabaseCatalogRepository(
             retiredYear = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,
             retiredMonth = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.monthValue ?: 0,
             subtheme = subtheme ?: "General",
-            // Brickset's image host is Cloudflare-blocked for non-browser clients, so images come from
-            // hosts that load over plain HTTP: the built-set render from Rebrickable's CDN, and the
-            // preferred box shot from BrickLink — both addressed by set number + variant.
+            // Brickset's image host is Cloudflare-blocked for non-browser clients, so the render + thumb
+            // come from Rebrickable's CDN (addressed by set number + variant). The box shot is the
+            // re-hosted `box_image_url` (our Storage, reliable) — null until the ingest captures it, in
+            // which case the app shows the Rebrickable render instead.
             imageUrl = CatalogImages.renderUrl(setNumber, numberVariant ?: 1),
-            boxImageUrl = CatalogImages.boxUrl(setNumber, numberVariant ?: 1),
+            boxImageUrl = boxImageUrl?.takeIf { it.isNotBlank() },
             // Small server-resized render for list cards: the box shot stays the preferred display
             // image, but a boxless set now falls back to this (~10–150 KB) instead of the full
             // multi-MB render — the main cause of slow-loading search thumbnails.

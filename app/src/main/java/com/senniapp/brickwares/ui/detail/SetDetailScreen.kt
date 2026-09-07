@@ -86,6 +86,7 @@ import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatIn
 import kotlinx.coroutines.launch
 import com.senniapp.brickwares.ui.components.releaseLabel
@@ -198,17 +199,18 @@ private fun SetDetailContent(
             return@Box
         }
         val set = state.set
-        // The URL the hero actually loaded (box, or its render fallback for a boxless set) — the
-        // gallery lists only images that exist, so a boxless set shows just the render (no dead page).
-        var heroResolved by remember(set?.id) { mutableStateOf<String?>(null) }
-        // A boxless set's 96dp hero falls back to the small render thumbnail (not the multi-MB full
-        // render); the gallery behind it still offers the full-resolution render.
+        // The hero shows the re-hosted box shot (our Storage, reliable) when captured, else the light
+        // Rebrickable render — no BrickLink request on open either way.
         val heroFallback = set?.let { it.thumbnailUrl ?: it.imageUrl }
-        val galleryImages = when (heroResolved) {
-            set?.boxImageUrl -> listOfNotNull(set?.boxImageUrl, set?.imageUrl).distinct()
-            heroFallback -> listOfNotNull(set?.imageUrl)
-            else -> emptyList()
-        }
+        val rebrickableRender = set?.let { CatalogImages.renderUrl(it.setNumber, it.numberVariant) }
+        // Gallery (opened on an explicit tap): the Storage box first; if none was captured yet, the
+        // BrickLink box as a tap-only stand-in; then the render. The viewer drops any that 404/403, so a
+        // boxless / throttled set still opens on a working render instead of a dead page.
+        val galleryImages = listOfNotNull(
+            set?.boxImageUrl,
+            if (set?.boxImageUrl == null) set?.let { CatalogImages.boxUrl(it.setNumber, it.numberVariant) } else null,
+            rebrickableRender,
+        ).distinct()
         Column(modifier = Modifier.fillMaxSize()) {
             // Sticky back header — pinned above the scroll so a long minifig list can still be exited
             // from anywhere on the page (not just the top).
@@ -246,17 +248,17 @@ private fun SetDetailContent(
                 return@Column
             }
 
-            // Hero: image + title + actions. Prefer the box shot, fall back to the render.
+            // Hero: image + title + actions. The re-hosted box shot when captured, else the Rebrickable
+            // render — both reliable CDNs, no BrickLink hit on open.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 SetThumb(
-                    imageUrl = set.boxImageUrl,
+                    imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
                     fallbackUrl = heroFallback,
                     itemType = set.itemType,
                     size = 96.dp,
                     iconSize = 40.dp,
                     corner = 12.dp,
-                    onResolvedUrl = { heroResolved = it },
-                    // Tap the image to open the full-screen gallery (only when one has loaded).
+                    // Tap the image to open the full-screen gallery (box shot first, then renders).
                     modifier = if (galleryImages.isNotEmpty()) {
                         Modifier.clickable { showGallery = true }
                     } else {

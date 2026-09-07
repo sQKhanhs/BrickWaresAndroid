@@ -83,6 +83,11 @@ fun SetThumb(
     modifier: Modifier = Modifier,
     fallbackUrl: String? = null,
     /**
+     * Extra fallbacks tried in order after [fallbackUrl] — e.g. a Rebrickable image when the BrickLink
+     * box AND the Brickset render are both missing for a set (image coverage differs per host).
+     */
+    extraFallbacks: List<String> = emptyList(),
+    /**
      * When non-empty, tapping the thumbnail opens the full-screen [ImageGalleryDialog] over these
      * (full-resolution) URLs instead of the caller wiring a navigation click on [modifier]. 404s are
      * dropped by the gallery, so pass box + render freely.
@@ -94,12 +99,12 @@ fun SetThumb(
 ) {
     val colors = BwTheme.colors
     var showGallery by remember { mutableStateOf(false) }
-    // The ordered chain of URLs to try (dropping a fallback identical to the primary).
-    val urls = remember(imageUrl, fallbackUrl) {
-        listOfNotNull(imageUrl, fallbackUrl?.takeIf { it != imageUrl })
+    // The ordered chain of URLs to try (box → fallback → extra fallbacks), de-duplicated.
+    val urls = remember(imageUrl, fallbackUrl, extraFallbacks) {
+        (listOfNotNull(imageUrl, fallbackUrl) + extraFallbacks).distinct()
     }
-    var index by remember(imageUrl, fallbackUrl) { mutableStateOf(0) }
-    var failed by remember(imageUrl, fallbackUrl) { mutableStateOf(urls.isEmpty()) }
+    var index by remember(imageUrl, fallbackUrl, extraFallbacks) { mutableStateOf(0) }
+    var failed by remember(imageUrl, fallbackUrl, extraFallbacks) { mutableStateOf(urls.isEmpty()) }
     val current = urls.getOrNull(index)
     Box(
         modifier = Modifier
