@@ -9,6 +9,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.data.local.AppGraph
+import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -270,6 +271,7 @@ object AuthRepository {
             AppGraph.database.salesDao().clearAll()
             AppGraph.syncState.clearPullCursors()
             AppGraph.syncState.setLastAccountId("")
+            ThemeFavoritesPrefs.clear() // favorited themes are the deleted account's too
         }
         client.auth.signOut(SignOutScope.LOCAL)
         SignInResult.Success

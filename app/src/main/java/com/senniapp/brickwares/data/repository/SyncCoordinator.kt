@@ -7,6 +7,7 @@ import com.senniapp.brickwares.data.local.CollectionCopyEntity
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.SyncStateStore
+import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.data.local.WishlistEntity
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -94,9 +95,11 @@ class SyncCoordinator(
         if (last != null && last != user.id) {
             // Different account → wipe the previous account's local data and load this account's
             // (Room holds one account at a time; logged-out users can't create data, so nothing to
-            // merge). Drop the pull cursors so the new account's full set is fetched.
+            // merge). Drop the pull cursors so the new account's full set is fetched, and the previous
+            // account's theme favorites so the new one doesn't inherit its bookmarks.
             clearLocal()
             syncState.clearPullCursors()
+            ThemeFavoritesPrefs.clear()
         }
         sync(user.id) // sets last_account_id
     }
