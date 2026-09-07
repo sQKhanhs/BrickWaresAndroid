@@ -1,5 +1,7 @@
 package com.senniapp.brickwares.data.model
 
+import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CurrencyConverter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -21,8 +23,19 @@ enum class ValueGuardTier { AVAILABLE, RETIRED_RECENT, RETIRED_OLD, NO_ANCHOR }
  * One contributed value point for [ValueAggregator]: the amount **in USD cents** (each contribution is
  * normalized from its recorded currency before aggregating), its submission time, and whether it came
  * from a realized **sale** (vs a paid price) — the available-tier floor is looser for a sale.
+ *
+ * [nativeMinor] / [nativeCurrency] keep the amount as originally recorded (its own currency's minor unit)
+ * so a value backed entirely by one currency can be shown in that currency *exactly*, instead of drifting
+ * through the USD-cents round-trip (a single ₫ contribution should read back the exact ₫ that was typed).
+ * A null [nativeCurrency] is a legacy/unknown point — treated as "mixed" so the exact path is skipped.
  */
-data class ValuePoint(val value: Double, val submittedAtMs: Long, val isSale: Boolean = false)
+data class ValuePoint(
+    val value: Double,
+    val submittedAtMs: Long,
+    val isSale: Boolean = false,
+    val nativeMinor: Long = 0L,
+    val nativeCurrency: AppCurrency? = null,
+)
 
 /**
  * The community "current value" for a set or minifig — a recency-tiered median over the public
@@ -32,13 +45,28 @@ data class ValuePoint(val value: Double, val submittedAtMs: Long, val isSale: Bo
  * @param contributionCount  distinct users backing the shown value (the honesty signal on the card).
  * @param freshness  FRESH (recent window), STALE (only older data), or NONE (nothing yet).
  * @param newestAgeDays  age of the most-recent contribution, for the STALE "last updated …" note.
+ * @param nativeMinor  the same median expressed in [nativeCurrency]'s own unit, set only when every
+ *        contribution behind the value shares that one currency — so it can be shown exactly there.
+ * @param nativeCurrency  that unanimous currency, or null when the contributions were mixed.
  */
 data class CurrentValue(
     val amountUsdCents: Long?,
     val contributionCount: Int,
     val freshness: ValueFreshness,
     val newestAgeDays: Int?,
+    val nativeMinor: Long? = null,
+    val nativeCurrency: AppCurrency? = null,
 ) {
+    /**
+     * The amount to render in [display], in its own minor unit: the exact native median when the value
+     * was recorded in [display]'s currency (no USD round-trip → a ₫ contribution reads back the exact ₫),
+     * otherwise the USD-cents amount converted. Null when there's no value (NONE). Format with `formatIn`.
+     */
+    fun displayMinor(display: AppCurrency): Long? = amountUsdCents?.let { usd ->
+        if (nativeMinor != null && nativeCurrency == display) nativeMinor
+        else CurrencyConverter.fromUsdCents(usd, display)
+    }
+
     companion object {
         val NONE = CurrentValue(null, 0, ValueFreshness.NONE, null)
     }
@@ -151,11 +179,19 @@ object ValueAggregator {
         val used = if (fresh) recent else guarded
 
         val newestAgeDays = ((nowMs - guarded.maxOf { it.submittedAtMs }) / DAY_MS).toInt().coerceAtLeast(0)
+        // When every point that fed the median shares one recorded currency, also express the median in
+        // that currency's own unit — sorting by USD value and by native amount coincide (the FX is
+        // monotonic), so the native median lines up with the USD one. This lets the card show it exactly
+        // in that currency instead of round-tripping USD cents (e.g. a lone ₫ price reads back its ₫).
+        val unanimousCurrency = used.mapNotNull { it.nativeCurrency }.toSet().singleOrNull()
+            ?.takeIf { used.all { p -> p.nativeCurrency != null } }
         return CurrentValue(
             amountUsdCents = median(used.map { it.value }).roundToLong(),
             contributionCount = used.size,
             freshness = if (fresh) ValueFreshness.FRESH else ValueFreshness.STALE,
             newestAgeDays = newestAgeDays,
+            nativeMinor = unanimousCurrency?.let { median(used.map { p -> p.nativeMinor.toDouble() }).roundToLong() },
+            nativeCurrency = unanimousCurrency,
         )
     }
 

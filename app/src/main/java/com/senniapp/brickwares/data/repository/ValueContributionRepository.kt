@@ -86,10 +86,19 @@ class ValueContributionRepository(
      * derived from it) at once — without waiting for the sync round-trip that publishes the real
      * community contribution and re-[warm]s. [warm] later replaces this with the DB-accurate value.
      */
-    fun applyLocalPaid(setId: Long?, figNum: String?, paidUsdCents: Long, retail: Long?, tier: ValueGuardTier, isSale: Boolean) {
+    fun applyLocalPaid(
+        setId: Long?,
+        figNum: String?,
+        paidUsdCents: Long,
+        nativeMinor: Long,
+        nativeCurrency: AppCurrency,
+        retail: Long?,
+        tier: ValueGuardTier,
+        isSale: Boolean,
+    ) {
         if (paidUsdCents <= 0L) return
         val now = System.currentTimeMillis()
-        val point = ValuePoint(paidUsdCents.toDouble(), now, isSale)
+        val point = ValuePoint(paidUsdCents.toDouble(), now, isSale, nativeMinor, nativeCurrency)
         when {
             setId != null -> {
                 val pts = setPoints[setId].orEmpty() + point
@@ -169,8 +178,10 @@ class ValueContributionRepository(
     private fun List<Row>.toPoints(): List<ValuePoint> =
         map { r ->
             val ccy = runCatching { AppCurrency.valueOf(r.currency ?: "USD") }.getOrDefault(AppCurrency.USD)
-            val usdCents = CurrencyConverter.usdCentsOf(r.value.roundToLong(), ccy)
-            ValuePoint(usdCents.toDouble(), parseIso(r.submittedAt), r.source == "sale")
+            val nativeMinor = r.value.roundToLong()
+            val usdCents = CurrencyConverter.usdCentsOf(nativeMinor, ccy)
+            // Carry the recorded amount + currency so a same-currency value displays without USD drift.
+            ValuePoint(usdCents.toDouble(), parseIso(r.submittedAt), r.source == "sale", nativeMinor, ccy)
         }
 
     // PostgREST returns timestamptz as "…+00:00"; Instant.parse accepts that offset form only on newer

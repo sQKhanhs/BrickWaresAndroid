@@ -3,6 +3,7 @@ package com.senniapp.brickwares.data.repository
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
+import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.WishlistEntity
 import com.senniapp.brickwares.data.model.Availability
@@ -75,10 +76,10 @@ class RoomCollectionRepository(
         }.flowOn(Dispatchers.Default)
 
     override suspend fun getCollectionSummary(): CollectionSummary =
-        collectionSummaryOf(getCollectionItems().first())
+        collectionSummaryOf(getCollectionItems().first(), CurrencyPrefs.current)
 
     override suspend fun getThemeSummaries(): List<ThemeSummary> =
-        themeSummariesOf(getCollectionItems().first())
+        themeSummariesOf(getCollectionItems().first(), CurrencyPrefs.current)
 
     override fun getSoldItems(): Flow<List<SoldItem>> =
         combine(salesDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
@@ -400,11 +401,11 @@ class RoomCollectionRepository(
         val usdCents = CurrencyConverter.usdCentsOf(amount, currency)
         if (usdCents <= 0L) return
         if (figNum != null) {
-            values.applyLocalPaid(null, figNum, usdCents, null, ValueGuardTier.NO_ANCHOR, isSale)
+            values.applyLocalPaid(null, figNum, usdCents, amount, currency, null, ValueGuardTier.NO_ANCHOR, isSale)
         } else if (setId != null) {
             val cat = catalogFor(setId, setNumber)
             val tier = ValueAggregator.tierOf(cat?.status ?: Availability.AVAILABLE, cat?.retiredYear ?: 0, cat?.retiredMonth ?: 0)
-            values.applyLocalPaid(setId, null, usdCents, cat?.retailPrice, tier, isSale)
+            values.applyLocalPaid(setId, null, usdCents, amount, currency, cat?.retailPrice, tier, isSale)
         }
     }
 

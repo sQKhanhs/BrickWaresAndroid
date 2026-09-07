@@ -44,8 +44,7 @@ import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueFreshness
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
-import com.senniapp.brickwares.util.AppCurrency
-import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatIn
 import kotlin.math.roundToInt
 
 /**
@@ -69,7 +68,7 @@ fun ValuePriceLine(value: CurrentValue?, alignEnd: Boolean = true, showBubble: B
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            value?.amountUsdCents?.let { formatMoney(it, BwTheme.currency) } ?: "----",
+            value?.displayMinor(BwTheme.currency)?.let { formatIn(it, BwTheme.currency) } ?: "----",
             // Remaining width, right-aligned, one line. With the bubble moved off this row (item cards),
             // the value has the same room as the Retail line, so a long ₫ amount no longer clips.
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),

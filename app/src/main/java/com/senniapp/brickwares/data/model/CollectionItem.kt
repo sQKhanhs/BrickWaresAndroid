@@ -87,4 +87,18 @@ data class CollectionItem(
                 status == Availability.RETIRED || status == Availability.PROMO || status == Availability.MAGAZINE
             return (currentValue?.takeIf { valueShown }) ?: retailPrice
         }
+
+    /**
+     * [worthPerUnit] in [display]'s own unit: the community value's **exact native amount** when it was
+     * recorded in [display]'s currency (no USD round-trip), else the USD figure converted. Mirrors the
+     * card's Value line so the collection-value hero — summed across items — stays exact in a
+     * single-currency collection instead of drifting through USD cents. Retail (no native) always
+     * converts, as catalog retail is USD-canonical.
+     */
+    fun worthPerUnitIn(display: AppCurrency): Long {
+        val valueShown = itemType == ItemType.MINIFIG ||
+            status == Availability.RETIRED || status == Availability.PROMO || status == Availability.MAGAZINE
+        return currentValueInfo?.takeIf { valueShown }?.displayMinor(display)
+            ?: CurrencyConverter.fromUsdCents(retailPrice, display)
+    }
 }

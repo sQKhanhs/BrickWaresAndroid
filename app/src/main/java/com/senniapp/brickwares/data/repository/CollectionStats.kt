@@ -13,9 +13,16 @@ import com.senniapp.brickwares.util.CurrencyConverter
  * Derives the collection [CollectionSummary] from the live item list, so the Home hero and the
  * Collection stat row read 0 when empty and grow as items are added (replacing the old static mock
  * summary). A set contributes its own minifig count; a standalone minifig contributes 1.
+ *
+ * Money (value / paid, and so growth) is summed **in [display]** — each item's worth and paid converted
+ * from its own currency — so a single-currency collection's hero total is exact (no ₫→USD→₫ drift, the
+ * same rule the per-item Value line and the sales summary follow), while a mixed-currency collection
+ * still sums consistently. Compute it in whatever currency it will be shown in; carry that currency
+ * alongside so the amounts and the symbol never mismatch during a switch.
  */
 fun collectionSummaryOf(
     items: List<CollectionItem>,
+    display: AppCurrency,
     bannerImageUrl: String? = null,
 ): CollectionSummary {
     var setCount = 0
@@ -36,8 +43,8 @@ fun collectionSummaryOf(
         // Worth = community value only where it's shown (minifigs / retired / promo / magazine), else
         // retail — so an available set counts at retail, not the user's own paid (which the single-user
         // community value echoes). Keeps Value from trivially equalling Paid.
-        value += item.worthPerUnit * qty
-        paid += item.totalPaid
+        value += item.worthPerUnitIn(display) * qty
+        paid += item.totalPaidIn(display)
     }
     val growth = if (paid > 0L) (value - paid).toDouble() / paid * 100.0 else 0.0
     return CollectionSummary(
@@ -68,14 +75,17 @@ fun salesSummaryOf(sold: List<SoldItem>, display: AppCurrency): SalesSummary {
     return SalesSummary(sold.size, totalSaleValue, totalProfit, avg, overall)
 }
 
-/** Per-theme counts + value for the Home "Collection by Theme" card, highest value first. */
-fun themeSummariesOf(items: List<CollectionItem>): List<ThemeSummary> =
+/**
+ * Per-theme counts + value for the Home "Collection by Theme" card, highest value first. Value is summed
+ * in [display] (same exact-in-one-currency rule as [collectionSummaryOf]).
+ */
+fun themeSummariesOf(items: List<CollectionItem>, display: AppCurrency): List<ThemeSummary> =
     items.groupBy { it.theme }
         .map { (theme, list) ->
             ThemeSummary(
                 theme = theme,
                 setCount = list.sumOf { it.totalQty },
-                totalValue = list.sumOf { it.worthPerUnit * it.totalQty },
+                totalValue = list.sumOf { it.worthPerUnitIn(display) * it.totalQty },
             )
         }
         .sortedByDescending { it.totalValue }

@@ -8,13 +8,14 @@ import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.collectionSummaryOf
 import com.senniapp.brickwares.data.repository.themeSummariesOf
+import com.senniapp.brickwares.data.local.CurrencyPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * ViewModel for the Home screen. Observes the real auth session (for the logged-out "!" prompt) and
@@ -54,13 +55,20 @@ class HomeViewModel(
             }
             .launchIn(viewModelScope)
 
-        repository.getCollectionItems()
-            .onEach { items ->
+        // Recompute on either a data change or a display-currency switch, so the hero's value / paid /
+        // growth are summed directly in the shown currency (exact for a single-currency collection) and
+        // re-derive when the user switches ₫⇄$. The currency the amounts are in is carried in the state
+        // so the view formats with it (never a stale symbol on a fresh amount).
+        combine(repository.getCollectionItems(), CurrencyPrefs.currency) { items, currency ->
+            items to currency
+        }
+            .onEach { (items, currency) ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        summary = collectionSummaryOf(items),
-                        themes = themeSummariesOf(items),
+                        currency = currency,
+                        summary = collectionSummaryOf(items, currency),
+                        themes = themeSummariesOf(items, currency),
                     )
                 }
             }

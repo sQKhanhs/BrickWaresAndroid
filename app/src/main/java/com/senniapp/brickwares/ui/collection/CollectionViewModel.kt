@@ -44,7 +44,9 @@ class CollectionViewModel(
         viewModelScope.launch {
             repository.getCollectionItems().collect { items ->
                 _uiState.update {
-                    it.copy(itemsLoaded = true, items = items, summary = collectionSummaryOf(items))
+                    // Only the counts are read from this summary (the stat row); its money is in the
+                    // current display currency for consistency, though the Collection tab doesn't show it.
+                    it.copy(itemsLoaded = true, items = items, summary = collectionSummaryOf(items, CurrencyPrefs.current))
                 }
             }
         }

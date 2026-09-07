@@ -65,7 +65,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatCount
-import com.senniapp.brickwares.util.formatMoney
+import com.senniapp.brickwares.util.formatIn
 
 /** Stateful entry point — binds the [HomeViewModel] to the stateless [HomeContent]. */
 @Composable
@@ -127,7 +127,9 @@ private fun HomeContent(
                 )
                 HeroCard(
                     summary = shown,
-                    currency = BwTheme.currency,
+                    // The summary's money is already in state.currency (computed there); format with it,
+                    // not BwTheme.currency, so a fresh switch never pairs an old amount with a new symbol.
+                    currency = state.currency,
                     showGif = showHeroGif,
                     showNoValue = shown.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
                     onGifFinished = onGifFinished,
@@ -144,7 +146,7 @@ private fun HomeContent(
             }
             Spacer(Modifier.height(14.dp))
             if (state.isLoggedIn) {
-                if (state.themes.isNotEmpty()) ThemesCard(themes = state.themes)
+                if (state.themes.isNotEmpty()) ThemesCard(themes = state.themes, currency = state.currency)
             } else {
                 // Logged out: prompt to sign in instead of the "Collection by Theme" card.
                 SignInPromptCard(
@@ -313,7 +315,7 @@ private fun HeroCard(
                 color = BwTheme.colors.brandYellow,
             )
             Text(
-                text = formatMoney(animatedNumber(summary.collectionValue, "home_value"), currency),
+                text = formatIn(animatedNumber(summary.collectionValue, "home_value"), currency),
                 style = BwType.heroValue.copy(
                     shadow = Shadow(Color(0x99000000), Offset(0f, 2f), 10f),
                 ),
@@ -326,7 +328,7 @@ private fun HeroCard(
             ) {
                 // Paid pill
                 Text(
-                    text = stringResource(R.string.home_paid_pill, formatMoney(summary.paid, currency)),
+                    text = stringResource(R.string.home_paid_pill, formatIn(summary.paid, currency)),
                     style = BwType.pill.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                     color = Color.White,
                     modifier = Modifier
@@ -357,7 +359,7 @@ private fun HeroCard(
 }
 
 @Composable
-private fun ThemesCard(themes: List<ThemeSummary>) {
+private fun ThemesCard(themes: List<ThemeSummary>, currency: AppCurrency) {
     val colors = BwTheme.colors
     val maxValue = themes.maxOfOrNull { it.totalValue } ?: 1L
     Surface(
@@ -386,7 +388,7 @@ private fun ThemesCard(themes: List<ThemeSummary>) {
                             color = colors.textMuted,
                         )
                         Text(
-                            formatMoney(theme.totalValue, BwTheme.currency),
+                            formatIn(theme.totalValue, currency),
                             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                             color = colors.text,
                         )
