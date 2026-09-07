@@ -10,6 +10,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { createHash, createHmac } from "node:crypto";
 
 const API = "https://brickset.com/api/v3.asmx";
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), "../supabase/seed.sql");
@@ -61,10 +62,42 @@ const {
   // primary/full/retired/minifig/translate passes). Implies append — fills in missing themes without
   // re-running the whole ingest.
   BRICKSET_SAMPLES_ONLY = "",
+  // "1" = pull the ENTIRE catalog: full-pull EVERY Brickset theme (all pages), not just the curated
+  // sample — the prod set-preload. Skips the primary/retired/theme-sample passes (subsumed) and implies
+  // append (so the existing box_image_url + notes_vi blocks are preserved). Minifigs stay gated by
+  // BRICKSET_FULL_MINIFIGS (off = sets only, ~minutes; on = every set's minifigs, ~hours). seed.sql is
+  // gitignored, so the big file stays local — apply it to prod with psql, don't commit it.
+  BRICKSET_FULL_ALL = "",
+  // ---- Box image re-hosting (see rehostBoxImages) ----
+  // "1" = download each set's BrickLink box once and upload it to a Cloudflare R2 bucket (free egress),
+  // writing the public URL to sets.box_image_url. Off by default — a normal ingest skips this pass.
+  REHOST_BOX_IMAGES = "",
+  // Cloudflare R2 (S3-compatible). Account id + an R2 API token's Access Key ID / Secret (R2 → Manage
+  // API Tokens). The secret stays in the gitignored .env only. R2_BUCKET is the bucket name; R2_PUBLIC_
+  // BASE is the public read origin (a custom domain like https://img.brickwares.app, or the bucket's
+  // r2.dev URL) — this is what gets stored in box_image_url and served to the app.
+  R2_ACCOUNT_ID = "",
+  R2_ACCESS_KEY_ID = "",
+  R2_SECRET_ACCESS_KEY = "",
+  R2_BUCKET = "set-box-images",
+  R2_PUBLIC_BASE = "",
+  // Delay (ms) between BrickLink downloads. Deliberately generous — BrickLink rate-limits img.bricklink
+  // .com per IP and 403-bans a busy one. Raise it if you still see 403s.
+  BOX_FETCH_DELAY_MS = "3000",
+  // Cap NEW downloads per run (empty = no cap). Run in batches across sessions to stay well under the
+  // limit and build coverage gradually — already-hosted boxes are skipped without touching BrickLink.
+  BOX_MAX = "",
+  // "1" = ONLY re-host boxes for the sets already in seed.sql, then rewrite just the box_image_url
+  // block — no Brickset/Rebrickable fetch, no other blocks touched. The right way to build box coverage
+  // for the whole existing catalog without a slow full re-fetch (and without risking losing sets).
+  BOX_ONLY = "",
 } = process.env;
 
 const SAMPLES_ONLY = BRICKSET_SAMPLES_ONLY === "1" || BRICKSET_SAMPLES_ONLY.toLowerCase() === "true";
-const APPEND = SAMPLES_ONLY || BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
+const FULL_ALL = BRICKSET_FULL_ALL === "1" || BRICKSET_FULL_ALL.toLowerCase() === "true";
+// FULL_ALL implies append so the whole-catalog pull merges onto (not wipes) the existing seed — keeping
+// the already-harvested box_image_url + notes_vi blocks.
+const APPEND = SAMPLES_ONLY || FULL_ALL || BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
 
 if (!BRICKSET_API_KEY) {
   console.error("Missing BRICKSET_API_KEY — put it in supabase/.env.local (see .env.example).");
@@ -192,6 +225,103 @@ function extractRows(sql, blockRe) {
   return m[1].split(/,\n {2}/).map((r) => r.trim().replace(/,\s*$/, "")).filter(Boolean);
 }
 
+// ---- Box image re-hosting -------------------------------------------------------------------------
+// BrickLink has each set's box packaging photo at a deterministic URL, but RATE-LIMITS img.bricklink
+// .com per IP: a burst of requests earns a 403 ban for that IP (the whole reason we can't hotlink it
+// live to users). This pass downloads each box ONCE and uploads it to a Cloudflare R2 bucket (free
+// egress) — after which the app loads box art from our CDN (R2_PUBLIC_BASE), never BrickLink.
+//
+// To avoid getting the INGEST machine banned it is deliberately gentle:
+//   • a generous, jittered delay before EVERY BrickLink request (BOX_FETCH_DELAY_MS, default 3s),
+//   • it BACKS OFF 60s on a 403 and STOPS entirely after 3 in a row (never hammers a limiter),
+//   • it is idempotent — a set already hosted on R2 (its box_image_url already points at R2_PUBLIC_BASE)
+//     is skipped WITHOUT touching BrickLink; a leftover URL from another host is re-hosted to R2, so
+//     switching hosts migrates automatically. Use BOX_MAX to build coverage in small batches.
+const REHOST = REHOST_BOX_IMAGES === "1" || REHOST_BOX_IMAGES.toLowerCase() === "true";
+const R2_HOST = `${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+const R2_BASE = R2_PUBLIC_BASE.replace(/\/$/, "");
+const boxPath = (number, variant) => `sets/${String(number).toLowerCase()}-${variant}.png`;
+const boxSourceUrl = (number, variant) => `https://img.bricklink.com/ItemImage/ON/0/${String(number).toLowerCase()}-${variant}.png`;
+const publicBoxUrl = (number, variant) => `${R2_BASE}/${boxPath(number, variant)}`;
+
+// Minimal AWS SigV4 (S3) for R2 PutObject — no SDK, just node:crypto.
+const sha256hex = (data) => createHash("sha256").update(data).digest("hex");
+const hmac = (key, data) => createHmac("sha256", key).update(data).digest();
+const signingKey = (secret, day, region, svc) => hmac(hmac(hmac(hmac(`AWS4${secret}`, day), region), svc), "aws4_request");
+
+async function r2Put(key, body, contentType) {
+  const region = "auto", svc = "s3";
+  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ""); // YYYYMMDDTHHMMSSZ
+  const day = amzDate.slice(0, 8);
+  const payloadHash = sha256hex(body);
+  const uri = "/" + [R2_BUCKET, ...key.split("/")].map(encodeURIComponent).join("/");
+  const canonicalHeaders = `host:${R2_HOST}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = ["PUT", uri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const scope = `${day}/${region}/${svc}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256hex(canonicalRequest)].join("\n");
+  const signature = createHmac("sha256", signingKey(R2_SECRET_ACCESS_KEY, day, region, svc)).update(stringToSign).digest("hex");
+  const auth = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return fetch(`https://${R2_HOST}${uri}`, {
+    method: "PUT",
+    headers: { Authorization: auth, "x-amz-date": amzDate, "x-amz-content-sha256": payloadHash, "Content-Type": contentType },
+    body,
+  });
+}
+
+// Returns Map<setID, publicBoxUrl> = the boxes we now have on R2 (carrying forward [existingBySetId],
+// re-hosting any not-yet-on-R2 URL). No-op unless enabled + configured.
+async function rehostBoxImages(sets, existingBySetId = new Map()) {
+  const byId = new Map(existingBySetId);
+  if (!REHOST) return byId;
+  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BASE) {
+    console.warn("REHOST_BOX_IMAGES set but R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PUBLIC_BASE missing — skipping box re-host.");
+    return byId;
+  }
+  const delay = Number(BOX_FETCH_DELAY_MS) || 3000;
+  const maxNew = BOX_MAX ? Number(BOX_MAX) : Infinity;
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+  console.log(`Box re-host -> R2 bucket "${R2_BUCKET}"; new downloads ${maxNew === Infinity ? "uncapped" : `capped at ${maxNew}`}, ~${delay}ms apart.`);
+
+  let got = 0, skipped = 0, missing = 0, streak403 = 0;
+  for (const s of sets) {
+    const number = s.number;
+    if (!number) continue;
+    const variant = variantOf(s);
+    const already = existingBySetId.get(s.setID);
+    if (already && already.startsWith(`${R2_BASE}/`)) { skipped++; continue; } // already on R2 → no BrickLink hit
+    if (got >= maxNew) continue; // batch cap reached — leave the rest for the next run
+
+    await sleep(delay + Math.floor(Math.random() * 1000)); // jittered throttle BEFORE every request
+    let res;
+    try {
+      res = await fetch(boxSourceUrl(number, variant), { headers: { "User-Agent": UA, Referer: "https://www.bricklink.com/" } });
+    } catch (e) { console.warn(`  ${number}-${variant}: fetch error ${e.message}`); continue; }
+
+    if (res.status === 403) {
+      streak403++;
+      console.warn(`  ${number}-${variant}: 403 rate-limited — backing off 60s (${streak403}/3).`);
+      if (streak403 >= 3) { console.error("  BrickLink keeps 403'ing — STOPPING the box re-host to avoid a hard ban. Re-run later to continue where it left off."); break; }
+      await sleep(60_000);
+      continue; // this set is retried on the next run (still not on R2)
+    }
+    streak403 = 0;
+    if (res.status === 404) { missing++; continue; } // no box on BrickLink → leave as-is (render fallback)
+    if (!res.ok) { console.warn(`  ${number}-${variant}: HTTP ${res.status}`); continue; }
+
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length < 1000) { missing++; continue; } // a placeholder / error body, not a real image
+    try {
+      const up = await r2Put(boxPath(number, variant), bytes, "image/png");
+      if (!up.ok) { console.warn(`  ${number}-${variant}: R2 upload HTTP ${up.status}: ${(await up.text()).slice(0, 140)}`); continue; }
+      byId.set(s.setID, publicBoxUrl(number, variant));
+      if (++got % 20 === 0) console.log(`  ...${got} boxes uploaded`);
+    } catch (e) { console.warn(`  ${number}-${variant}: ${e.message}`); }
+  }
+  console.log(`Box re-host: ${got} downloaded+uploaded, ${skipped} already on R2, ${missing} with no box on BrickLink.`);
+  return byId;
+}
+
 // Merge existing + fresh row strings, keyed by keyOf. Existing order is preserved; a fresh row
 // with the same key overwrites the existing one, and brand-new fresh rows are appended.
 function mergeRows(existingRows, freshRows, keyOf) {
@@ -240,14 +370,21 @@ async function fetchRetiredSets(userHash) {
 // Full-theme pass — pull EVERY set in each BRICKSET_FULL_THEMES theme (all pages, any availability,
 // retired included), so an entire theme lands in the catalog rather than just its newest page.
 async function fetchFullThemes(userHash) {
-  const themes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
+  // FULL_ALL: full-pull EVERY Brickset theme (whole catalog) via getThemes; else just BRICKSET_FULL_THEMES.
+  let themes;
+  if (FULL_ALL) {
+    const tj = await post("getThemes", { apiKey: BRICKSET_API_KEY });
+    themes = tj.status === "success" ? (tj.themes || []).map((t) => t.theme).filter(Boolean) : [];
+  } else {
+    themes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
+  }
   if (themes.length === 0) return [];
   const pageSize = Number(BRICKSET_FULL_PAGESIZE);
-  console.log(`Fetching ALL sets (every page) for: ${themes.join(", ")}`);
+  console.log(`Fetching ALL sets (every page) for: ${FULL_ALL ? `all ${themes.length} themes` : themes.join(", ")}`);
   const out = [];
   for (const theme of themes) {
     let total = 0;
-    for (let page = 1; page <= 50; page++) {
+    for (let page = 1; page <= 200; page++) {
       const params = JSON.stringify({ theme, pageSize, pageNumber: page, orderBy: "YearFromDESC", extendedData: true });
       const j = await post("getSets", { apiKey: BRICKSET_API_KEY, userHash, params });
       if (j.status !== "success") { console.error(`  full ${theme} p${page}: ${j.message}`); break; }
@@ -257,6 +394,7 @@ async function fetchFullThemes(userHash) {
       if (batch.length < pageSize) break; // last page
     }
     console.log(`  ${theme}: ${total} sets (all pages)`);
+    if (FULL_ALL) await sleep(150); // gentle pacing across all ~173 themes
   }
   return out;
 }
@@ -314,7 +452,47 @@ async function translateNotes(notes) {
   return out;
 }
 
+// BOX_ONLY: re-host boxes for every set already in seed.sql (no Brickset/Rebrickable fetch), then
+// splice just the box_image_url UPDATE block back in — leaving all other blocks untouched.
+async function boxOnlyRun() {
+  const existing = await readFile(OUT, "utf8").catch(() => null);
+  if (!existing) { console.error(`BOX_ONLY: ${OUT} not found — generate the seed first.`); process.exit(1); }
+  const rows = extractRows(existing, /insert into public\.sets[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id\)/);
+  const sets = rows
+    .map((r) => r.match(/^\(\s*(\d+)\s*,\s*'((?:[^']|'')*)'\s*,\s*(\d+)/))
+    .filter(Boolean)
+    .map((m) => ({ setID: Number(m[1]), number: m[2].replace(/''/g, "'"), numberVariant: Number(m[3]) }));
+  const exBox = extractRows(existing, /set box_image_url = v\.box_image_url\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, box_image_url\)/);
+  const existingBySetId = new Map(
+    exBox.map((r) => { const m = r.match(/^\((\d+),\s*'([^']*)'/); return m ? [Number(m[1]), m[2]] : null; }).filter(Boolean),
+  );
+  console.log(`BOX_ONLY: ${sets.length} sets in the current seed (${existingBySetId.size} already have a box URL).`);
+
+  // rehostBoxImages carries existing entries forward and re-hosts any not-yet-on-R2 URL, so the
+  // returned map is the complete, updated box set — no separate merge needed.
+  const boxUrlBySetId = await rehostBoxImages(sets, existingBySetId);
+  const boxRows = [...boxUrlBySetId.entries()].map(([setId, url]) => `(${num(setId)}, ${q(url)})`);
+  const block = boxRows.length
+    ? `-- Re-hosted box images (Supabase Storage) -> sets.box_image_url (see fetch-catalog.mjs)
+update public.sets as s set box_image_url = v.box_image_url
+from (values
+  ${boxRows.join(",\n  ")}
+) as v(set_id, box_image_url)
+where s.set_id = v.set_id;`
+    : "-- (no re-hosted box images)";
+
+  const blockRe = /-- Re-hosted box images[\s\S]*?where s\.set_id = v\.set_id;/;
+  const noBoxRe = /-- \(no re-hosted box images\)/;
+  const updated = blockRe.test(existing) ? existing.replace(blockRe, block)
+    : noBoxRe.test(existing) ? existing.replace(noBoxRe, block)
+    : `${existing.trimEnd()}\n\n${block}\n`;
+  await writeFile(OUT, updated, "utf8");
+  console.log(`BOX_ONLY: ${boxRows.length} box_image rows -> supabase/seed.sql`);
+  console.log("Next: supabase db reset (local) / apply the box UPDATE block to prod");
+}
+
 async function main() {
+  if (BOX_ONLY === "1" || BOX_ONLY.toLowerCase() === "true") { await boxOnlyRun(); return; }
   const userHash = await getUserHash();
   const themes = BRICKSET_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
   const fullThemes = BRICKSET_FULL_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
@@ -325,7 +503,10 @@ async function main() {
   let primarySets = [];
   let fullSets = [];
   let retiredSets = [];
-  if (!SAMPLES_ONLY) {
+  if (FULL_ALL) {
+    console.log("FULL_ALL — full-pulling every Brickset theme (whole catalog); skipping the primary/retired/theme-sample passes.");
+    fullSets = await fetchFullThemes(userHash); // pulls ALL themes when FULL_ALL
+  } else if (!SAMPLES_ONLY) {
     console.log(`Fetching newest ${pageSize} sets each for: ${themes.join(", ")}`);
     const collected = [];
     for (const theme of themes) {
@@ -358,7 +539,8 @@ async function main() {
   }
 
   // Full-picture pass — one sample set per Brickset theme so every theme shows up in the browse.
-  const themeSampleSets = enableAllThemes ? await fetchThemeSamples(userHash, sampleSize) : [];
+  // Skipped under FULL_ALL (which already pulls every theme in full).
+  const themeSampleSets = (enableAllThemes && !FULL_ALL) ? await fetchThemeSamples(userHash, sampleSize) : [];
 
   // Sets that go through the Rebrickable minifig fetch: the primary pass (+ full-theme when
   // BRICKSET_FULL_MINIFIGS is on). Never the retired or theme-sample passes; none in SAMPLES_ONLY.
@@ -375,6 +557,10 @@ async function main() {
     process.exit(1);
   }
   console.log(`Catalog: ${primarySets.length} primary + ${fullSets.length} full-theme + ${retiredSets.length} retired + ${themeSampleSets.length} theme-samples -> ${catalogSets.length} unique.`);
+
+  // Box images are re-hosted via BOX_ONLY mode (which reads the whole seed); a normal run doesn't
+  // touch BrickLink — it just preserves the existing box_image_url block through the append merge.
+  const boxUrlBySetId = new Map();
 
   // Minifigs (Rebrickable): fig list per set → the `minifigs` catalog + `set_minifigs` join.
   const { figs, setFigs } = REBRICKABLE_API_KEY
@@ -396,6 +582,9 @@ async function main() {
     .filter((s) => s.extendedData?.notes && noteViMap.has(s.extendedData.notes.trim()))
     .map((s) => `(${num(s.setID)}, ${q(noteViMap.get(s.extendedData.notes.trim()))})`);
 
+  // Re-hosted box image URLs, keyed by set_id (a separate UPDATE, append-safe like notes_vi).
+  let boxImageRowList = [...boxUrlBySetId.entries()].map(([setId, url]) => `(${num(setId)}, ${q(url)})`);
+
   // Append mode: merge onto the existing seed.sql. Existing rows are kept; a freshly fetched row for
   // the same key overwrites the old one. Minifigs + note translations are merged too (not just
   // sets/prices), so an append never drops previously-seeded figs or notes — even when this run skips
@@ -408,12 +597,14 @@ async function main() {
       const exFigs = extractRows(existing, /insert into public\.minifigs[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(fig_num\)/);
       const exSetFigs = extractRows(existing, /insert into public\.set_minifigs[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id, fig_num\)/);
       const exNoteVi = extractRows(existing, /set notes_vi = v\.notes_vi\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, notes_vi\)/);
+      const exBox = extractRows(existing, /set box_image_url = v\.box_image_url\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, box_image_url\)/);
       setRowList = mergeRows(exSets, setRowList, (r) => r.match(/^\((\d+),/)?.[1]);
       priceRowList = mergeRows(exPrices, priceRowList, (r) => r.match(/^\((\d+), '([A-Z]+)'/)?.slice(1, 3).join("-"));
       minifigRowList = mergeRows(exFigs, minifigRowList, (r) => r.match(/^\('([^']+)'/)?.[1]);
       setMinifigRowList = mergeRows(exSetFigs, setMinifigRowList, (r) => r.match(/^\((\d+), '([^']+)'/)?.slice(1, 3).join("-"));
       noteViRowList = mergeRows(exNoteVi, noteViRowList, (r) => r.match(/^\((\d+),/)?.[1]);
-      console.log(`Append: ${exSets.length} existing sets -> ${setRowList.length}; minifigs ${exFigs.length} -> ${minifigRowList.length}; notes_vi ${exNoteVi.length} -> ${noteViRowList.length}.`);
+      boxImageRowList = mergeRows(exBox, boxImageRowList, (r) => r.match(/^\((\d+),/)?.[1]);
+      console.log(`Append: ${exSets.length} existing sets -> ${setRowList.length}; minifigs ${exFigs.length} -> ${minifigRowList.length}; notes_vi ${exNoteVi.length} -> ${noteViRowList.length}; box_image ${exBox.length} -> ${boxImageRowList.length}.`);
     }
   }
 
@@ -422,6 +613,7 @@ async function main() {
   const minifigValues = minifigRowList.join(",\n  ");
   const setMinifigValues = setMinifigRowList.join(",\n  ");
   const noteViValues = noteViRowList.join(",\n  ");
+  const boxImageValues = boxImageRowList.join(",\n  ");
 
   const sql =
 `-- Generated by scripts/fetch-catalog.mjs from Brickset. Sample catalog for LOCAL dev.
@@ -459,6 +651,13 @@ from (values
   ${noteViValues}
 ) as v(set_id, notes_vi)
 where s.set_id = v.set_id;` : "-- (no translated notes)"}
+
+${boxImageValues ? `-- Re-hosted box images (Supabase Storage) -> sets.box_image_url (see fetch-catalog.mjs)
+update public.sets as s set box_image_url = v.box_image_url
+from (values
+  ${boxImageValues}
+) as v(set_id, box_image_url)
+where s.set_id = v.set_id;` : "-- (no re-hosted box images)"}
 
 ${minifigValues ? `insert into public.minifigs
   (fig_num, name, num_parts, image_url)
