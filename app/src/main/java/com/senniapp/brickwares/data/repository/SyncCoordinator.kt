@@ -90,6 +90,16 @@ class SyncCoordinator(
         syncRequests.trySend(Unit)
     }
 
+    /**
+     * Runs a full push+pull **now** (bypassing the debounce) and suspends until it finishes. Returns
+     * true on success, false when signed out or the round-trip failed. Used by the CSV import so the UI
+     * can lock behind a loading screen until the overwrite has actually synced.
+     */
+    suspend fun syncNow(): Boolean {
+        val uid = client.auth.currentUserOrNull()?.id ?: return false
+        return sync(uid)
+    }
+
     private suspend fun onSignedIn(user: AuthUser) {
         val last = syncState.lastAccountId()
         if (last != null && last != user.id) {
@@ -104,7 +114,7 @@ class SyncCoordinator(
         sync(user.id) // sets last_account_id
     }
 
-    private suspend fun sync(uid: String) = mutex.withLock {
+    private suspend fun sync(uid: String): Boolean = mutex.withLock {
         runCatching {
             // Both catalogs must be loaded before pull() reconstructs rows from set_id / fig_num.
             catalog.refresh()
@@ -114,7 +124,7 @@ class SyncCoordinator(
             syncState.setLastAccountId(uid)
             // Refresh the community value cache so a just-contributed paid price shows on the cards.
             ValueRepositoryProvider.instance.warm()
-        }.onFailure { Log.e(TAG, "sync failed", it) }
+        }.onFailure { Log.e(TAG, "sync failed", it) }.isSuccess
     }
 
     // ---- push (dirty local → Supabase upsert) ----

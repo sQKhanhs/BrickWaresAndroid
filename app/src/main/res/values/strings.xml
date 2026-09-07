@@ -48,6 +48,7 @@
     <string name="action_go">Go</string>
     <string name="pagination_go_title">Go to page</string>
     <string name="action_delete">Delete</string>
+    <string name="action_import">Import</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Retry</string>
     <string name="error_connection">Something went wrong. Check your internet connection and try again.</string>
@@ -137,6 +138,16 @@
     <string name="theme_dark">Dark</string>
     <string name="settings_export_csv">Export collection (CSV)</string>
     <string name="settings_import_csv">Import collection (CSV)</string>
+    <string name="settings_import_confirm_title">Import collection?</string>
+    <string name="settings_import_confirm_body">This replaces your current collection with the file\'s contents. This can\'t be undone.</string>
+    <string name="toast_export_success">Collection exported</string>
+    <string name="toast_export_failed">Couldn\'t export the collection</string>
+    <string name="toast_import_success">Imported %1$d items</string>
+    <string name="toast_import_failed">Couldn\'t import — check the file and try again</string>
+    <string name="toast_import_too_new">This file is from a newer version of BrickWares. Update the app to import it.</string>
+    <string name="settings_importing">Importing…</string>
+    <string name="settings_no_internet_title">No internet connection</string>
+    <string name="settings_no_internet_body">Importing needs a connection to sync your collection. Try again later.</string>
     <string name="settings_retirement_alerts">Retirement alerts</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Service</string>

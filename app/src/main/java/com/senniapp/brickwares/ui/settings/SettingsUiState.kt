@@ -44,5 +44,7 @@ data class SettingsUiState(
     val avatar: AvatarGender = AvatarGender.MALE,
     /** Whether the "Choose Avatar" picker sheet is open. */
     val showAvatarPicker: Boolean = false,
+    /** A CSV import (overwrite + immediate sync) is running — the UI locks behind a loading screen. */
+    val importing: Boolean = false,
     val toastMessage: UiText? = null,
 )

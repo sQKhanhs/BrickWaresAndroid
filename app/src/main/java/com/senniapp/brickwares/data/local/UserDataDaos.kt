@@ -16,8 +16,16 @@ interface CollectionDao {
     @Query("SELECT * FROM collection_copies WHERE deleted = 0")
     fun observeActive(): Flow<List<CollectionCopyEntity>>
 
+    /** One-shot snapshot of the active copies (for the CSV export). */
+    @Query("SELECT * FROM collection_copies WHERE deleted = 0")
+    suspend fun getActive(): List<CollectionCopyEntity>
+
     @Query("SELECT COUNT(*) FROM collection_copies WHERE deleted = 0")
     suspend fun activeCount(): Int
+
+    /** Tombstone every active copy (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM collection_copies WHERE dirty = 1")
     suspend fun getDirty(): List<CollectionCopyEntity>

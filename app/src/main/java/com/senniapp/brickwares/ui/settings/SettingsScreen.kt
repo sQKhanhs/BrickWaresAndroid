@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -41,9 +42,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -51,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +77,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.ui.theme.ThemeMode
 import com.senniapp.brickwares.util.AppCurrency
+import java.time.LocalDate
 
 // Public legal pages, hosted on the web (brickwares.app) rather than baked into the app, so the text
 // can be updated without an app release. Paths match the hosted files (privacy-policy.html /
@@ -136,6 +142,8 @@ fun SettingsScreen(
         onToggleRetirement = viewModel::onToggleRetirementAlerts,
         onToggleAnalytics = viewModel::onToggleAnalytics,
         onToggleChangelog = viewModel::onToggleChangelog,
+        onExport = viewModel::onExportCollection,
+        onImport = viewModel::onImportCollection,
         onComingSoon = viewModel::onComingSoon,
         onToastShown = viewModel::onToastShown,
         modifier = modifier,
@@ -164,12 +172,25 @@ private fun SettingsContent(
     onToggleRetirement: () -> Unit,
     onToggleAnalytics: () -> Unit,
     onToggleChangelog: () -> Unit,
+    onExport: (Uri, ContentResolver) -> Unit,
+    onImport: (Uri, ContentResolver) -> Unit,
     onComingSoon: (String) -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
     val context = LocalContext.current
+    val resolver = context.contentResolver
+    // Storage Access Framework: the user chooses where to save / which file to load (no storage perms).
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let { onExport(it, resolver) }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { onImport(it, resolver) }
+    }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    var showNoInternet by remember { mutableStateOf(false) }
+    val exportFileName = "brickwares-collection-${LocalDate.now()}.csv"
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         Column(
             modifier = Modifier
@@ -269,10 +290,13 @@ private fun SettingsContent(
             }
 
             // ---- Data ----
+            // Export/Import act on the signed-in account's collection, so they're disabled (greyed,
+            // untappable) while signed out.
             Section(stringResource(R.string.settings_section_data)) {
-                NavRow(stringResource(R.string.settings_export_csv), onClick = { onComingSoon("Export") })
+                NavRow(stringResource(R.string.settings_export_csv), onClick = { exportLauncher.launch(exportFileName) }, enabled = state.isLoggedIn)
                 RowDivider()
-                NavRow(stringResource(R.string.settings_import_csv), onClick = { onComingSoon("Import") })
+                // Import overwrites the collection → confirm first, then open the file picker.
+                NavRow(stringResource(R.string.settings_import_csv), onClick = { showImportConfirm = true }, enabled = state.isLoggedIn)
             }
 
             // ---- Notifications ----
@@ -335,6 +359,27 @@ private fun SettingsContent(
 
         if (state.showDeleteConfirm) {
             DeleteAccountDialog(onConfirm = onConfirmDelete, onDismiss = onCancelDelete)
+        }
+
+        if (showImportConfirm) {
+            ImportCollectionDialog(
+                // Import overwrites then syncs, so it needs a connection — block it while offline.
+                onConfirm = {
+                    showImportConfirm = false
+                    if (isOnline) importLauncher.launch(arrayOf("*/*")) else showNoInternet = true
+                },
+                onDismiss = { showImportConfirm = false },
+            )
+        }
+
+        if (showNoInternet) {
+            NoInternetDialog(onDismiss = { showNoInternet = false })
+        }
+
+        // Import runs an overwrite + immediate sync; lock the UI behind a non-dismissable loading modal
+        // until it completes (can't back out or navigate away mid-import).
+        if (state.importing) {
+            ImportLoadingDialog()
         }
 
         BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
@@ -492,6 +537,81 @@ private fun DeleteAccountDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * Warns that importing replaces the current collection before the file picker opens. Confirming opens
+ * the picker (in the caller); the actual overwrite runs on the picked file.
+ */
+@Composable
+private fun ImportCollectionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.settings_import_confirm_title), style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.settings_import_confirm_body),
+                    style = BwType.body.copy(fontSize = 13.sp),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinePill(stringResource(R.string.action_cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+                    Pill(text = stringResource(R.string.action_import), filled = true, onClick = onConfirm, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/** Shown when the user confirms an import while offline — import needs a connection to sync. */
+@Composable
+private fun NoInternetDialog(onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.settings_no_internet_title), style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.settings_no_internet_body),
+                    style = BwType.body.copy(fontSize = 13.sp),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Pill(text = stringResource(R.string.action_ok), filled = true, onClick = onDismiss)
+                }
+            }
+        }
+    }
+}
+
+/** Non-dismissable loading modal shown while a CSV import (overwrite + sync) runs. */
+@Composable
+private fun ImportLoadingDialog() {
+    val colors = BwTheme.colors
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+    ) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Row(
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp, color = colors.brandYellow)
+                Text(
+                    stringResource(R.string.settings_importing),
+                    style = BwType.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.text,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     val colors = BwTheme.colors
@@ -520,16 +640,21 @@ private fun RowDivider() {
 }
 
 @Composable
-private fun NavRow(label: String, onClick: () -> Unit, danger: Boolean = false) {
+private fun NavRow(label: String, onClick: () -> Unit, danger: Boolean = false, enabled: Boolean = true) {
     val colors = BwTheme.colors
-    val color = if (danger) colors.error else colors.text
+    // Disabled → greyed out and untappable (e.g. Export/Import while signed out).
+    val labelColor = when {
+        !enabled -> colors.textFaint
+        danger -> colors.error
+        else -> colors.text
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 13.dp),
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = color)
-        Text("›", style = BwType.cardTitle.copy(fontSize = 18.sp), color = if (danger) colors.error else colors.textFaint)
+        Text(label, style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = labelColor)
+        Text("›", style = BwType.cardTitle.copy(fontSize = 18.sp), color = if (enabled && danger) colors.error else colors.textFaint)
     }
 }
 

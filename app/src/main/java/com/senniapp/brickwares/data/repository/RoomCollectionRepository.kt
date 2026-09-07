@@ -81,6 +81,65 @@ class RoomCollectionRepository(
     override suspend fun getThemeSummaries(): List<ThemeSummary> =
         themeSummariesOf(getCollectionItems().first(), CurrencyPrefs.current)
 
+    // ---- CSV export / import (Settings → Data) ----
+
+    override suspend fun exportCollectionCsv(): String =
+        CollectionCsv.encode(collectionDao.getActive())
+
+    override suspend fun importCollectionCsv(csv: String): Int {
+        val parsed = CollectionCsv.parse(csv)
+        // Reject a file that isn't a BrickWares export BEFORE touching the collection, so picking the
+        // wrong file can't silently wipe it (a valid but empty export is allowed — it clears everything).
+        require("set_number" in parsed.header && "item_kind" in parsed.header) {
+            "Not a BrickWares collection export"
+        }
+        // Refuse a file from a newer app version rather than importing it with silently-dropped fields.
+        val version = CollectionCsv.versionOf(parsed)
+        if (version > CollectionCsv.FORMAT_VERSION) throw CsvTooNewException(version)
+        val now = System.currentTimeMillis()
+        val entities = parsed.rows.mapNotNull { it.toImportedCopy(now) }
+        // Overwrite: tombstone the current copies (so the removals push), then insert the imported rows.
+        collectionDao.markAllActiveDeleted(now)
+        if (entities.isNotEmpty()) collectionDao.upsertAll(entities)
+        // Sync now and wait, so the caller can hold a loading screen until the overwrite has pushed +
+        // pulled (and the value cache re-warmed). Best-effort: if it fails (offline) the data is already
+        // local and a reconnect sync will push it later.
+        sync.syncNow()
+        return entities.size
+    }
+
+    /** One CSV row → a fresh dirty [CollectionCopyEntity]; null when it has no usable item identity. */
+    private fun Map<String, String>.toImportedCopy(now: Long): CollectionCopyEntity? {
+        fun s(key: String) = this[key]?.trim()?.ifBlank { null }
+        val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
+        val isFig = kind == "minifig"
+        val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
+        val setNumber = s("set_number") ?: figNum ?: return null
+        // The sync key: from the file, else resolved from the catalog (a hand-edited file may omit it).
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
+        return CollectionCopyEntity(
+            id = UUID.randomUUID().toString(),
+            setId = setId, figNum = if (isFig) (figNum ?: setNumber) else figNum, itemKind = kind,
+            setNumber = setNumber, name = s("name").orEmpty(),
+            theme = s("theme") ?: "Unknown", subtheme = s("subtheme") ?: "General",
+            releaseYear = s("release_year")?.toIntOrNull() ?: 0,
+            releaseMonth = s("release_month")?.toIntOrNull() ?: 0,
+            pieces = s("pieces")?.toIntOrNull() ?: 0,
+            minifigs = s("minifigs")?.toIntOrNull() ?: 0,
+            retailPrice = s("retail_price")?.toLongOrNull(),
+            status = s("status") ?: Availability.AVAILABLE.name,
+            imageUrl = s("image_url"),
+            quantity = (s("quantity")?.toIntOrNull() ?: 1).coerceAtLeast(1),
+            condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
+            pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
+            currency = currency,
+            acquiredOn = s("acquired_on"),
+            notes = s("notes"),
+            deleted = false, updatedAt = now, dirty = true,
+        )
+    }
+
     override fun getSoldItems(): Flow<List<SoldItem>> =
         combine(salesDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.map { entity ->

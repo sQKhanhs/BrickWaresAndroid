@@ -47,6 +47,18 @@ interface CollectionRepository {
     /** Replaces an existing copy (matched by id) with an edited version. */
     fun updateCopy(setNumber: String, copy: Copy)
 
+    // ---- CSV export / import (Settings → Data) ----
+
+    /** Serializes the current collection to CSV text the user can save and later re-import. */
+    suspend fun exportCollectionCsv(): String
+
+    /**
+     * Replaces the collection with the rows in [csv] (overwrite): tombstones the current copies so the
+     * removals sync, then inserts the parsed rows as fresh dirty entities and kicks a sync. Returns how
+     * many copies were imported; throws if the text can't be read as the export format.
+     */
+    suspend fun importCollectionCsv(csv: String): Int
+
     /** Sold items (Sales sub-view), exposed as a [Flow] so the list updates as sales are recorded. */
     fun getSoldItems(): Flow<List<SoldItem>>
 
