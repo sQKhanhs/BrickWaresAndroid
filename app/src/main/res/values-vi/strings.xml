@@ -126,6 +126,7 @@
     <string name="set_password_title">Đặt mật khẩu</string>
     <string name="set_password_body">Thêm mật khẩu để bạn có thể đăng nhập bằng email, không chỉ bằng Google.</string>
     <string name="settings_delete_account">Xóa tài khoản</string>
+    <string name="settings_delete_confirm_title">Xóa tài khoản?</string>
     <string name="settings_delete_confirm_body">Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu bộ sưu tập của bạn. Không thể hoàn tác.</string>
     <string name="settings_sign_in">Đăng nhập</string>
     <string name="settings_language">Ngôn ngữ</string>

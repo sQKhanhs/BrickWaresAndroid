@@ -216,19 +216,6 @@ private fun SettingsContent(
                     }
                     RowDivider()
                     NavRow(stringResource(R.string.settings_delete_account), onClick = onRequestDelete, danger = true)
-                    if (state.showDeleteConfirm) {
-                        Column(modifier = Modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                stringResource(R.string.settings_delete_confirm_body),
-                                style = BwType.body.copy(fontSize = 11.sp),
-                                color = colors.textMuted,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinePill(stringResource(R.string.action_cancel), onClick = onCancelDelete, modifier = Modifier.weight(1f))
-                                DangerPill(stringResource(R.string.action_delete), onClick = onConfirmDelete, modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
                 } else {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
@@ -344,6 +331,10 @@ private fun SettingsContent(
 
         if (state.showSetPassword) {
             SetPasswordDialog(onConfirm = onSetPassword, onDismiss = onCloseSetPassword)
+        }
+
+        if (state.showDeleteConfirm) {
+            DeleteAccountDialog(onConfirm = onConfirmDelete, onDismiss = onCancelDelete)
         }
 
         BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
@@ -462,6 +453,39 @@ private fun AvatarPickerDialog(
                                 .clickable { onSelect(avatar) },
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Confirmation modal for the destructive "Delete account" action. Replaces the old inline
+ * expand-in-place row so the irreversible choice is a deliberate, focused decision (dim scrim +
+ * centered card) rather than something that quietly unfolds under the tapped row. State + handlers
+ * live in the VM (showDeleteConfirm / onConfirmDelete / onCancelDelete); this only renders them.
+ */
+@Composable
+private fun DeleteAccountDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(
+                    stringResource(R.string.settings_delete_confirm_title),
+                    style = BwType.cardTitle,
+                    color = colors.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.settings_delete_confirm_body),
+                    style = BwType.body.copy(fontSize = 13.sp),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinePill(stringResource(R.string.action_cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+                    DangerPill(stringResource(R.string.action_delete), onClick = onConfirm, modifier = Modifier.weight(1f))
                 }
             }
         }

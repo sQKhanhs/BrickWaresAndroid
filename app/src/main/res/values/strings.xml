@@ -127,6 +127,7 @@
     <string name="set_password_title">Set a password</string>
     <string name="set_password_body">Add a password so you can also sign in with your email — not just Google.</string>
     <string name="settings_delete_account">Delete account</string>
+    <string name="settings_delete_confirm_title">Delete account?</string>
     <string name="settings_delete_confirm_body">This permanently removes your account and all collection data. This can\'t be undone.</string>
     <string name="settings_sign_in">Sign in</string>
     <string name="settings_language">Language</string>
