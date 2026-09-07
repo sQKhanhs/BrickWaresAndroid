@@ -1,8 +1,10 @@
 package com.senniapp.brickwares.ui.login
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -37,6 +41,9 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -44,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -161,16 +169,11 @@ fun LoginScreen(
                             textAlign = TextAlign.Center,
                         )
                         Spacer(Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = state.code,
-                            onValueChange = viewModel::onCodeChange,
-                            placeholder = { Text(stringResource(R.string.login_code_hint)) },
-                            singleLine = true,
+                        OtpCodeField(
+                            code = state.code,
+                            onCodeChange = viewModel::onCodeChange,
                             enabled = !busy,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                            colors = fieldColors,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                            onImeDone = { viewModel.onVerifyCode() },
                         )
                         Spacer(Modifier.height(18.dp))
                         Button(
@@ -358,4 +361,65 @@ fun LoginScreen(
             }
         }
     }
+}
+
+/**
+ * A 6-box segmented input for the email OTP. Backed by a single hidden [BasicTextField] (so backspace,
+ * paste and numeric-keyboard autofill all just work), with the visible boxes drawn in its
+ * decorationBox — one square per digit, the next-to-type box highlighted. The field auto-focuses so the
+ * keyboard opens as soon as the confirmation step appears. The VM already filters non-digits and caps
+ * the length, so this composable only mirrors [code] into the boxes.
+ */
+@Composable
+private fun OtpCodeField(
+    code: String,
+    onCodeChange: (String) -> Unit,
+    enabled: Boolean,
+    onImeDone: () -> Unit,
+    modifier: Modifier = Modifier,
+    length: Int = 6,
+) {
+    val colors = BwTheme.colors
+    val focusRequester = remember { FocusRequester() }
+    // Open the keyboard as soon as the OTP step is shown (this composable only exists while awaiting).
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+
+    BasicTextField(
+        value = code,
+        onValueChange = onCodeChange,
+        enabled = enabled,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onImeDone() }),
+        modifier = modifier.fillMaxWidth().focusRequester(focusRequester),
+        decorationBox = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                repeat(length) { i ->
+                    // The box the next digit lands in gets the brand highlight (until the code is full).
+                    val active = enabled && i == code.length && code.length < length
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                width = if (active) 2.dp else 1.dp,
+                                color = if (active) colors.brandYellow else colors.borderStrong,
+                                shape = RoundedCornerShape(10.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = code.getOrNull(i)?.toString().orEmpty(),
+                            style = BwType.cardTitle.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                            color = colors.text,
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
