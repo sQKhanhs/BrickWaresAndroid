@@ -65,7 +65,10 @@ data class SearchUiState(
     /** The query that produced [results]; null while the user hasn't submitted a search yet. */
     val submittedQuery: String? = null,
     val results: List<CatalogSet> = emptyList(),
+    /** Live set suggestions (the typing dropdown), shown above [minifigSuggestions]. */
     val suggestions: List<CatalogSet> = emptyList(),
+    /** Live minifig suggestions (matched by name or fig code, e.g. "fig-017485"), shown below the sets. */
+    val minifigSuggestions: List<Minifig> = emptyList(),
     val themes: List<ThemeGroup> = emptyList(),
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
     /** 1-based current page for the theme browse grid (10/page). */

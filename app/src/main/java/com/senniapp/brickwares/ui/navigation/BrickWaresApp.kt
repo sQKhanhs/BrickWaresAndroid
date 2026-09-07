@@ -160,7 +160,12 @@ fun BrickWaresApp(
                     onOpenSetDetail = openSet,
                     // Tapping a minifig in the set's grid pushes the minifig detail.
                     onOpenMinifig = openFig,
-                    onNavigateToSearch = { detailStack.clear(); selectedTab = BwTab.Search },
+                    // Tapping the theme/subtheme link opens the Search tab filtered to that theme.
+                    onOpenTheme = { theme, subtheme ->
+                        detailStack.clear()
+                        selectedTab = BwTab.Search
+                        searchViewModel.openSetTheme(theme, subtheme)
+                    },
                     // Show the search FABs on the detail only when it's opened from the Search tab.
                     showSearchFab = selectedTab == BwTab.Search,
                     // Switching to minifig search exits the detail stack and lands on the minifig home.

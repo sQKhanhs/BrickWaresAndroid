@@ -87,7 +87,6 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.formatIn
-import com.senniapp.brickwares.util.formatMoney
 import kotlinx.coroutines.launch
 import com.senniapp.brickwares.ui.components.releaseLabel
 import com.senniapp.brickwares.ui.components.retailLabel
@@ -101,7 +100,8 @@ fun SetDetailScreen(
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onOpenMinifig: (String) -> Unit,
-    onNavigateToSearch: () -> Unit,
+    /** Open the Search tab filtered to this set's theme (subtheme = null) or subtheme. */
+    onOpenTheme: (theme: String, subtheme: String?) -> Unit,
     modifier: Modifier = Modifier,
     /** When true (the detail is viewed from the Search tab), the search FABs are shown. */
     showSearchFab: Boolean = false,
@@ -123,7 +123,7 @@ fun SetDetailScreen(
         onBack = onBack,
         onOpenSetDetail = onOpenSetDetail,
         onOpenMinifig = onOpenMinifig,
-        onNavigateToSearch = onNavigateToSearch,
+        onOpenTheme = onOpenTheme,
         onAddWishlist = viewModel::onAddToWishlist,
         onAddCollectionClick = viewModel::onAddToCollectionClick,
         onRecommendAddCollection = viewModel::onAddRecommendToCollection,
@@ -159,7 +159,7 @@ private fun SetDetailContent(
     onBack: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onOpenMinifig: (String) -> Unit,
-    onNavigateToSearch: () -> Unit,
+    onOpenTheme: (theme: String, subtheme: String?) -> Unit,
     onAddWishlist: () -> Unit,
     onAddCollectionClick: () -> Unit,
     onRecommendAddCollection: (CatalogSet) -> Unit,
@@ -305,8 +305,8 @@ private fun SetDetailContent(
             SectionCard(title = stringResource(R.string.detail_set_details)) {
                 DetailRow(stringResource(R.string.detail_set_number), set.setNumber)
                 DetailRow(stringResource(R.string.detail_name), set.name)
-                DetailLinkRow(stringResource(R.string.meta_theme), set.theme, onNavigateToSearch)
-                DetailLinkRow(stringResource(R.string.meta_subtheme), set.subtheme, onNavigateToSearch)
+                DetailLinkRow(stringResource(R.string.meta_theme), set.theme) { onOpenTheme(set.theme, null) }
+                DetailLinkRow(stringResource(R.string.meta_subtheme), set.subtheme) { onOpenTheme(set.theme, set.subtheme) }
                 DetailRow(stringResource(R.string.detail_released), releaseLabel(set.releaseMonth, set.releaseYear))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.detail_availability), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
@@ -637,8 +637,7 @@ private fun CurrentValueRow(value: CurrentValue, loading: Boolean) {
         Spacer(Modifier.width(10.dp))
         val amountText = when {
             loading -> "…"
-            value.amountUsdCents != null -> formatMoney(value.amountUsdCents, BwTheme.currency)
-            else -> "----"
+            else -> value.displayMinor(BwTheme.currency)?.let { formatIn(it, BwTheme.currency) } ?: "----"
         }
         Text(
             amountText,

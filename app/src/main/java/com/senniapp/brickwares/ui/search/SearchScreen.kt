@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.ui.search
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -265,12 +266,19 @@ private fun SearchContent(
             }
 
             when {
-                // Live set suggestions while typing (both browse modes).
+                // Live suggestions while typing (both browse modes) — sets first, then minifigs.
                 state.showSuggestions -> {
-                    if (state.suggestions.isEmpty()) {
+                    if (state.suggestions.isEmpty() && state.minifigSuggestions.isEmpty()) {
                         item { SectionLabel(stringResource(R.string.search_no_matches, state.query)) }
                     } else {
-                        item { SuggestionList(state.suggestions) { onOpenSetDetail(it.id) } }
+                        item {
+                            SuggestionList(
+                                sets = state.suggestions,
+                                figs = state.minifigSuggestions,
+                                onSetClick = { onOpenSetDetail(it.id) },
+                                onFigClick = { onOpenMinifig(it.figNum) },
+                            )
+                        }
                     }
                 }
 
@@ -468,7 +476,8 @@ private fun SearchContent(
                 onOpenSetDetail = { id -> showSearchModal = false; onOpenSetDetail(id) },
                 onDismiss = { showSearchModal = false },
                 onSearchMinifigs = onSearchMinifigsForModal,
-                onSelectMinifig = { fig -> showSearchModal = false; onAddMinifig(fig) },
+                // Tapping a result opens its detail page (like the set rows), not the Add sheet.
+                onSelectMinifig = { fig -> showSearchModal = false; onOpenMinifig(fig.figNum) },
             )
         }
 
@@ -929,8 +938,18 @@ private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpe
     }
 }
 
+/**
+ * Live typing dropdown: matching [sets] first, then matching [figs] (minifigs). One bordered card; a
+ * divider between every row including the set→minifig seam. Tapping a set opens its detail; tapping a
+ * minifig opens the minifig detail.
+ */
 @Composable
-private fun SuggestionList(suggestions: List<CatalogSet>, onClick: (CatalogSet) -> Unit) {
+private fun SuggestionList(
+    sets: List<CatalogSet>,
+    figs: List<Minifig>,
+    onSetClick: (CatalogSet) -> Unit,
+    onFigClick: (Minifig) -> Unit,
+) {
     val colors = BwTheme.colors
     Column(
         modifier = Modifier
@@ -939,27 +958,48 @@ private fun SuggestionList(suggestions: List<CatalogSet>, onClick: (CatalogSet) 
             .background(colors.card)
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp)),
     ) {
-        suggestions.forEachIndexed { index, set ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onClick(set) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painter = painterResource(if (set.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set),
-                    contentDescription = null,
-                    tint = colors.textMuted,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
-                    Text(set.theme, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
-                }
-            }
-            if (index < suggestions.lastIndex) HorizontalDivider(color = colors.borderSoft)
+        sets.forEachIndexed { index, set ->
+            SuggestionRow(
+                icon = if (set.itemType == ItemType.MINIFIG) R.drawable.ic_bw_minifig else R.drawable.ic_bw_set,
+                title = "${set.setNumber} ${set.name}",
+                subtitle = set.theme,
+                onClick = { onSetClick(set) },
+            )
+            // Divider after each set, and after the last set when minifigs follow.
+            if (index < sets.lastIndex || figs.isNotEmpty()) HorizontalDivider(color = colors.borderSoft)
+        }
+        figs.forEachIndexed { index, fig ->
+            SuggestionRow(
+                icon = R.drawable.ic_bw_minifig,
+                title = fig.name,
+                subtitle = "${fig.figNum} · ${stringResource(R.string.filter_minifig)}",
+                onClick = { onFigClick(fig) },
+            )
+            if (index < figs.lastIndex) HorizontalDivider(color = colors.borderSoft)
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(@DrawableRes icon: Int, title: String, subtitle: String, onClick: () -> Unit) {
+    val colors = BwTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = colors.textMuted,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
+            Text(subtitle, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted, maxLines = 1)
         }
     }
 }

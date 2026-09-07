@@ -58,6 +58,15 @@ class SearchViewModel(
             }
         }
         viewModelScope.launch { catalogRepo.refresh() }
+        // Keep the browse marks in sync with the stored favorites. Beyond an in-VM toggle, this fires
+        // when an account switch / deletion wipes them (ThemeFavoritesPrefs.clear), so the previous
+        // account's stars disappear on a live Search screen without waiting for a restart.
+        viewModelScope.launch {
+            ThemeFavoritesPrefs.setThemesFlow.collect { favs -> _uiState.update { it.copy(favoriteThemes = favs) } }
+        }
+        viewModelScope.launch {
+            ThemeFavoritesPrefs.minifigThemesFlow.collect { favs -> _uiState.update { it.copy(favoriteMinifigThemes = favs) } }
+        }
         // Load minifigs up front too — the search bar is GLOBAL (searches sets + minifigs regardless
         // of the browse mode), so the minifig cache must be ready even before entering minifig mode.
         loadMinifigs()
@@ -102,8 +111,10 @@ class SearchViewModel(
             it.copy(
                 query = query,
                 submittedQuery = null,
-                // Live set suggestions (the dropdown); minifigs fold into the submitted global results.
-                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query, limit = 6),
+                // Live suggestions in the dropdown: sets first, then minifigs (matched by name or fig
+                // code, e.g. "fig-017485"). The FAB search modal already lists both the same way.
+                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query, limit = SUGGESTION_LIMIT),
+                minifigSuggestions = if (query.isBlank()) emptyList() else catalogRepo.searchMinifigs(query).take(SUGGESTION_LIMIT),
             )
         }
     }
@@ -286,9 +297,23 @@ class SearchViewModel(
     /** Tapping a subtheme link opens the theme-detail list filtered to that subtheme. */
     fun onSubthemeClick(theme: String, subtheme: String) = openThemeDetail(theme, subtheme)
 
+    /**
+     * Open a set theme's detail from outside the browse (a Set Detail's theme/subtheme link). Forces set
+     * mode so Back lands on the set browse, not a stale minifig one. [openThemeDetail] clears any typed
+     * query, so the filtered list shows instead of the leftover live suggestions.
+     */
+    fun openSetTheme(theme: String, subtheme: String?) {
+        _uiState.update { it.copy(mode = SearchMode.SETS) }
+        if (subtheme.isNullOrBlank() || subtheme == theme) onThemeClick(theme)
+        else onSubthemeClick(theme, subtheme)
+    }
+
     private fun openThemeDetail(theme: String, sub: String) {
         _uiState.update {
             it.copy(
+                // Clear any in-progress search so the theme-filtered list is what shows (and Back from it
+                // returns to the browse, not the leftover suggestions).
+                query = "", submittedQuery = null, suggestions = emptyList(), minifigSuggestions = emptyList(),
                 themeDetail = theme,
                 themeDetailSub = sub,
                 themeDetailSort = ThemeDetailSort.NEWEST,
@@ -470,5 +495,10 @@ class SearchViewModel(
         "architecture" -> "file:///android_asset/themelogo-architecture.png"
         "batman" -> "file:///android_asset/themelogo-batman.png"
         else -> null
+    }
+
+    private companion object {
+        /** Max live suggestions per kind (sets, minifigs) in the typing dropdown. */
+        const val SUGGESTION_LIMIT = 6
     }
 }
