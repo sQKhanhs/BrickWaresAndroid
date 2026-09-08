@@ -2,4 +2,18 @@
 <resources>
 
     <style name="Theme.BrickWares" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Off-white brand ground; matches the Compose splash's top gradient stop (LightBg #FAF8F5) so the
+         system splash hands off to it without a colour flash. Kept light in both system themes because
+         the app itself cold-starts in light mode. -->
+    <color name="splash_bg">#FAF8F5</color>
+
+    <!-- Minimal Android-12 system splash: JUST the brand ground (the icon is transparent, so the brick
+         doesn't show here) — then it swaps to the app theme and the Compose SplashScreen takes over,
+         where the brick + wordmark animate in as the single logo reveal. -->
+    <style name="Theme.BrickWares.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparent</item>
+        <item name="postSplashScreenTheme">@style/Theme.BrickWares</item>
+    </style>
 </resources>

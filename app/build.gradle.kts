@@ -140,6 +140,7 @@ dependencies {
     // Lets Coil load remote http(s) images (Brickset catalog images); mock assets were local.
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     // Chrome Custom Tabs: in-app browser for the Settings Privacy / Terms links.
     implementation(libs.androidx.browser)
     implementation(libs.androidx.lifecycle.runtime.ktx)

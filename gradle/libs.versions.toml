@@ -17,6 +17,7 @@ room = "2.7.1"
 ksp = "2.2.10-2.0.2"
 datastore = "1.1.1"
 browser = "1.8.0"
+splashscreen = "1.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -55,6 +56,8 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 # Chrome Custom Tabs — in-app browser for the Settings legal links (Privacy / Terms).
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+# Android 12+ splash screen, back-ported — the minimal system splash that hands off to the Compose landing.
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

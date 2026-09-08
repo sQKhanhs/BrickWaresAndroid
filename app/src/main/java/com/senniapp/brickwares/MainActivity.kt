@@ -6,17 +6,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.senniapp.brickwares.data.local.LocalePrefs
-import com.senniapp.brickwares.ui.components.LoadingScreen
+import com.senniapp.brickwares.ui.components.SplashScreen
 import com.senniapp.brickwares.ui.navigation.AuthGate
 import com.senniapp.brickwares.ui.navigation.BrickWaresApp
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
 import com.senniapp.brickwares.ui.theme.ThemeMode
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -36,6 +41,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Minimal Android-12 system splash (brand ground + brick) — it paints before the first Compose
+        // frame and hands off to the branded Compose SplashScreen (same ground) with no colour flash.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -46,15 +54,27 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.DARK -> true
             }
             BrickWaresTheme(darkTheme = darkTheme) {
-                // No login wall: splash only while the persisted session restores, then always show
-                // the app (logged-out users browse; write features prompt sign-in on demand).
+                // No login wall: the splash covers only the initial session restore, then the app always
+                // shows (logged-out users browse; write features prompt sign-in on demand). Hold the
+                // branded splash for a minimum beat so its entrance animation is seen even when the
+                // session restores instantly, then cross-fade into the app.
                 val gate by AuthGate.state.collectAsStateWithLifecycle()
-                when (gate) {
-                    AuthGate.State.Loading -> LoadingScreen()
-                    AuthGate.State.Ready ->
+                var minElapsed by rememberSaveable { mutableStateOf(false) }
+                LaunchedEffect(Unit) { delay(SPLASH_MIN_MS); minElapsed = true }
+                val showSplash = gate == AuthGate.State.Loading || !minElapsed
+                Crossfade(targetState = showSplash, animationSpec = tween(400), label = "splash") { splash ->
+                    if (splash) {
+                        SplashScreen()
+                    } else {
                         BrickWaresApp(themeMode = themeMode, onThemeModeChange = { themeMode = it })
+                    }
                 }
             }
         }
+    }
+
+    private companion object {
+        /** Minimum time the branded splash stays up so its entrance animation isn't cut off. */
+        const val SPLASH_MIN_MS = 1400L
     }
 }
