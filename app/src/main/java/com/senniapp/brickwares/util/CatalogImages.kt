@@ -29,13 +29,4 @@ object CatalogImages {
      */
     fun thumbUrl(setNumber: String, variant: Int = 1, size: Int = 320): String =
         "https://cdn.rebrickable.com/media/thumbs/sets/${setNumber.lowercase()}-$variant.jpg/${size}x${size}p.jpg"
-
-    /**
-     * Full-resolution gallery candidates for a set — the box shot + the render. Either may 404 (the
-     * gallery drops those). Use where only the set number is on hand (collection / wishlist / sold
-     * items); callers holding a [com.senniapp.brickwares.data.model.CatalogSet] can pass its
-     * `boxImageUrl` + `imageUrl` directly instead (they already carry the correct variant).
-     */
-    fun galleryUrls(setNumber: String, variant: Int = 1): List<String> =
-        listOf(boxUrl(setNumber, variant), renderUrl(setNumber, variant))
 }

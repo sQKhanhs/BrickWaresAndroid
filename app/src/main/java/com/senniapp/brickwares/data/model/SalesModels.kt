@@ -17,7 +17,10 @@ data class SoldItem(
     val releaseMonth: Int,
     val pieces: Int = 0,
     val minifigs: Int = 0,
+    /** Default card image: the Rebrickable render (thumb). See [boxImageUrl] for the box-shot fallback. */
     val imageUrl: String? = null,
+    /** Re-hosted box shot (R2) — the card image fallback and the tap gallery's second image, after the render. */
+    val boxImageUrl: String? = null,
     val retailPrice: Long,
     val pricePaid: Long,
     val saleValue: Long,

@@ -1,16 +1,20 @@
 package com.senniapp.brickwares.data.repository
 
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
+import com.senniapp.brickwares.data.local.SalesEntity
+import com.senniapp.brickwares.data.local.WishlistEntity
 
 /**
- * CSV (de)serialization for the collection export/import in Settings. The file is a plain, portable
- * backup the user can save and later re-import; columns are ordered user-meaningful-first, but import
- * maps by header **name** (not position) so a hand-edited or future-versioned file still loads.
+ * CSV (de)serialization for the user-data export/import in Settings — the collection, sales, AND
+ * wishlist in one file. The file is a plain, portable backup the user can save and later re-import;
+ * every row is tagged with a `record_type` (`collection` | `sale` | `wishlist`) and the columns are the
+ * union across the three (a row leaves the ones its type doesn't use blank). Import maps by header
+ * **name** (not position) so a hand-edited or future-versioned file still loads.
  *
- * Every field needed to rebuild a [CollectionCopyEntity] offline is exported (the technical `set_id` /
- * `status` / … tail included), so a normal round-trip never depends on the catalog. Sync/identity
- * fields (`id`, `deleted`, `updatedAt`, `dirty`) are NOT exported — import always mints a fresh id and
- * marks the row dirty. RFC-4180-style quoting handles commas, quotes and newlines inside notes/names.
+ * Every field needed to rebuild a row offline is exported (the technical `set_id` / `status` / … tail
+ * included), so a normal round-trip never depends on the catalog. Sync/identity fields (`id`,
+ * `deleted`, `updatedAt`, `dirty`) are NOT exported — import always mints a fresh id and marks the row
+ * dirty. RFC-4180-style quoting handles commas, quotes and newlines inside notes/names.
  */
 object CollectionCsv {
     /**
@@ -19,38 +23,92 @@ object CollectionCsv {
      * NEWER file is refused with [CsvTooNewException] so the user is told to update rather than importing
      * with silent gaps. Bump this only when a change can't be absorbed by name-mapping (e.g. a column's
      * meaning changes) — a file with no column at all reads as version 1 (predates the marker).
+     *
+     * v2 added `record_type` + the sales/wishlist columns (one file now backs up all three lists). The
+     * bump matters: a v1 app must REFUSE a v2 file rather than import its sale/wishlist rows as
+     * collection copies — which is exactly what the "refuse newer" gate does. A v1 file (no
+     * `record_type`) still imports here: every row reads as a `collection` copy, as before.
      */
-    const val FORMAT_VERSION = 1
+    const val FORMAT_VERSION = 2
 
-    // Header order (version marker first, then user-facing fields). Import is by name, so order is free.
+    // The union of columns across the three record types (version + record_type first, then the shared
+    // identity/display fields, then the per-type value fields). Import maps by name, so order is free and
+    // a row simply leaves the columns its type doesn't use blank.
     private val COLUMNS = listOf(
-        "format_version",
-        "set_number", "name", "item_kind", "quantity", "condition", "price_paid", "currency",
-        "acquired_on", "notes", "theme", "subtheme", "release_year", "release_month",
-        "pieces", "minifigs", "retail_price", "status", "set_id", "fig_num", "image_url",
+        "format_version", "record_type",
+        "set_number", "name", "item_kind", "fig_num", "set_id",
+        "theme", "subtheme", "release_year", "release_month", "pieces", "minifigs",
+        "retail_price", "status", "image_url",
+        "quantity", "condition", "currency", "price_paid", "sale_price",
+        "acquired_on", "sold_on", "notes",
     )
 
-    /** Serialize active copies to CSV text (a header row + one row per copy). */
-    fun encode(copies: List<CollectionCopyEntity>): String {
+    /**
+     * Serialize the user's collection, sales and wishlist to one CSV (a header row + one tagged row per
+     * item). Row order is collection → sales → wishlist, but import keys off `record_type`, not order.
+     */
+    fun encode(
+        copies: List<CollectionCopyEntity>,
+        sales: List<SalesEntity>,
+        wishlist: List<WishlistEntity>,
+    ): String {
         val sb = StringBuilder()
         sb.append(COLUMNS.joinToString(",") { escape(it) }).append('\n')
-        for (c in copies) {
-            val row = listOf(
-                FORMAT_VERSION.toString(),
-                c.setNumber, c.name, c.itemKind, c.quantity.toString(), c.condition,
-                c.pricePaid.toString(), c.currency, c.acquiredOn.orEmpty(), c.notes.orEmpty(),
-                c.theme, c.subtheme, c.releaseYear.toString(), c.releaseMonth.toString(),
-                c.pieces.toString(), c.minifigs.toString(), c.retailPrice?.toString().orEmpty(),
-                c.status, c.setId?.toString().orEmpty(), c.figNum.orEmpty(), c.imageUrl.orEmpty(),
-            )
-            sb.append(row.joinToString(",") { escape(it) }).append('\n')
-        }
+        copies.forEach { appendRow(sb, it.toRow()) }
+        sales.forEach { appendRow(sb, it.toRow()) }
+        wishlist.forEach { appendRow(sb, it.toRow()) }
         return sb.toString()
     }
+
+    /** Emit one row's values in [COLUMNS] order; a column the row omits is written blank. */
+    private fun appendRow(sb: StringBuilder, row: Map<String, String>) {
+        sb.append(COLUMNS.joinToString(",") { escape(row[it].orEmpty()) }).append('\n')
+    }
+
+    private fun CollectionCopyEntity.toRow(): Map<String, String> = mapOf(
+        "format_version" to FORMAT_VERSION.toString(), "record_type" to "collection",
+        "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
+        "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "theme" to theme, "subtheme" to subtheme,
+        "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
+        "pieces" to pieces.toString(), "minifigs" to minifigs.toString(),
+        "retail_price" to retailPrice?.toString().orEmpty(), "status" to status,
+        "image_url" to imageUrl.orEmpty(),
+        "quantity" to quantity.toString(), "condition" to condition, "currency" to currency,
+        "price_paid" to pricePaid.toString(),
+        "acquired_on" to acquiredOn.orEmpty(), "notes" to notes.orEmpty(),
+    )
+
+    private fun SalesEntity.toRow(): Map<String, String> = mapOf(
+        "format_version" to FORMAT_VERSION.toString(), "record_type" to "sale",
+        "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
+        "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "theme" to theme,
+        "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
+        "retail_price" to retailPrice?.toString().orEmpty(), "image_url" to imageUrl.orEmpty(),
+        "quantity" to quantity.toString(), "condition" to condition, "currency" to currency,
+        "price_paid" to pricePaid.toString(), "sale_price" to salePrice.toString(),
+        "sold_on" to soldOn.orEmpty(), "notes" to notes.orEmpty(),
+    )
+
+    private fun WishlistEntity.toRow(): Map<String, String> = mapOf(
+        "format_version" to FORMAT_VERSION.toString(), "record_type" to "wishlist",
+        "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
+        "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "theme" to theme, "subtheme" to subtheme,
+        "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
+        "pieces" to pieces.toString(), "minifigs" to minifigs.toString(),
+        "retail_price" to retailPrice?.toString().orEmpty(), "status" to status,
+        "image_url" to imageUrl.orEmpty(),
+    )
 
     /** The declared format version of a parsed file (from the first row), or 1 when the marker is absent. */
     fun versionOf(parsed: Parsed): Int =
         parsed.rows.firstOrNull()?.get("format_version")?.trim()?.toIntOrNull() ?: 1
+
+    /** A parsed row's record type. A v1 file (no `record_type` column) is entirely collection copies. */
+    fun recordType(row: Map<String, String>): String =
+        row["record_type"]?.trim()?.lowercase()?.ifBlank { null } ?: "collection"
 
     /** A parsed CSV: the [header] columns and the header-keyed data [rows]. */
     data class Parsed(val header: List<String>, val rows: List<Map<String, String>>)

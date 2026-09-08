@@ -99,7 +99,8 @@ fun SetThumb(
 ) {
     val colors = BwTheme.colors
     var showGallery by remember { mutableStateOf(false) }
-    // The ordered chain of URLs to try (box → fallback → extra fallbacks), de-duplicated.
+    // The ordered chain of URLs to try (primary → fallback → extra fallbacks), de-duplicated. Each
+    // caller passes its own preference order — sets lead with the Rebrickable render, box shot as fallback.
     val urls = remember(imageUrl, fallbackUrl, extraFallbacks) {
         (listOfNotNull(imageUrl, fallbackUrl) + extraFallbacks).distinct()
     }

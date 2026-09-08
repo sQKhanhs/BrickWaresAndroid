@@ -84,28 +84,48 @@ class RoomCollectionRepository(
     // ---- CSV export / import (Settings → Data) ----
 
     override suspend fun exportCollectionCsv(): String =
-        CollectionCsv.encode(collectionDao.getActive())
+        CollectionCsv.encode(
+            copies = collectionDao.getActive(),
+            sales = salesDao.getActive(),
+            wishlist = wishlistDao.getActive(),
+        )
 
     override suspend fun importCollectionCsv(csv: String): Int {
         val parsed = CollectionCsv.parse(csv)
-        // Reject a file that isn't a BrickWares export BEFORE touching the collection, so picking the
-        // wrong file can't silently wipe it (a valid but empty export is allowed — it clears everything).
+        // Reject a file that isn't a BrickWares export BEFORE touching anything, so picking the wrong
+        // file can't silently wipe user data (a valid but empty export is allowed — it clears everything).
         require("set_number" in parsed.header && "item_kind" in parsed.header) {
-            "Not a BrickWares collection export"
+            "Not a BrickWares export"
         }
-        // Refuse a file from a newer app version rather than importing it with silently-dropped fields.
+        // Refuse a file from a newer app version rather than importing it with silently-dropped fields
+        // (or, pre-v2, mis-reading sale/wishlist rows as collection copies).
         val version = CollectionCsv.versionOf(parsed)
         if (version > CollectionCsv.FORMAT_VERSION) throw CsvTooNewException(version)
         val now = System.currentTimeMillis()
-        val entities = parsed.rows.mapNotNull { it.toImportedCopy(now) }
-        // Overwrite: tombstone the current copies (so the removals push), then insert the imported rows.
+        // Split the tagged rows into the three lists (a v1 file has no record_type → all collection).
+        val copies = mutableListOf<CollectionCopyEntity>()
+        val sales = mutableListOf<SalesEntity>()
+        val wishlist = mutableListOf<WishlistEntity>()
+        for (row in parsed.rows) {
+            when (CollectionCsv.recordType(row)) {
+                "sale" -> row.toImportedSale(now)?.let(sales::add)
+                "wishlist" -> row.toImportedWishlist(now)?.let(wishlist::add)
+                else -> row.toImportedCopy(now)?.let(copies::add)
+            }
+        }
+        // Overwrite all three tables: tombstone the current rows (so the removals push), then insert the
+        // imported rows. Doing every table under one import keeps the file a full snapshot restore.
         collectionDao.markAllActiveDeleted(now)
-        if (entities.isNotEmpty()) collectionDao.upsertAll(entities)
+        salesDao.markAllActiveDeleted(now)
+        wishlistDao.markAllActiveDeleted(now)
+        if (copies.isNotEmpty()) collectionDao.upsertAll(copies)
+        if (sales.isNotEmpty()) salesDao.upsertAll(sales)
+        if (wishlist.isNotEmpty()) wishlistDao.upsertAll(wishlist)
         // Sync now and wait, so the caller can hold a loading screen until the overwrite has pushed +
         // pulled (and the value cache re-warmed). Best-effort: if it fails (offline) the data is already
         // local and a reconnect sync will push it later.
         sync.syncNow()
-        return entities.size
+        return copies.size + sales.size + wishlist.size
     }
 
     /** One CSV row → a fresh dirty [CollectionCopyEntity]; null when it has no usable item identity. */
@@ -140,6 +160,59 @@ class RoomCollectionRepository(
         )
     }
 
+    /** One CSV row → a fresh dirty [SalesEntity]; null when it has no usable item identity. */
+    private fun Map<String, String>.toImportedSale(now: Long): SalesEntity? {
+        fun s(key: String) = this[key]?.trim()?.ifBlank { null }
+        val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
+        val isFig = kind == "minifig"
+        val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
+        val setNumber = s("set_number") ?: figNum ?: return null
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
+        return SalesEntity(
+            id = UUID.randomUUID().toString(),
+            setId = setId, figNum = if (isFig) (figNum ?: setNumber) else figNum, itemKind = kind,
+            setNumber = setNumber, name = s("name").orEmpty(),
+            theme = s("theme") ?: "Unknown",
+            releaseYear = s("release_year")?.toIntOrNull() ?: 0,
+            releaseMonth = s("release_month")?.toIntOrNull() ?: 0,
+            imageUrl = s("image_url"),
+            retailPrice = s("retail_price")?.toLongOrNull(),
+            quantity = (s("quantity")?.toIntOrNull() ?: 1).coerceAtLeast(1),
+            condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
+            pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
+            salePrice = s("sale_price")?.toLongOrNull() ?: 0L,
+            currency = currency,
+            soldOn = s("sold_on"),
+            notes = s("notes"),
+            deleted = false, updatedAt = now, dirty = true,
+        )
+    }
+
+    /** One CSV row → a fresh dirty [WishlistEntity]; null when it has no usable item identity. */
+    private fun Map<String, String>.toImportedWishlist(now: Long): WishlistEntity? {
+        fun s(key: String) = this[key]?.trim()?.ifBlank { null }
+        val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
+        val isFig = kind == "minifig"
+        val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
+        val setNumber = s("set_number") ?: figNum ?: return null
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        return WishlistEntity(
+            id = UUID.randomUUID().toString(),
+            setId = setId, figNum = if (isFig) (figNum ?: setNumber) else figNum, itemKind = kind,
+            setNumber = setNumber, name = s("name").orEmpty(),
+            theme = s("theme") ?: "Unknown", subtheme = s("subtheme") ?: "General",
+            releaseYear = s("release_year")?.toIntOrNull() ?: 0,
+            releaseMonth = s("release_month")?.toIntOrNull() ?: 0,
+            pieces = s("pieces")?.toIntOrNull() ?: 0,
+            minifigs = s("minifigs")?.toIntOrNull() ?: 0,
+            retailPrice = s("retail_price")?.toLongOrNull(),
+            status = s("status") ?: Availability.AVAILABLE.name,
+            imageUrl = s("image_url"),
+            deleted = false, updatedAt = now, dirty = true,
+        )
+    }
+
     override fun getSoldItems(): Flow<List<SoldItem>> =
         combine(salesDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
             rows.map { entity ->
@@ -156,6 +229,7 @@ class RoomCollectionRepository(
                     // field (holds the fig_num for minifigs) so pre-fix sales without a fig_num recover.
                     imageUrl = minifigFor(entity.figNum ?: entity.setNumber.takeIf { entity.itemKind == "minifig" })?.imageUrl
                         ?: entity.imageUrl,
+                    boxImageUrl = cat?.boxImageUrl,
                     retailPrice = entity.retailPrice ?: 0L,
                     pricePaid = entity.pricePaid, saleValue = entity.salePrice,
                     currency = entity.currency.toCurrency(),
@@ -497,6 +571,8 @@ class RoomCollectionRepository(
             status = status,
             // Minifigs: overlay the catalog image (older rows were stored without it); sets keep theirs.
             imageUrl = fig?.imageUrl ?: head.imageUrl,
+            // Box shot from the live catalog (sets only; null for minifigs) — the card's fallback + gallery.
+            boxImageUrl = cat?.boxImageUrl,
             copies = map { e ->
                 Copy(
                     id = e.id,
@@ -518,6 +594,7 @@ class RoomCollectionRepository(
             pieces = pieces, minifigs = minifigs,
             retailPrice = retailPrice ?: 0L, currentValue = value?.amountUsdCents, currentValueInfo = value, growthPercent = null,
             status = cat?.status ?: status.toAvailability(), imageUrl = minifigFor(figNum)?.imageUrl ?: imageUrl,
+            boxImageUrl = cat?.boxImageUrl,
         )
     }
 

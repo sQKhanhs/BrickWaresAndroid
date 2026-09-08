@@ -485,8 +485,8 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     val isFig = item.itemType == ItemType.MINIFIG
-    // Sets: box shot first, falling back to the render. Minifigs: their stored Rebrickable image.
-    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.boxUrl(item.setNumber)
+    // Sets: the Rebrickable thumb by default, the re-hosted box shot only as a fallback. Minifigs: their stored Rebrickable image.
+    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.thumbUrl(item.setNumber)
     // Sets show a community value only when retired/promo/magazine; its "!" bubble then sits beside the
     // status badge (below), keeping it off the narrow value line where a long ₫ amount clipped.
     val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
@@ -500,12 +500,13 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(item.setNumber),
+            fallbackUrl = if (isFig) null else item.boxImageUrl,
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery; the title still opens the detail.
-            galleryImages = if (isFig) listOfNotNull(item.imageUrl) else CatalogImages.galleryUrls(item.setNumber),
+            // Tap the image → full-screen gallery (render first, then the box shot if captured).
+            galleryImages = if (isFig) listOfNotNull(item.imageUrl)
+                else listOfNotNull(CatalogImages.renderUrl(item.setNumber), item.boxImageUrl),
         )
 
         Spacer(Modifier.width(12.dp))
@@ -695,7 +696,8 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
     // Value shows only for retired/promo/magazine sets; its "!" bubble then sits beside the status
     // badge (below), off the narrow value line where a long ₫ amount clipped.
     val showValue = !isFig && (sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE)
-    val thumbUrl = if (isFig) sold.imageUrl else CatalogImages.boxUrl(sold.setNumber)
+    // Sets: the Rebrickable thumb by default, the re-hosted box shot only as a fallback. Minifigs: their stored Rebrickable image.
+    val thumbUrl = if (isFig) sold.imageUrl else CatalogImages.thumbUrl(sold.setNumber)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -706,12 +708,13 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(sold.setNumber),
+            fallbackUrl = if (isFig) null else sold.boxImageUrl,
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery; the title still opens the detail.
-            galleryImages = if (isFig) listOfNotNull(sold.imageUrl) else CatalogImages.galleryUrls(sold.setNumber),
+            // Tap the image → full-screen gallery (render first, then the box shot if captured).
+            galleryImages = if (isFig) listOfNotNull(sold.imageUrl)
+                else listOfNotNull(CatalogImages.renderUrl(sold.setNumber), sold.boxImageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (isFig) 4.dp else 5.dp)) {

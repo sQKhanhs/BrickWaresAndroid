@@ -256,8 +256,8 @@ private val WishlistHeart = Color(0xFFC9506F)
 private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     val isFig = item.itemType == ItemType.MINIFIG
-    // Sets: box shot first, falling back to the render. Minifigs: their stored Rebrickable image.
-    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.boxUrl(item.setNumber)
+    // Sets: the Rebrickable thumb by default, the re-hosted box shot only as a fallback. Minifigs: their stored Rebrickable image.
+    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.thumbUrl(item.setNumber)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,12 +268,13 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
     ) {
         SetThumb(
             imageUrl = thumbUrl,
-            fallbackUrl = if (isFig) null else CatalogImages.thumbUrl(item.setNumber),
+            fallbackUrl = if (isFig) null else item.boxImageUrl,
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery; the title still opens the detail.
-            galleryImages = if (isFig) listOfNotNull(item.imageUrl) else CatalogImages.galleryUrls(item.setNumber),
+            // Tap the image → full-screen gallery (render first, then the box shot if captured).
+            galleryImages = if (isFig) listOfNotNull(item.imageUrl)
+                else listOfNotNull(CatalogImages.renderUrl(item.setNumber), item.boxImageUrl),
         )
 
         Spacer(Modifier.width(12.dp))

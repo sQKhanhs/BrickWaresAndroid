@@ -104,7 +104,7 @@ class SupabaseCatalogRepository(
                     val rows = client.from("sets")
                         .select(
                             Columns.raw(
-                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,year,pieces," +
+                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,year,pieces," +
                                     "minifigs,availability,notes,notes_vi,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
                             ),
                         )

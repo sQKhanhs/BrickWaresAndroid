@@ -62,8 +62,16 @@ interface WishlistDao {
     @Query("SELECT * FROM wishlist_items WHERE deleted = 0")
     fun observeActive(): Flow<List<WishlistEntity>>
 
+    /** One-shot snapshot of the active wishlist items (for the CSV export). */
+    @Query("SELECT * FROM wishlist_items WHERE deleted = 0")
+    suspend fun getActive(): List<WishlistEntity>
+
     @Query("SELECT COUNT(*) FROM wishlist_items WHERE deleted = 0")
     suspend fun activeCount(): Int
+
+    /** Tombstone every active item (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM wishlist_items WHERE dirty = 1")
     suspend fun getDirty(): List<WishlistEntity>
@@ -95,8 +103,16 @@ interface SalesDao {
     @Query("SELECT * FROM sales WHERE deleted = 0")
     fun observeActive(): Flow<List<SalesEntity>>
 
+    /** One-shot snapshot of the active sales (for the CSV export). */
+    @Query("SELECT * FROM sales WHERE deleted = 0")
+    suspend fun getActive(): List<SalesEntity>
+
     @Query("SELECT COUNT(*) FROM sales WHERE deleted = 0")
     suspend fun activeCount(): Int
+
+    /** Tombstone every active sale (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
+    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM sales WHERE dirty = 1")
     suspend fun getDirty(): List<SalesEntity>

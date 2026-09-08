@@ -80,15 +80,15 @@ fun SetResultCard(
             .padding(14.dp),
     ) {
         SetThumb(
-            // The re-hosted box shot (our Storage, reliable) when captured, else the Rebrickable render.
-            // Both are reliable CDNs — never BrickLink, which rate-limits the burst a scrolling list makes.
-            imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
-            fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
+            // The Rebrickable render (thumb) by default, the re-hosted box shot (our Storage) only as a
+            // fallback. Both reliable CDNs — never BrickLink, which rate-limits the burst a scrolling list makes.
+            imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
+            fallbackUrl = set.boxImageUrl,
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery (box + render); the title still opens the detail.
-            galleryImages = listOfNotNull(set.boxImageUrl, set.imageUrl),
+            // Tap the image → full-screen gallery (render first, then the box shot); the title still opens the detail.
+            galleryImages = listOfNotNull(set.imageUrl, set.boxImageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {

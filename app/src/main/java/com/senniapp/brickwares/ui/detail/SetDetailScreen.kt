@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -199,17 +200,17 @@ private fun SetDetailContent(
             return@Box
         }
         val set = state.set
-        // The hero shows the re-hosted box shot (our Storage, reliable) when captured, else the light
-        // Rebrickable render — no BrickLink request on open either way.
-        val heroFallback = set?.let { it.thumbnailUrl ?: it.imageUrl }
+        // The hero shows the light Rebrickable render (thumb) by default, falling back to the re-hosted
+        // box shot only when the render is missing — no BrickLink request on open either way.
+        val rebrickableThumb = set?.let { it.thumbnailUrl ?: CatalogImages.thumbUrl(it.setNumber, it.numberVariant) }
         val rebrickableRender = set?.let { CatalogImages.renderUrl(it.setNumber, it.numberVariant) }
-        // Gallery (opened on an explicit tap): the Storage box first; if none was captured yet, the
-        // BrickLink box as a tap-only stand-in; then the render. The viewer drops any that 404/403, so a
-        // boxless / throttled set still opens on a working render instead of a dead page.
+        // Gallery (opened on an explicit tap): the Rebrickable render first, then the Storage box shot if
+        // captured; a set with no captured box falls back to the BrickLink box as a tap-only stand-in. The
+        // viewer drops any that 404/403, so a set still opens on a working render instead of a dead page.
         val galleryImages = listOfNotNull(
+            rebrickableRender,
             set?.boxImageUrl,
             if (set?.boxImageUrl == null) set?.let { CatalogImages.boxUrl(it.setNumber, it.numberVariant) } else null,
-            rebrickableRender,
         ).distinct()
         Column(modifier = Modifier.fillMaxSize()) {
             // Sticky back header — pinned above the scroll so a long minifig list can still be exited
@@ -248,17 +249,17 @@ private fun SetDetailContent(
                 return@Column
             }
 
-            // Hero: image + title + actions. The re-hosted box shot when captured, else the Rebrickable
-            // render — both reliable CDNs, no BrickLink hit on open.
+            // Hero: image + title + actions. The Rebrickable render (thumb) by default, the re-hosted box
+            // shot only as a fallback — both reliable CDNs, no BrickLink hit on open.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 SetThumb(
-                    imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
-                    fallbackUrl = heroFallback,
+                    imageUrl = rebrickableThumb,
+                    fallbackUrl = set.boxImageUrl,
                     itemType = set.itemType,
                     size = 96.dp,
                     iconSize = 40.dp,
                     corner = 12.dp,
-                    // Tap the image to open the full-screen gallery (box shot first, then renders).
+                    // Tap the image to open the full-screen gallery (render first, then the box shot).
                     modifier = if (galleryImages.isNotEmpty()) {
                         Modifier.clickable { showGallery = true }
                     } else {
@@ -537,8 +538,9 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 
 /**
  * The "Minifigs" section: the figs this set contains, in a 2-column grid. Each card shows the fig
- * number, name, image, an "Exclusive" badge when the fig appears in only this set, and the community
- * value line (with the "!" bubble; `----` when there's no value) — matching the item-list cards.
+ * number, name, image, then either an "Exclusive" badge (fig appears in only this set) or an "In N sets"
+ * count (how many catalog sets it appears in), and the community value line (with the "!" bubble;
+ * `----` when there's no value) — matching the item-list cards.
  * Built manually (not a lazy grid) because the detail page is one scrolling Column.
  */
 @Composable
@@ -608,11 +610,26 @@ private fun MinifigGridCard(fig: Minifig, value: CurrentValue?, onClick: () -> U
             modifier = Modifier.fillMaxWidth(),
         )
         SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 36.dp, corner = 10.dp)
-        // "Exclusive" badge below the image (left-aligned) when the fig appears in only this set —
-        // kept off the image so it stays legible.
-        if (fig.setCount <= 1) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+        // Below the image (left-aligned, off the image so it stays legible): an "Exclusive" badge when the
+        // fig appears in only this set, otherwise how many catalog sets it appears in ("In N sets").
+        Row(modifier = Modifier.fillMaxWidth()) {
+            if (fig.setCount <= 1) {
                 StatusBadge(Availability.EXCLUSIVE)
+            } else {
+                // A neutral pill (same slot + shape as the Exclusive badge) so "In N sets" reads as a
+                // tag that stands apart from the muted value line just below it.
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.track)
+                        .padding(horizontal = 9.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        pluralStringResource(R.plurals.search_minifig_sets, fig.setCount, fig.setCount),
+                        style = BwType.micro,
+                        color = colors.textSecondary,
+                    )
+                }
             }
         }
         // Push the value line to the bottom so it aligns across equal-height cards in a row.

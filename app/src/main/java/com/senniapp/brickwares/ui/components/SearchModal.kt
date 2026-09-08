@@ -107,7 +107,7 @@ fun SearchModal(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Re-hosted box shot when captured, else the Rebrickable render — both reliable (never BrickLink).
-                            SetThumb(imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant), fallbackUrl = set.thumbnailUrl ?: set.imageUrl, itemType = set.itemType, size = 44.dp, iconSize = 20.dp)
+                            SetThumb(imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant), fallbackUrl = set.boxImageUrl ?: set.imageUrl, itemType = set.itemType, size = 44.dp, iconSize = 20.dp)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)

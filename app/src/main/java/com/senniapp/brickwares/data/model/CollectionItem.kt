@@ -50,7 +50,10 @@ data class CollectionItem(
     val currentValueInfo: CurrentValue? = null,
     val growthPercent: Double? = null,
     val status: Availability = Availability.AVAILABLE,
+    /** Default card image: the Rebrickable render (thumb). See [boxImageUrl] for the box-shot fallback. */
     val imageUrl: String? = null,
+    /** Re-hosted box shot (R2) — the card image fallback and the tap gallery's second image, after the render. */
+    val boxImageUrl: String? = null,
     val copies: List<Copy> = emptyList(),
 ) {
     /** Total paid across all copies, in **USD cents** (copies may carry different currencies, so each

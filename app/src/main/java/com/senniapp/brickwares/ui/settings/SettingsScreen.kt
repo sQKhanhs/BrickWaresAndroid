@@ -190,7 +190,7 @@ private fun SettingsContent(
     }
     var showImportConfirm by remember { mutableStateOf(false) }
     var showNoInternet by remember { mutableStateOf(false) }
-    val exportFileName = "brickwares-collection-${LocalDate.now()}.csv"
+    val exportFileName = "brickwares-backup-${LocalDate.now()}.csv"
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         Column(
             modifier = Modifier

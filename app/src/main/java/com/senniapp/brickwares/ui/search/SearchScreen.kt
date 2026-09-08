@@ -1024,8 +1024,8 @@ private fun ResultCard(
     val valueRepo = ValueRepositoryProvider.instance
     val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
     val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
-    // The re-hosted box shot (our Storage) when captured, else the Rebrickable render — both reliable
-    // CDNs, never BrickLink (which rate-limits the burst a scrolling list makes).
+    // The Rebrickable render (thumb) by default, the re-hosted box shot (our Storage) only as a fallback —
+    // both reliable CDNs, never BrickLink (which rate-limits the burst a scrolling list makes).
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1035,13 +1035,13 @@ private fun ResultCard(
             .padding(14.dp),
     ) {
         SetThumb(
-            imageUrl = set.boxImageUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
-            fallbackUrl = set.thumbnailUrl ?: set.imageUrl,
+            imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
+            fallbackUrl = set.boxImageUrl,
             itemType = set.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery (box + render); the title still opens the detail.
-            galleryImages = listOfNotNull(set.boxImageUrl, set.imageUrl),
+            // Tap the image → full-screen gallery (render first, then the box shot); the title still opens the detail.
+            galleryImages = listOfNotNull(set.imageUrl, set.boxImageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
