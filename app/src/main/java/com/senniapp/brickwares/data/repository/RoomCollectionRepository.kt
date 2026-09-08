@@ -300,6 +300,10 @@ class RoomCollectionRepository(
         item.copies.lastOrNull()?.let { copy ->
             contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
         }
+        // Owning an item removes it from the wishlist (want → have) — applies to EVERY add path (search,
+        // detail, collection, or the wishlist "Move"). No-op when it wasn't wishlisted; marks the row
+        // deleted+dirty so the removal syncs. Keyed by setNumber (a minifig's fig_num is stored there).
+        wishlistDao.markDeletedBySetNumber(item.setNumber, now)
     }
 
     override fun removeCopy(setNumber: String, copyId: String) = write {
@@ -595,6 +599,7 @@ class RoomCollectionRepository(
             retailPrice = retailPrice ?: 0L, currentValue = value?.amountUsdCents, currentValueInfo = value, growthPercent = null,
             status = cat?.status ?: status.toAvailability(), imageUrl = minifigFor(figNum)?.imageUrl ?: imageUrl,
             boxImageUrl = cat?.boxImageUrl,
+            addedAt = updatedAt,
         )
     }
 

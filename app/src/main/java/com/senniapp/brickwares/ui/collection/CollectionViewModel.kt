@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.ItemDetailsTab
+import com.senniapp.brickwares.ui.components.ItemSort
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.util.AppCurrency
@@ -71,6 +72,14 @@ class CollectionViewModel(
 
     fun onSalesPageChange(page: Int) {
         _uiState.update { it.copy(salesPage = page) }
+    }
+
+    fun onSortChange(sort: ItemSort) {
+        _uiState.update { it.copy(sort = sort, page = 1) }
+    }
+
+    fun onSalesSortChange(sort: ItemSort) {
+        _uiState.update { it.copy(salesSort = sort, salesPage = 1) }
     }
 
     fun onToggleMode() {

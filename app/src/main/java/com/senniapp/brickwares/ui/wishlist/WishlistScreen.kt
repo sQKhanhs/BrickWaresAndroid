@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,9 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ChipItem
+import com.senniapp.brickwares.ui.components.ItemSort
+import com.senniapp.brickwares.ui.components.ItemSortOptionsFull
+import com.senniapp.brickwares.ui.components.SortRow
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.blinkAttention
 import com.senniapp.brickwares.ui.components.GrowthPill
@@ -88,6 +92,7 @@ fun WishlistScreen(
         isLoggedIn = rememberIsLoggedIn(),
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
+        onSortChange = viewModel::onSortChange,
         onNavigateToSearch = onNavigateToSearch,
         onOpenSetDetail = onOpenSetDetail,
         onOpenMinifigDetail = onOpenMinifigDetail,
@@ -101,6 +106,7 @@ fun WishlistScreen(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WishlistContent(
     state: WishlistUiState,
@@ -108,6 +114,7 @@ private fun WishlistContent(
     isLoggedIn: Boolean = true,
     onFilterSelected: (WishlistFilter) -> Unit,
     onPageChange: (Int) -> Unit,
+    onSortChange: (ItemSort) -> Unit,
     onNavigateToSearch: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onOpenMinifigDetail: (String) -> Unit = {},
@@ -172,9 +179,15 @@ private fun WishlistContent(
                 )
                 Spacer(Modifier.height(16.dp))
             }
-            item {
-                FilterChips(selected = state.filter, onSelect = onFilterSelected)
-                Spacer(Modifier.height(14.dp))
+            stickyHeader {
+                // Sticky so the filter + sort stay reachable while the list scrolls; the opaque
+                // background hides the cards sliding under it.
+                Column(Modifier.background(colors.bg)) {
+                    FilterChips(selected = state.filter, onSelect = onFilterSelected)
+                    Spacer(Modifier.height(10.dp))
+                    SortRow(selected = state.sort, options = ItemSortOptionsFull, onSelect = onSortChange)
+                    Spacer(Modifier.height(14.dp))
+                }
             }
             if (!state.isLoading && state.visibleItems.isEmpty()) {
                 item { EmptyStateArt(stringResource(R.string.wishlist_empty)) }

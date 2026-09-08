@@ -9,7 +9,9 @@ import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.SalesSummary
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.components.ItemDetailsTab
+import com.senniapp.brickwares.ui.components.ItemSort
 import com.senniapp.brickwares.ui.components.PAGE_SIZE
+import com.senniapp.brickwares.util.CurrencyConverter
 
 /** Collection tab has two modes: the collection view and its Sales sub-view. */
 enum class CollectionMode { COLLECTION, SALES }
@@ -51,6 +53,10 @@ data class CollectionUiState(
     val page: Int = 1,
     /** 1-based current page for the Sales (sold items) list — independent of [page]. */
     val salesPage: Int = 1,
+    /** Sort order for the collection list. */
+    val sort: ItemSort = ItemSort.DATE_ADDED,
+    /** Sort order for the Sales (sold items) list — independent of [sort]. */
+    val salesSort: ItemSort = ItemSort.DATE_ADDED,
     /** When non-null, the swipe-to-delete confirmation dialog is open for this set. */
     val pendingDeleteSetNumber: String? = null,
     /** When non-null, the swipe-to-delete confirmation dialog is open for this sale record. */
@@ -80,15 +86,15 @@ data class CollectionUiState(
     val pageCount: Int get() = ((visibleItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
     val currentPage: Int get() = page.coerceIn(1, pageCount)
 
-    /** The current page's slice of [visibleItems] (what the collection list renders). */
+    /** The current page's slice of the sorted [visibleItems] (what the collection list renders). */
     val pageItems: List<CollectionItem>
-        get() = visibleItems.drop((currentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
+        get() = visibleItems.applyItemSort(sort).drop((currentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     /** Numbered pagination for the Sales (sold items) list. */
     val salesPageCount: Int get() = ((soldItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
     val salesCurrentPage: Int get() = salesPage.coerceIn(1, salesPageCount)
     val salesPageItems: List<SoldItem>
-        get() = soldItems.drop((salesCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
+        get() = soldItems.applySalesSort(salesSort).drop((salesCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     /** The set whose See Details modal is open, resolved from the live list (null closes it). */
     val detailItem: CollectionItem?
@@ -108,4 +114,27 @@ data class CollectionUiState(
             val copy = sellCopyId?.let { cid -> item.copies.find { it.id == cid } } ?: return null
             return item to copy
         }
+}
+
+/** Release ordering key: year*100 + month (month 0 = unknown, sorts before real months in a year). */
+private fun releaseKey(year: Int, month: Int): Int = year * 100 + month
+
+/** Apply an [ItemSort] to owned items: price = total paid (USD cents); date = the latest copy's acquired date. */
+private fun List<CollectionItem>.applyItemSort(sort: ItemSort): List<CollectionItem> = when (sort) {
+    ItemSort.NAME -> sortedBy { it.name.lowercase() }
+    ItemSort.PRICE_HIGH -> sortedByDescending { it.totalPaid }
+    ItemSort.PRICE_LOW -> sortedBy { it.totalPaid }
+    ItemSort.DATE_ADDED -> sortedByDescending { it.copies.mapNotNull { c -> c.dateAdded.ifBlank { null } }.maxOrNull() ?: "" }
+    ItemSort.RELEASE_NEWEST -> sortedByDescending { releaseKey(it.releaseYear, it.releaseMonth) }
+    ItemSort.RELEASE_OLDEST -> sortedBy { releaseKey(it.releaseYear, it.releaseMonth) }
+}
+
+/** Apply an [ItemSort] to sold items: price = sale value normalized to USD cents; date = the sold date. */
+private fun List<SoldItem>.applySalesSort(sort: ItemSort): List<SoldItem> = when (sort) {
+    ItemSort.NAME -> sortedBy { it.name.lowercase() }
+    ItemSort.PRICE_HIGH -> sortedByDescending { CurrencyConverter.usdCentsOf(it.saleValue, it.currency) }
+    ItemSort.PRICE_LOW -> sortedBy { CurrencyConverter.usdCentsOf(it.saleValue, it.currency) }
+    ItemSort.DATE_ADDED -> sortedByDescending { it.soldOn ?: "" }
+    ItemSort.RELEASE_NEWEST -> sortedByDescending { releaseKey(it.releaseYear, it.releaseMonth) }
+    ItemSort.RELEASE_OLDEST -> sortedBy { releaseKey(it.releaseYear, it.releaseMonth) }
 }

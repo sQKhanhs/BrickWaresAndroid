@@ -133,6 +133,7 @@
     <string name="settings_sign_in">Sign in</string>
     <string name="settings_language">Language</string>
     <string name="settings_currency">Currency</string>
+    <string name="settings_currency_vnd_note">Retail price in VND is converted from USD (based on the current global conversion rate), or from another currency if USD is not available.</string>
     <string name="settings_theme">Theme</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
@@ -270,6 +271,7 @@
     <string name="sort_price_high">Price: high to low</string>
     <string name="sort_price_low">Price: low to high</string>
     <string name="sort_name">Name</string>
+    <string name="sort_date_added">Date added</string>
     <string name="sort_value_high">Value: high to low</string>
     <string name="sort_value_low">Value: low to high</string>
     <string name="sort_most_sets">In most sets</string>

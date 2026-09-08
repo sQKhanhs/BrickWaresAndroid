@@ -57,6 +57,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -273,6 +274,16 @@ private fun SettingsContent(
                     options = listOf(AppCurrency.VND to currencyLabel(AppCurrency.VND), AppCurrency.USD to currencyLabel(AppCurrency.USD)),
                     onSelect = onCurrencyChange,
                 )
+                // VND is a converted display (USD is the catalog's canonical currency), so tell the user
+                // the retail figures aren't native prices.
+                if (state.currency == AppCurrency.VND) {
+                    Text(
+                        stringResource(R.string.settings_currency_vnd_note),
+                        style = BwType.body.copy(fontSize = 12.sp, fontStyle = FontStyle.Italic),
+                        color = colors.textMuted,
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
+                    )
+                }
                 RowDivider()
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),

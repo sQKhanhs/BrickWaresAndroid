@@ -3,6 +3,7 @@ package com.senniapp.brickwares.ui.wishlist
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.ItemSort
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -46,6 +47,10 @@ class WishlistViewModel(
 
     fun onPageChange(page: Int) {
         _uiState.update { it.copy(page = page) }
+    }
+
+    fun onSortChange(sort: ItemSort) {
+        _uiState.update { it.copy(sort = sort, page = 1) }
     }
 
     fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)

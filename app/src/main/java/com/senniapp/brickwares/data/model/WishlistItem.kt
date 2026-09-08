@@ -25,4 +25,7 @@ data class WishlistItem(
     val imageUrl: String? = null,
     /** Re-hosted box shot (R2) — the card image fallback and the tap gallery's second image, after the render. */
     val boxImageUrl: String? = null,
+    /** When the item was added to the wishlist (epoch millis; the row's updatedAt — wishlist rows aren't
+     *  edited after adding, so this is effectively the "date added"). Drives the "Date added" sort. */
+    val addedAt: Long = 0L,
 )

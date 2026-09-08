@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
@@ -67,7 +68,10 @@ import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.ItemDetailsDialog
 import com.senniapp.brickwares.ui.components.SellCopyDialog
+import com.senniapp.brickwares.ui.components.ItemSort
+import com.senniapp.brickwares.ui.components.ItemSortOptionsFull
 import com.senniapp.brickwares.ui.components.SetThumb
+import com.senniapp.brickwares.ui.components.SortRow
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
@@ -107,6 +111,8 @@ fun CollectionScreen(
         onFilterSelected = viewModel::onFilterSelected,
         onPageChange = viewModel::onPageChange,
         onSalesPageChange = viewModel::onSalesPageChange,
+        onSortChange = viewModel::onSortChange,
+        onSalesSortChange = viewModel::onSalesSortChange,
         onToggleMode = viewModel::onToggleMode,
         onAddClick = viewModel::onAddClick,
         onItemDetail = viewModel::onItemDetail,
@@ -137,6 +143,7 @@ fun CollectionScreen(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CollectionContent(
     state: CollectionUiState,
@@ -147,6 +154,8 @@ private fun CollectionContent(
     onFilterSelected: (CollectionFilter) -> Unit,
     onPageChange: (Int) -> Unit,
     onSalesPageChange: (Int) -> Unit,
+    onSortChange: (ItemSort) -> Unit,
+    onSalesSortChange: (ItemSort) -> Unit,
     onToggleMode: () -> Unit,
     onAddClick: () -> Unit,
     onItemDetail: (CollectionItem) -> Unit,
@@ -245,9 +254,15 @@ private fun CollectionContent(
                         Spacer(Modifier.height(16.dp))
                     }
                 }
-                item {
-                    FilterChips(selected = state.filter, onSelect = onFilterSelected)
-                    Spacer(Modifier.height(14.dp))
+                stickyHeader {
+                    // Sticky so the filter + sort stay reachable while the list scrolls; the opaque
+                    // background hides the cards sliding under it.
+                    Column(Modifier.background(colors.bg)) {
+                        FilterChips(selected = state.filter, onSelect = onFilterSelected)
+                        Spacer(Modifier.height(10.dp))
+                        SortRow(selected = state.sort, options = ItemSortOptionsFull, onSelect = onSortChange)
+                        Spacer(Modifier.height(14.dp))
+                    }
                 }
                 if (state.visibleItems.isEmpty()) {
                     item { EmptyStateArt(stringResource(R.string.collection_empty)) }
@@ -290,6 +305,13 @@ private fun CollectionContent(
                 if (state.soldItems.isEmpty()) {
                     item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
+                    stickyHeader {
+                        // Sales has no All/Set/Minifig filter, so its sort control sticks on its own.
+                        Column(Modifier.background(colors.bg)) {
+                            SortRow(selected = state.salesSort, options = ItemSortOptionsFull, onSelect = onSalesSortChange)
+                            Spacer(Modifier.height(14.dp))
+                        }
+                    }
                     items(state.salesPageItems, key = { it.id }) { sold ->
                         SwipeToDelete(onSwiped = { onRequestDeleteSale(sold.id) }, autoDismiss = false) {
                             SoldCard(
