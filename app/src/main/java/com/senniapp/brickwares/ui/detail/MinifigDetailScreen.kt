@@ -131,7 +131,8 @@ fun MinifigDetailScreen(
 
             // Hero: image + name + actions.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 40.dp, corner = 12.dp)
+                // Tap the image → full-screen gallery (SetThumb opens it when galleryImages is set).
+                SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 40.dp, corner = 12.dp, galleryImages = listOfNotNull(fig.imageUrl))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(fig.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
                     if (state.isOwned || state.isSold) {
@@ -168,7 +169,8 @@ fun MinifigDetailScreen(
             // Minifig details.
             SectionCard(title = stringResource(R.string.minifig_details)) {
                 DetailRow(stringResource(R.string.minifig_number), fig.figNum)
-                DetailRow(stringResource(R.string.detail_name), fig.name)
+                // Name is omitted here — it's already the hero title + sticky header, and a long name
+                // wrapping made this card's rows look uneven.
                 // "In sets" count; when the fig is in only one set, mark it Exclusive next to the count.
                 if (fig.setCount > 0) InSetsRow(count = fig.setCount)
                 if (fig.themes.isNotEmpty()) DetailRow(stringResource(R.string.meta_theme), fig.themes.joinToString(", "))
