@@ -16,6 +16,12 @@ data class HomeUiState(
     val currency: AppCurrency = AppCurrency.USD,
     val summary: CollectionSummary? = null,
     val themes: List<ThemeSummary> = emptyList(),
+    /** Signed-in user's display name, shown on the share card ("<name> · My Collection"). */
+    val memberName: String = "",
+    /** The owned items (value desc) — the pool the share card's "Top Sets" slots pick from. */
+    val collectionSets: List<FeaturedSet> = emptyList(),
+    /** Whether the Share Collection sheet is open. */
+    val shareOpen: Boolean = false,
 ) {
     /**
      * The page is shown only once BOTH the collection summary has loaded AND auth has resolved — so
@@ -29,3 +35,12 @@ data class HomeUiState(
     val canShare: Boolean
         get() = isLoggedIn && (summary?.setCount ?: 0) > 0
 }
+
+/** A collection item as a "Top Sets" slot / picker entry. [value] is the line's total worth, in [HomeUiState.currency]'s unit. */
+data class FeaturedSet(
+    val setNumber: String,
+    val name: String,
+    val theme: String,
+    val value: Long,
+    val imageUrl: String? = null,
+)

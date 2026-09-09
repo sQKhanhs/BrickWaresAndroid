@@ -108,6 +108,21 @@
     <string name="home_paid_pill">Đã trả %1$s</string>
     <string name="home_signin_prompt">Đăng nhập để lưu và đồng bộ bộ sưu tập của bạn</string>
     <string name="home_collection_by_theme">Bộ sưu tập theo chủ đề</string>
+    <!-- Share collection sheet -->
+    <string name="share_title">Chia Sẻ Bộ Sưu Tập</string>
+    <string name="share_action">Chia Sẻ</string>
+    <string name="share_chooser_title">Chia sẻ bộ sưu tập của bạn</string>
+    <string name="share_top_sets">Set/Minifig Yêu Thích</string>
+    <string name="share_by_theme">Theo Chủ Đề</string>
+    <string name="share_footer">Theo dõi bằng BrickWares</string>
+    <string name="share_hide_value">Ẩn giá trị</string>
+    <string name="share_show_value">Hiện giá trị</string>
+    <string name="share_add_set_slot">Chạm để thêm từ bộ sưu tập</string>
+    <string name="share_choose_set">Chọn một bộ</string>
+    <string name="share_save">Lưu</string>
+    <string name="share_saved">Đã lưu vào Ảnh</string>
+    <string name="share_save_failed">Không thể lưu ảnh</string>
+    <string name="share_failed">Không thể tạo ảnh chia sẻ</string>
     <plurals name="home_theme_set_count">
         <item quantity="other">%1$d bộ</item>
     </plurals>

@@ -83,6 +83,7 @@ fun HomeScreen(
         showHeroGif = showGif,
         onGifFinished = viewModel::onHeroGifPlayed,
         onShareClick = viewModel::onShareClick,
+        onCloseShare = viewModel::onCloseShare,
         modifier = modifier,
     )
 }
@@ -94,6 +95,7 @@ private fun HomeContent(
     showHeroGif: Boolean,
     onGifFinished: () -> Unit,
     onShareClick: () -> Unit,
+    onCloseShare: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -155,6 +157,9 @@ private fun HomeContent(
                 )
             }
             Spacer(Modifier.height(24.dp))
+        }
+        if (state.shareOpen) {
+            ShareCollectionSheet(state = state, onDismiss = onCloseShare)
         }
     }
 }

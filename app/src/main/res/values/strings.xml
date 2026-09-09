@@ -108,6 +108,21 @@
     <string name="home_paid_pill">Paid %1$s</string>
     <string name="home_signin_prompt">Sign in to save and sync your collection</string>
     <string name="home_collection_by_theme">Collection by Theme</string>
+    <!-- Share collection sheet -->
+    <string name="share_title">Share Collection</string>
+    <string name="share_action">Share</string>
+    <string name="share_chooser_title">Share your collection</string>
+    <string name="share_top_sets">Top Sets/Minifigs</string>
+    <string name="share_by_theme">By Theme</string>
+    <string name="share_footer">Tracked with BrickWares</string>
+    <string name="share_hide_value">Hide value</string>
+    <string name="share_show_value">Show value</string>
+    <string name="share_add_set_slot">Tap to add an item from your collection</string>
+    <string name="share_choose_set">Choose a set</string>
+    <string name="share_save">Save</string>
+    <string name="share_saved">Saved to Photos</string>
+    <string name="share_save_failed">Couldn\'t save the image</string>
+    <string name="share_failed">Couldn\'t create the share image</string>
     <plurals name="home_theme_set_count">
         <item quantity="one">%1$d set</item>
         <item quantity="other">%1$d sets</item>

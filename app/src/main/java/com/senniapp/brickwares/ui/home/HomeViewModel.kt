@@ -50,6 +50,7 @@ class HomeViewModel(
                         isLoggedIn = authState is AuthState.SignedIn,
                         // Resolved once it's no longer the initial Loading state (SignedIn or SignedOut).
                         authReady = authState !is AuthState.Loading,
+                        memberName = (authState as? AuthState.SignedIn)?.user?.displayName ?: "",
                     )
                 }
             }
@@ -63,12 +64,26 @@ class HomeViewModel(
             items to currency
         }
             .onEach { (items, currency) ->
+                // All owned items (value desc, in the display currency) — the pool the share card's
+                // "Top Sets" slots pick from. Value = per-unit worth × qty.
+                val sets = items
+                    .map { item ->
+                        FeaturedSet(
+                            setNumber = item.setNumber,
+                            name = item.name,
+                            theme = item.theme,
+                            value = item.worthPerUnitIn(currency) * item.totalQty,
+                            imageUrl = item.imageUrl,
+                        )
+                    }
+                    .sortedByDescending { it.value }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         currency = currency,
                         summary = collectionSummaryOf(items, currency),
                         themes = themeSummariesOf(items, currency),
+                        collectionSets = sets,
                     )
                 }
             }
@@ -76,6 +91,10 @@ class HomeViewModel(
     }
 
     fun onShareClick() {
-        // TODO: open the share sheet once implemented.
+        _uiState.update { it.copy(shareOpen = true) }
+    }
+
+    fun onCloseShare() {
+        _uiState.update { it.copy(shareOpen = false) }
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider roots. Only the rendered share image (cacheDir/shared/) is exposed, read-only,
+     to whichever app the user picks in the share sheet. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="shared_images" path="shared/" />
+</paths>
