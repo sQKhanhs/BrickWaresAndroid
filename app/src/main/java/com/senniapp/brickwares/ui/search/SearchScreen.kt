@@ -60,7 +60,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
-import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.Minifig
@@ -69,16 +68,14 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.BackCircleButton
-import com.senniapp.brickwares.ui.components.MetaLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.PaginationBar
-import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
-import com.senniapp.brickwares.ui.components.StatusBadgeWithValueInfo
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.ErrorScreen
+import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -86,8 +83,6 @@ import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.util.formatMoney
-import com.senniapp.brickwares.ui.components.releaseLabel
-import com.senniapp.brickwares.ui.components.retailLabel
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)
@@ -297,7 +292,7 @@ private fun SearchContent(
                             Spacer(Modifier.height(10.dp))
                         }
                         items(state.results, key = { it.id }) { set ->
-                            ResultCard(
+                            SetResultCard(
                                 set = set,
                                 wishlisted = set.setNumber in state.wishlistedNumbers,
                                 owned = set.setNumber in state.ownedNumbers || set.setNumber in state.soldNumbers,
@@ -680,7 +675,7 @@ private fun ThemeDetailView(
             Spacer(Modifier.height(12.dp))
         }
         items(results, key = { it.id }) { set ->
-            ResultCard(
+            SetResultCard(
                 set = set,
                 wishlisted = set.setNumber in wishlistedNumbers,
                 owned = set.setNumber in ownedNumbers || set.setNumber in soldNumbers,
@@ -1001,121 +996,6 @@ private fun SuggestionRow(@DrawableRes icon: Int, title: String, subtitle: Strin
         Column(Modifier.weight(1f)) {
             Text(title, style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text, maxLines = 1)
             Text(subtitle, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun ResultCard(
-    set: CatalogSet,
-    wishlisted: Boolean,
-    owned: Boolean,
-    onOpenDetail: () -> Unit,
-    onAddCollection: () -> Unit,
-    onAddWishlist: () -> Unit,
-) {
-    val colors = BwTheme.colors
-    // Adding/wishlisting needs an account; logged out → prompt sign-in instead.
-    val isLoggedIn = rememberIsLoggedIn()
-    val add = { if (isLoggedIn) onAddCollection() else SignInController.request() }
-    val wish = { if (isLoggedIn) onAddWishlist() else SignInController.request() }
-    // Community value (Decision 17), read once so the meta column's "!" freshness bubble (beside the
-    // status badge) and the price column's amount share it.
-    val valueRepo = ValueRepositoryProvider.instance
-    val valueRev by valueRepo.revision.collectAsStateWithLifecycle()
-    val currentValue = remember(set.setId, valueRev) { valueRepo.valueFor(set.setId) }
-    // The Rebrickable render (thumb) by default, the re-hosted box shot (our Storage) only as a fallback —
-    // both reliable CDNs, never BrickLink (which rate-limits the burst a scrolling list makes).
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.card)
-            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(14.dp))
-            .padding(14.dp),
-    ) {
-        SetThumb(
-            imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
-            fallbackUrl = set.boxImageUrl,
-            itemType = set.itemType,
-            size = 72.dp,
-            iconSize = 30.dp,
-            // Tap the image → full-screen gallery (render first, then the box shot); the title still opens the detail.
-            galleryImages = listOfNotNull(set.imageUrl, set.boxImageUrl),
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("${set.setNumber} ${set.name}", style = BwType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = colors.linkAccent, modifier = Modifier.clickable(onClick = onOpenDetail))
-            MetaLine(stringResource(R.string.meta_theme), set.theme)
-            MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
-            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
-            StatusBadgeWithValueInfo(set.status, currentValue)
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(
-            modifier = Modifier.width(120.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            PriceLine(stringResource(R.string.price_retail), retailLabel(set.retailPrice, BwTheme.currency))
-            // Value amount (Decision 17); its "!" freshness bubble sits beside the status badge above.
-            ValuePriceLine(currentValue, showBubble = false)
-            if (owned) {
-                // Already in the collection → a single "See Detail" (opens the set detail), no add/wishlist.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(colors.track)
-                        .clickable(onClick = onOpenDetail)
-                        .padding(vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(painter = painterResource(R.drawable.ic_bw_check), contentDescription = null, tint = colors.text, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.action_see_detail), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
-                }
-            } else {
-                // Add to collection.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(colors.brandYellow)
-                        .clickable(onClick = add)
-                        .padding(vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(painter = painterResource(R.drawable.ic_bw_pieces), contentDescription = null, tint = colors.onYellow, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
-                }
-                // Wishlist / Wishlisted.
-                val wishlistModifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(999.dp))
-                    .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
-                    .then(if (wishlisted) Modifier else Modifier.clickable(onClick = wish))
-                    .padding(vertical = 7.dp)
-                Row(
-                    modifier = wishlistModifier,
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_bw_heart),
-                        contentDescription = null,
-                        tint = if (wishlisted) WishlistHeart else colors.textMuted,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(if (wishlisted) R.string.action_wishlisted else R.string.action_wishlist), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
-                }
-            }
         }
     }
 }

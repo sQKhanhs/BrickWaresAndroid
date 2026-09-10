@@ -108,6 +108,12 @@
     <string name="home_paid_pill">Paid %1$s</string>
     <string name="home_signin_prompt">Sign in to save and sync your collection</string>
     <string name="home_collection_by_theme">Collection by Theme</string>
+    <!-- New LEGO Sets (Home card + full page) -->
+    <string name="home_new_sets_title">New LEGO Sets</string>
+    <string name="home_new_sets_subtitle">See the latest LEGO sets added</string>
+    <string name="home_new_sets_view_more">View more new sets</string>
+    <string name="new_sets_title">New Sets</string>
+    <string name="new_sets_count">%1$d new sets</string>
     <!-- Share collection sheet -->
     <string name="share_title">Share Collection</string>
     <string name="share_action">Share</string>

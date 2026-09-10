@@ -16,6 +16,7 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,7 +54,13 @@ class SearchViewModel(
             catalogRepo.revision.collect {
                 catalog = catalogRepo.all()
                 if (catalog.isNotEmpty()) {
-                    _uiState.update { it.copy(themes = buildThemes(), isLoading = false).withReorderedThemes() }
+                    _uiState.update {
+                        it.copy(
+                            themes = buildThemes(),
+                            newSetsByTheme = NewSets.groupedByTheme(catalog),
+                            isLoading = false,
+                        ).withReorderedThemes()
+                    }
                 }
             }
         }

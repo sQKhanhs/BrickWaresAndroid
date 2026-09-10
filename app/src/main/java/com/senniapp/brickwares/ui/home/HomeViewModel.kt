@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
+import com.senniapp.brickwares.data.repository.CatalogRepository
+import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.collectionSummaryOf
 import com.senniapp.brickwares.data.repository.themeSummariesOf
 import com.senniapp.brickwares.data.local.CurrencyPrefs
+import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * ViewModel for the Home screen. Observes the real auth session (for the logged-out "!" prompt) and
@@ -25,6 +29,7 @@ import kotlinx.coroutines.flow.update
 class HomeViewModel(
     private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
     private val authRepository: AuthRepository = AuthRepository,
+    private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -88,6 +93,23 @@ class HomeViewModel(
                 }
             }
             .launchIn(viewModelScope)
+
+        // "New LEGO Sets" preview — recompute when the catalog (re)loads (revision bumps on each
+        // successful load, so rev > 0 means a load has completed). refresh() is idempotent (the Search
+        // VM also warms it app-wide). catalogReady gates the whole page so the section appears with the
+        // rest of Home instead of popping in later.
+        catalogRepo.revision
+            .onEach { rev ->
+                val newSets = NewSets.select(catalogRepo.all()).take(NEW_SETS_PREVIEW)
+                _uiState.update { it.copy(newSets = newSets, catalogReady = it.catalogReady || rev > 0) }
+            }
+            .launchIn(viewModelScope)
+        // A failed catalog load still releases the page (the new-sets card is simply absent) — never
+        // hold Home on a network error.
+        catalogRepo.loadError
+            .onEach { failed -> if (failed) _uiState.update { it.copy(catalogReady = true) } }
+            .launchIn(viewModelScope)
+        viewModelScope.launch { catalogRepo.refresh() }
     }
 
     fun onShareClick() {
@@ -96,5 +118,10 @@ class HomeViewModel(
 
     fun onCloseShare() {
         _uiState.update { it.copy(shareOpen = false) }
+    }
+
+    private companion object {
+        /** How many new sets the Home card previews before "View more new sets". */
+        const val NEW_SETS_PREVIEW = 5
     }
 }

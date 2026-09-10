@@ -123,6 +123,12 @@ data class SearchUiState(
      * doesn't reset and so leaves this unchanged (the list restores its previous scroll).
      */
     val homeScrollTick: Int = 0,
+    /**
+     * New catalog sets (pending release + released this/last month) grouped by theme, themes A→Z —
+     * the full list behind the Home "New LEGO Sets" card, rendered on the dedicated New Sets page.
+     * Rebuilt whenever the catalog (re)loads.
+     */
+    val newSetsByTheme: List<Pair<String, List<CatalogSet>>> = emptyList(),
 ) {
     val isMinifigMode: Boolean get() = mode == SearchMode.MINIFIGS
     /** Minifig browse (theme cards) shows when no theme is open and no search is submitted. */

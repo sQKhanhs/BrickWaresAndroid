@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,25 +52,33 @@ import coil3.gif.onAnimationEnd
 import coil3.gif.repeatCount
 import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.MetaLine
+import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.StatCardRow
 import com.senniapp.brickwares.ui.components.StatEntry
+import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.animatedNumber
 import com.senniapp.brickwares.ui.components.growthDirection
 import com.senniapp.brickwares.ui.components.growthLabel
+import com.senniapp.brickwares.ui.components.releaseLabel
 import com.senniapp.brickwares.ui.navigation.SignInController
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.formatCount
 import com.senniapp.brickwares.util.formatIn
 
 /** Stateful entry point — binds the [HomeViewModel] to the stateless [HomeContent]. */
 @Composable
 fun HomeScreen(
+    onOpenSetDetail: (String) -> Unit = {},
+    onOpenNewSets: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -84,6 +93,8 @@ fun HomeScreen(
         onGifFinished = viewModel::onHeroGifPlayed,
         onShareClick = viewModel::onShareClick,
         onCloseShare = viewModel::onCloseShare,
+        onOpenSetDetail = onOpenSetDetail,
+        onOpenNewSets = onOpenNewSets,
         modifier = modifier,
     )
 }
@@ -96,6 +107,8 @@ private fun HomeContent(
     onGifFinished: () -> Unit,
     onShareClick: () -> Unit,
     onCloseShare: () -> Unit = {},
+    onOpenSetDetail: (String) -> Unit = {},
+    onOpenNewSets: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
@@ -154,6 +167,16 @@ private fun HomeContent(
                 SignInPromptCard(
                     message = stringResource(R.string.home_signin_prompt),
                     onSignIn = { SignInController.request() },
+                )
+            }
+            // "New LEGO Sets" — below the themes card (signed in) or the sign-in prompt (signed out).
+            // Hidden until the catalog has loaded enough to have any new sets.
+            if (state.newSets.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                NewSetsCard(
+                    sets = state.newSets,
+                    onOpenSet = onOpenSetDetail,
+                    onViewMore = onOpenNewSets,
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -420,6 +443,101 @@ private fun ThemesCard(themes: List<ThemeSummary>, currency: AppCurrency) {
     }
 }
 
+/**
+ * Home "New LEGO Sets" card — a preview of the newest catalog sets (pending release + released
+ * this/last month). Each row opens the set detail; "View more new sets" opens the full page.
+ */
+@Composable
+private fun NewSetsCard(
+    sets: List<CatalogSet>,
+    onOpenSet: (String) -> Unit,
+    onViewMore: () -> Unit,
+) {
+    val colors = BwTheme.colors
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, colors.borderSoft),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(stringResource(R.string.home_new_sets_title), style = BwType.cardTitle, color = colors.text)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                stringResource(R.string.home_new_sets_subtitle),
+                style = BwType.body.copy(fontSize = 12.sp),
+                color = colors.textMuted,
+            )
+            sets.forEach { set ->
+                Spacer(Modifier.height(14.dp))
+                NewSetPreviewRow(set = set, onClick = { onOpenSet(set.id) })
+            }
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = colors.borderSoft)
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onViewMore)
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // One Text (not two) so the larger arrow shares the label's baseline instead of
+                // floating off-centre — a bigger span inside the same line.
+                Text(
+                    text = buildAnnotatedString {
+                        append(stringResource(R.string.home_new_sets_view_more))
+                        withStyle(SpanStyle(fontSize = 19.sp)) { append("  →") }
+                    },
+                    style = BwType.body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    color = colors.brandYellow,
+                )
+            }
+        }
+    }
+}
+
+/** One compact new-set row: thumbnail + number/name (opens detail), theme/pieces meta, retail + status. */
+@Composable
+private fun NewSetPreviewRow(set: CatalogSet, onClick: () -> Unit) {
+    val colors = BwTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // No gallery here — a tap anywhere on the row opens the set detail (which has its own gallery).
+        SetThumb(
+            imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
+            fallbackUrl = set.boxImageUrl,
+            itemType = set.itemType,
+            size = 56.dp,
+            iconSize = 22.dp,
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "${set.setNumber} ${set.name}",
+                style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                color = colors.linkAccent,
+                maxLines = 2,
+            )
+            MetaLine(stringResource(R.string.meta_theme), set.theme)
+            MetaLine(stringResource(R.string.meta_pieces_minifigs), "${set.pieces} / ${set.minifigs}")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MetaLine(stringResource(R.string.meta_release), releaseLabel(set.releaseMonth, set.releaseYear))
+                StatusBadge(set.status)
+            }
+        }
+    }
+}
+
 // ---- Previews ----
 
 private val previewSummary = CollectionSummary(
@@ -443,7 +561,7 @@ private val previewThemes = listOf(
 private fun HomeLoggedInPreview() {
     BrickWaresTheme {
         HomeContent(
-            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
+            state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},
@@ -456,7 +574,7 @@ private fun HomeLoggedInPreview() {
 private fun HomeLoggedOutPreview() {
     BrickWaresTheme {
         HomeContent(
-            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = false, summary = previewSummary),
+            state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = false, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},
@@ -469,7 +587,7 @@ private fun HomeLoggedOutPreview() {
 private fun HomeDarkPreview() {
     BrickWaresTheme(darkTheme = true) {
         HomeContent(
-            state = HomeUiState(isLoading = false, authReady = true, isLoggedIn = true, summary = previewSummary),
+            state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = true, summary = previewSummary),
             showHeroGif = false,
             onGifFinished = {},
             onShareClick = {},

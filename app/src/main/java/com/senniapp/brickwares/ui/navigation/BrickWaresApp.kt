@@ -48,6 +48,7 @@ import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.detail.MinifigDetailScreen
 import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
+import com.senniapp.brickwares.ui.home.NewSetsScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
 import com.senniapp.brickwares.ui.search.SearchViewModel
 import com.senniapp.brickwares.ui.settings.SettingsScreen
@@ -153,6 +154,13 @@ fun BrickWaresApp(
                         searchViewModel.showSets()
                     },
                 )
+            } else if (current != null && current.startsWith("n:")) { // the "New Sets" page
+                NewSetsScreen(
+                    viewModel = searchViewModel,
+                    onBack = popDetail,
+                    // Tapping a new set pushes its detail onto the same stack (Back returns here).
+                    onOpenSetDetail = openSet,
+                )
             } else if (current != null) { // "s:" — a set
                 SetDetailScreen(
                     setNumber = current.substring(2),
@@ -177,7 +185,10 @@ fun BrickWaresApp(
                 )
             } else {
                 when (selectedTab) {
-                    BwTab.Home -> HomeScreen()
+                    BwTab.Home -> HomeScreen(
+                        onOpenSetDetail = openSet,
+                        onOpenNewSets = { detailStack.add("n:") },
+                    )
                     BwTab.Collection -> CollectionScreen(
                         onOpenSetDetail = openSet,
                         onOpenMinifigDetail = openFig,

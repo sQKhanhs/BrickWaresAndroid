@@ -108,6 +108,12 @@
     <string name="home_paid_pill">Đã trả %1$s</string>
     <string name="home_signin_prompt">Đăng nhập để lưu và đồng bộ bộ sưu tập của bạn</string>
     <string name="home_collection_by_theme">Bộ sưu tập theo chủ đề</string>
+    <!-- New LEGO Sets (Home card + full page) -->
+    <string name="home_new_sets_title">Bộ LEGO Mới</string>
+    <string name="home_new_sets_subtitle">Xem các bộ LEGO mới nhất</string>
+    <string name="home_new_sets_view_more">Xem thêm bộ mới</string>
+    <string name="new_sets_title">Bộ Mới</string>
+    <string name="new_sets_count">%1$d bộ mới</string>
     <!-- Share collection sheet -->
     <string name="share_title">Chia Sẻ Bộ Sưu Tập</string>
     <string name="share_action">Chia Sẻ</string>
