@@ -29,4 +29,35 @@ object CatalogImages {
      */
     fun thumbUrl(setNumber: String, variant: Int = 1, size: Int = 320): String =
         "https://cdn.rebrickable.com/media/thumbs/sets/${setNumber.lowercase()}-$variant.jpg/${size}x${size}p.jpg"
+
+    /**
+     * The full-resolution [renderUrl] for a stored [thumbUrl] — same set + **variant**. User rows
+     * (collection/wishlist/sales) persist the small thumb in `imageUrl` but NOT the number variant, so
+     * a card can't rebuild the render from `setNumber` alone (that would drop the variant and, for
+     * shared numbers like CMF/SDCC exclusives, resolve a *different* set). This recovers the crisp
+     * gallery image from the thumb the row already carries. Non-thumb URLs (or null) pass through.
+     */
+    fun renderFromThumb(thumbUrl: String?): String? {
+        if (thumbUrl == null) return null
+        val marker = "/media/thumbs/sets/"
+        val i = thumbUrl.indexOf(marker)
+        if (i < 0) return thumbUrl
+        val slug = thumbUrl.substring(i + marker.length).substringBefore(".jpg")
+        return "https://cdn.rebrickable.com/media/sets/$slug.jpg"
+    }
+
+    /**
+     * The card-sized [thumbUrl] for a stored Rebrickable *render* URL (e.g. `sets.render_url`, the
+     * authoritative image captured at ingest) — the inverse of [renderFromThumb]. Lets a card show the
+     * small thumbnail of an authoritative render without knowing the set's number/variant. A URL that
+     * isn't a standard Rebrickable render (or a non-Rebrickable host) is returned unchanged, so it's
+     * still shown — just at full size.
+     */
+    fun thumbFromRender(renderUrl: String, size: Int = 320): String {
+        val marker = "/media/sets/"
+        val i = renderUrl.indexOf(marker)
+        if (i < 0) return renderUrl
+        val slug = renderUrl.substring(i + marker.length).substringBefore(".jpg")
+        return "https://cdn.rebrickable.com/media/thumbs/sets/$slug.jpg/${size}x${size}p.jpg"
+    }
 }

@@ -104,7 +104,7 @@ class SupabaseCatalogRepository(
                     val rows = client.from("sets")
                         .select(
                             Columns.raw(
-                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,year,pieces," +
+                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,render_url,year,pieces," +
                                     "minifigs,availability,notes,notes_vi,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
                             ),
                         )
@@ -209,6 +209,12 @@ class SupabaseCatalogRepository(
         @SerialName("item_type") val itemType: String? = null,
         /** Box packaging image re-hosted in our Storage at ingest (reliable); null when none captured. */
         @SerialName("box_image_url") val boxImageUrl: String? = null,
+        /**
+         * Authoritative Rebrickable render URL captured at ingest for shared-number (multi-variant)
+         * sets, where reconstructing the image from number+variant can resolve to the WRONG set (CMF /
+         * comic-con exclusives). When present it overrides the reconstruction; null → reconstruct.
+         */
+        @SerialName("render_url") val renderUrl: String? = null,
         val theme: String? = null,
         val subtheme: String? = null,
         val year: Int? = null,
@@ -305,12 +311,16 @@ class SupabaseCatalogRepository(
             // come from Rebrickable's CDN (addressed by set number + variant). The box shot is the
             // re-hosted `box_image_url` (our Storage, reliable) — null until the ingest captures it, in
             // which case the app shows the Rebrickable render instead.
-            imageUrl = CatalogImages.renderUrl(setNumber, numberVariant ?: 1),
+            // Prefer the ingest-captured authoritative render (correct even for misindexed multi-variant
+            // sets); otherwise reconstruct from number+variant (reliable for single-variant sets).
+            imageUrl = renderUrl?.takeIf { it.isNotBlank() } ?: CatalogImages.renderUrl(setNumber, numberVariant ?: 1),
             boxImageUrl = boxImageUrl?.takeIf { it.isNotBlank() },
             // Small server-resized render for list cards: the box shot stays the preferred display
             // image, but a boxless set now falls back to this (~10–150 KB) instead of the full
-            // multi-MB render — the main cause of slow-loading search thumbnails.
-            thumbnailUrl = CatalogImages.thumbUrl(setNumber, numberVariant ?: 1),
+            // multi-MB render — the main cause of slow-loading search thumbnails. Derived from the
+            // authoritative render when we have one, so the card and the reconstruction never disagree.
+            thumbnailUrl = renderUrl?.takeIf { it.isNotBlank() }?.let { CatalogImages.thumbFromRender(it) }
+                ?: CatalogImages.thumbUrl(setNumber, numberVariant ?: 1),
             numberVariant = numberVariant ?: 1,
             notes = notes?.takeIf { it.isNotBlank() },
             notesVi = notesVi?.takeIf { it.isNotBlank() },

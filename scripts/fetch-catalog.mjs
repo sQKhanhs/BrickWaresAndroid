@@ -165,6 +165,47 @@ async function fetchMinifigs(sets) {
   return { figs, setFigs };
 }
 
+// Authoritative Rebrickable render URL for SHARED-NUMBER (multi-variant) sets. The app otherwise
+// reconstructs a set's image from <number>-<number_variant>, but Rebrickable's variant indexing for a
+// shared number can differ from Brickset's number_variant — so that guess can grab a *different* set's
+// image (CMF / comic-con exclusives / promo sub-models). Here we pull every Rebrickable set for the
+// number and match each Brickset row to its real image BY NAME, pinning the correct URL. Matching is
+// exact (normalized) and conservative: no confident match → left null → the app reconstructs as before,
+// so this is never worse. Single-variant sets are skipped (their reconstruction is always correct).
+// Returns [{ setId, renderUrl }]. Gated on REBRICKABLE_API_KEY by the caller.
+async function fetchRenderUrls(sets) {
+  const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const byNumber = new Map();
+  for (const s of sets) {
+    const arr = byNumber.get(s.number) || [];
+    arr.push(s);
+    byNumber.set(s.number, arr);
+  }
+  const shared = [...byNumber.values()].filter((rows) => rows.length > 1);
+  const out = [];
+  console.log(`Fetching render URLs for ${shared.length} shared-number set groups from Rebrickable...`);
+  for (const rows of shared) {
+    const number = rows[0].number;
+    let rb = [];
+    try {
+      const j = await rbGet(`sets/?search=${encodeURIComponent(number)}&page_size=100`);
+      rb = (j?.results || []).filter((r) => String(r.set_num || "").startsWith(`${number}-`) && r.set_img_url);
+    } catch (e) {
+      console.error(`  ${number}: ${e.message}`);
+    }
+    await sleep(800); // ~1 req/s — stay under Rebrickable's free-tier throttle
+    if (!rb.length) continue;
+    const urlByName = new Map();
+    for (const r of rb) urlByName.set(norm(r.name), r.set_img_url);
+    for (const s of rows) {
+      const url = urlByName.get(norm(s.name));
+      if (url) out.push({ setId: s.setID, renderUrl: url });
+    }
+  }
+  console.log(`  matched ${out.length} render URLs.`);
+  return out;
+}
+
 async function getUserHash() {
   if (BRICKSET_USER_HASH) return BRICKSET_USER_HASH;
   if (!BRICKSET_USERNAME || !BRICKSET_PASSWORD) {
@@ -567,6 +608,10 @@ async function main() {
     ? await fetchMinifigs(minifigSets)
     : { figs: new Map(), setFigs: [] };
 
+  // Authoritative render URLs for shared-number (multi-variant) sets — overrides the app's
+  // number+variant image guess where Rebrickable indexes a shared number differently than Brickset.
+  const renderUrls = REBRICKABLE_API_KEY && !SAMPLES_ONLY ? await fetchRenderUrls(catalogSets) : [];
+
   // Fresh row strings for everything just fetched.
   let setRowList = catalogSets.map(setRow);
   let priceRowList = catalogSets.flatMap(priceRows);
@@ -585,6 +630,9 @@ async function main() {
   // Re-hosted box image URLs, keyed by set_id (a separate UPDATE, append-safe like notes_vi).
   let boxImageRowList = [...boxUrlBySetId.entries()].map(([setId, url]) => `(${num(setId)}, ${q(url)})`);
 
+  // Authoritative render URLs, keyed by set_id (a separate UPDATE, append-safe like box_image_url).
+  let renderUrlRowList = renderUrls.map(({ setId, renderUrl }) => `(${num(setId)}, ${q(renderUrl)})`);
+
   // Append mode: merge onto the existing seed.sql. Existing rows are kept; a freshly fetched row for
   // the same key overwrites the old one. Minifigs + note translations are merged too (not just
   // sets/prices), so an append never drops previously-seeded figs or notes — even when this run skips
@@ -598,13 +646,15 @@ async function main() {
       const exSetFigs = extractRows(existing, /insert into public\.set_minifigs[\s\S]*?\nvalues\n {2}([\s\S]*?)\non conflict \(set_id, fig_num\)/);
       const exNoteVi = extractRows(existing, /set notes_vi = v\.notes_vi\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, notes_vi\)/);
       const exBox = extractRows(existing, /set box_image_url = v\.box_image_url\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, box_image_url\)/);
+      const exRender = extractRows(existing, /set render_url = v\.render_url\nfrom \(values\n {2}([\s\S]*?)\n\) as v\(set_id, render_url\)/);
       setRowList = mergeRows(exSets, setRowList, (r) => r.match(/^\((\d+),/)?.[1]);
       priceRowList = mergeRows(exPrices, priceRowList, (r) => r.match(/^\((\d+), '([A-Z]+)'/)?.slice(1, 3).join("-"));
       minifigRowList = mergeRows(exFigs, minifigRowList, (r) => r.match(/^\('([^']+)'/)?.[1]);
       setMinifigRowList = mergeRows(exSetFigs, setMinifigRowList, (r) => r.match(/^\((\d+), '([^']+)'/)?.slice(1, 3).join("-"));
       noteViRowList = mergeRows(exNoteVi, noteViRowList, (r) => r.match(/^\((\d+),/)?.[1]);
       boxImageRowList = mergeRows(exBox, boxImageRowList, (r) => r.match(/^\((\d+),/)?.[1]);
-      console.log(`Append: ${exSets.length} existing sets -> ${setRowList.length}; minifigs ${exFigs.length} -> ${minifigRowList.length}; notes_vi ${exNoteVi.length} -> ${noteViRowList.length}; box_image ${exBox.length} -> ${boxImageRowList.length}.`);
+      renderUrlRowList = mergeRows(exRender, renderUrlRowList, (r) => r.match(/^\((\d+),/)?.[1]);
+      console.log(`Append: ${exSets.length} existing sets -> ${setRowList.length}; minifigs ${exFigs.length} -> ${minifigRowList.length}; notes_vi ${exNoteVi.length} -> ${noteViRowList.length}; box_image ${exBox.length} -> ${boxImageRowList.length}; render_url ${exRender.length} -> ${renderUrlRowList.length}.`);
     }
   }
 
@@ -614,6 +664,7 @@ async function main() {
   const setMinifigValues = setMinifigRowList.join(",\n  ");
   const noteViValues = noteViRowList.join(",\n  ");
   const boxImageValues = boxImageRowList.join(",\n  ");
+  const renderUrlValues = renderUrlRowList.join(",\n  ");
 
   const sql =
 `-- Generated by scripts/fetch-catalog.mjs from Brickset. Sample catalog for LOCAL dev.
@@ -658,6 +709,13 @@ from (values
   ${boxImageValues}
 ) as v(set_id, box_image_url)
 where s.set_id = v.set_id;` : "-- (no re-hosted box images)"}
+
+${renderUrlValues ? `-- Authoritative Rebrickable render URLs (shared-number sets) -> sets.render_url (see fetch-catalog.mjs)
+update public.sets as s set render_url = v.render_url
+from (values
+  ${renderUrlValues}
+) as v(set_id, render_url)
+where s.set_id = v.set_id;` : "-- (no captured render URLs)"}
 
 ${minifigValues ? `insert into public.minifigs
   (fig_num, name, num_parts, image_url)

@@ -507,8 +507,10 @@ private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter)
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
     val colors = BwTheme.colors
     val isFig = item.itemType == ItemType.MINIFIG
-    // Sets: the Rebrickable thumb by default, the re-hosted box shot only as a fallback. Minifigs: their stored Rebrickable image.
-    val thumbUrl = if (isFig) item.imageUrl else CatalogImages.thumbUrl(item.setNumber)
+    // The stored Rebrickable thumb (already the correct number+variant — captured at add time), box
+    // shot only as a fallback for sets. Recomputing thumbUrl(setNumber) here dropped the variant and,
+    // for shared numbers (CMF/SDCC exclusives), showed a *different* set's image.
+    val thumbUrl = item.imageUrl
     // Sets show a community value only when retired/promo/magazine; its "!" bubble then sits beside the
     // status badge (below), keeping it off the narrow value line where a long ₫ amount clipped.
     val showValue = item.status == Availability.RETIRED || item.status == Availability.PROMO || item.status == Availability.MAGAZINE
@@ -526,9 +528,10 @@ private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: (
             itemType = item.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery (render first, then the box shot if captured).
+            // Tap the image → full-screen gallery (full render first, then the box shot if captured).
+            // The render is derived from the stored thumb so it keeps the correct number+variant.
             galleryImages = if (isFig) listOfNotNull(item.imageUrl)
-                else listOfNotNull(CatalogImages.renderUrl(item.setNumber), item.boxImageUrl),
+                else listOfNotNull(CatalogImages.renderFromThumb(item.imageUrl), item.boxImageUrl),
         )
 
         Spacer(Modifier.width(12.dp))
@@ -718,8 +721,10 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
     // Value shows only for retired/promo/magazine sets; its "!" bubble then sits beside the status
     // badge (below), off the narrow value line where a long ₫ amount clipped.
     val showValue = !isFig && (sold.status == Availability.RETIRED || sold.status == Availability.PROMO || sold.status == Availability.MAGAZINE)
-    // Sets: the Rebrickable thumb by default, the re-hosted box shot only as a fallback. Minifigs: their stored Rebrickable image.
-    val thumbUrl = if (isFig) sold.imageUrl else CatalogImages.thumbUrl(sold.setNumber)
+    // The stored Rebrickable thumb (already the correct number+variant — captured at add time), box
+    // shot only as a fallback for sets. Recomputing thumbUrl(setNumber) here dropped the variant and,
+    // for shared numbers (CMF/SDCC exclusives), showed a *different* set's image.
+    val thumbUrl = sold.imageUrl
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -734,9 +739,10 @@ private fun SoldCard(sold: SoldItem, onDetail: () -> Unit, onOpenDetail: () -> U
             itemType = sold.itemType,
             size = 72.dp,
             iconSize = 30.dp,
-            // Tap the image → full-screen gallery (render first, then the box shot if captured).
+            // Tap the image → full-screen gallery (full render first, then the box shot if captured).
+            // The render is derived from the stored thumb so it keeps the correct number+variant.
             galleryImages = if (isFig) listOfNotNull(sold.imageUrl)
-                else listOfNotNull(CatalogImages.renderUrl(sold.setNumber), sold.boxImageUrl),
+                else listOfNotNull(CatalogImages.renderFromThumb(sold.imageUrl), sold.boxImageUrl),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (isFig) 4.dp else 5.dp)) {
