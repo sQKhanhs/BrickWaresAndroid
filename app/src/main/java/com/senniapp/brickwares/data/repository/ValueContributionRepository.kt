@@ -1,6 +1,6 @@
 package com.senniapp.brickwares.data.repository
 
-import android.util.Log
+import timber.log.Timber
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CurrentValue
 import com.senniapp.brickwares.data.model.ValueAggregator
@@ -60,7 +60,7 @@ class ValueContributionRepository(
             withTimeout(TIMEOUT_MS) { client.from(TABLE).select().decodeList<Row>() }
         }.getOrElse {
             if (it is CancellationException) throw it
-            Log.w(TAG, "value warm failed", it)
+            Timber.tag(TAG).w(it, "value warm failed")
             return
         }
         val now = System.currentTimeMillis()
@@ -155,7 +155,7 @@ class ValueContributionRepository(
             }
         }.getOrElse {
             if (it is CancellationException) throw it
-            Log.w(TAG, "bulk value fetch failed", it)
+            Timber.tag(TAG).w(it, "bulk value fetch failed")
             return emptyMap()
         }
         val now = System.currentTimeMillis()
@@ -167,7 +167,7 @@ class ValueContributionRepository(
     private suspend fun aggregate(retailUsdCents: Long?, tier: ValueGuardTier, fetch: suspend () -> List<Row>): CurrentValue {
         val rows = runCatching { withTimeout(TIMEOUT_MS) { fetch() } }.getOrElse {
             if (it is CancellationException) throw it
-            Log.w(TAG, "value fetch failed", it)
+            Timber.tag(TAG).w(it, "value fetch failed")
             return CurrentValue.NONE
         }
         return ValueAggregator.aggregate(rows.toPoints(), retailUsdCents, tier)

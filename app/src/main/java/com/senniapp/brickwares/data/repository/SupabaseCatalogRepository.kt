@@ -1,6 +1,6 @@
 package com.senniapp.brickwares.data.repository
 
-import android.util.Log
+import timber.log.Timber
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
@@ -131,14 +131,14 @@ class SupabaseCatalogRepository(
                 _revision.value += 1
             } catch (e: TimeoutCancellationException) {
                 _loadError.value = true
-                Log.e("CatalogRepository", "Catalog load timed out", e)
+                Timber.tag("CatalogRepository").e(e, "Catalog load timed out")
             } catch (e: CancellationException) {
                 throw e // genuine coroutine cancellation — never swallow it
             } catch (e: Exception) {
                 // Don't crash the app on a network/permission failure — flag the error so catalog-backed
                 // screens show the error/offline fallback, leave the cache empty, and allow a retry.
                 _loadError.value = true
-                Log.e("CatalogRepository", "Failed to load catalog from Supabase", e)
+                Timber.tag("CatalogRepository").e(e, "Failed to load catalog from Supabase")
             }
         }
     }
@@ -176,12 +176,12 @@ class SupabaseCatalogRepository(
                 _revision.value += 1
             } catch (e: TimeoutCancellationException) {
                 _loadError.value = true
-                Log.e("CatalogRepository", "Minifig load timed out", e)
+                Timber.tag("CatalogRepository").e(e, "Minifig load timed out")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _loadError.value = true
-                Log.e("CatalogRepository", "Failed to load minifigs from Supabase", e)
+                Timber.tag("CatalogRepository").e(e, "Failed to load minifigs from Supabase")
             }
         }
     }

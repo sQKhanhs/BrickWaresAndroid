@@ -2,7 +2,7 @@ package com.senniapp.brickwares.util
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
+import timber.log.Timber
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
@@ -89,7 +89,7 @@ object CurrencyConverter {
                     liveFetched = true
                 }
             }.onFailure { e ->
-                Log.w("CurrencyConverter", "Live FX fetch failed; using last-known / fallback rate", e)
+                Timber.tag("CurrencyConverter").w(e, "Live FX fetch failed; using last-known / fallback rate")
             }
             // Nothing live and nothing persisted → the approximate fallback table (first-ever run only).
             if (rates == null) rates = FALLBACK_RATES

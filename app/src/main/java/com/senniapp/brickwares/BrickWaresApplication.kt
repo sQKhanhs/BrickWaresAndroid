@@ -9,11 +9,13 @@ import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.senniapp.brickwares.data.local.AnalyticsPrefs
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
+import com.senniapp.brickwares.util.Observability
 import com.senniapp.brickwares.util.RetirementAlerts
 
 /**
@@ -31,6 +33,9 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         ThemeFavoritesPrefs.init(this)
         CurrencyPrefs.init(this)
         RetirementAlertPrefs.init(this)
+        AnalyticsPrefs.init(this)
+        // Timber + (opt-in, Firebase-optional) Crashlytics/Analytics — before anything that might log.
+        Observability.init(this)
         AppGraph.init(this)
         // Watches the wishlist for items that change to Retired and notifies (Settings → Notifications).
         RetirementAlerts.start(this)

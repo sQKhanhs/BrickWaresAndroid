@@ -19,6 +19,10 @@ datastore = "1.1.1"
 browser = "1.8.0"
 splashscreen = "1.0.1"
 work = "2.10.0"
+timber = "5.0.1"
+firebaseBom = "34.0.0"
+googleServices = "4.4.3"
+crashlyticsGradle = "3.0.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -63,10 +67,19 @@ androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscree
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 # App-process lifecycle — lets the retirement check tell foreground (in-app notice) from background (notification).
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
+# Observability (Arch Decision 13): Timber structured logging; Firebase Crashlytics (crashes + non-fatals) and
+# Analytics (usage) — both OPT-IN via the Settings toggle, and only active once app/google-services.json exists.
+timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+# Firebase build plugins — applied by app/build.gradle.kts ONLY when app/google-services.json exists.
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlyticsGradle" }
 

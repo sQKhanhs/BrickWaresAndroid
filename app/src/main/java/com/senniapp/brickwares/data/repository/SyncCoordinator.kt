@@ -1,6 +1,6 @@
 package com.senniapp.brickwares.data.repository
 
-import android.util.Log
+import timber.log.Timber
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
@@ -124,7 +124,7 @@ class SyncCoordinator(
             syncState.setLastAccountId(uid)
             // Refresh the community value cache so a just-contributed paid price shows on the cards.
             ValueRepositoryProvider.instance.warm()
-        }.onFailure { Log.e(TAG, "sync failed", it) }.isSuccess
+        }.onFailure { Timber.tag(TAG).e(it, "sync failed") }.isSuccess
     }
 
     // ---- push (dirty local → Supabase upsert) ----
@@ -170,7 +170,7 @@ class SyncCoordinator(
                         put("p_source", "paid")
                     },
                 )
-            }.onFailure { Log.w(TAG, "contribute_value failed for ${row.id}", it) }
+            }.onFailure { Timber.tag(TAG).w(it, "contribute_value failed for ${row.id}") }
         }
     }
 
@@ -195,7 +195,7 @@ class SyncCoordinator(
                         put("p_source", "sale")
                     },
                 )
-            }.onFailure { Log.w(TAG, "contribute_value (sale) failed for ${row.id}", it) }
+            }.onFailure { Timber.tag(TAG).w(it, "contribute_value (sale) failed for ${row.id}") }
         }
     }
 

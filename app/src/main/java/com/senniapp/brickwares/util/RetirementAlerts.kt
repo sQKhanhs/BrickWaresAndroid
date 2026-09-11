@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
+import timber.log.Timber
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -91,7 +91,7 @@ object RetirementAlerts {
         scheduleDailyCheck(app)
         scope.launch {
             CollectionRepositoryProvider.instance.getWishlistItems()
-                .catch { e -> Log.e(TAG, "Wishlist observation failed", e) }
+                .catch { e -> Timber.tag(TAG).e(e, "Wishlist observation failed") }
                 .collect { items -> evaluate(app, items) }
         }
     }
@@ -154,7 +154,7 @@ object RetirementAlerts {
             return
         }
         if (!canPost(context)) {
-            Log.i(TAG, "Notification permission not granted — skipping ${names.size} retirement alert(s)")
+            Timber.tag(TAG).i("Notification permission not granted — skipping ${names.size} retirement alert(s)")
             return
         }
         val text = if (names.size == 1) {

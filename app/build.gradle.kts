@@ -7,6 +7,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Firebase (Crashlytics + Analytics, Arch Decision 13) is OPTIONAL until the console config exists: the
+// google-services plugin fails the build without app/google-services.json, so both plugins are applied
+// only once it's there. The JSON must register BOTH app ids — the dev flavor's com.senniapp.brickwares.dev
+// and prod's com.senniapp.brickwares — or the flavor without one fails. Runtime use is guarded the same
+// way (util/Observability.kt), so a build without the file still logs (Timber) and just skips Firebase.
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+    apply(plugin = libs.plugins.firebase.crashlytics.get().pluginId)
+}
+
 // Read secrets from local.properties (gitignored) so keys aren't hardcoded in source.
 val localProperties = Properties().apply {
     val f = rootProject.file("local.properties")
@@ -150,6 +160,11 @@ dependencies {
     // Retirement alerts: daily background check (WorkManager) + foreground/background detection.
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
+    // Observability (Decision 13): Timber logging; Firebase Crashlytics + Analytics (opt-in — see Observability.kt).
+    implementation(libs.timber)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.analytics)
     // Supabase (Postgrest for catalog reads, Auth for Google sign-in) + Ktor engine for Android.
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)

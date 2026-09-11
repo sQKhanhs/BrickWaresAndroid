@@ -1,7 +1,7 @@
 package com.senniapp.brickwares.util
 
 import android.content.Context
-import android.util.Log
+import timber.log.Timber
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
@@ -28,7 +28,7 @@ class RetirementCheckWorker(context: Context, params: WorkerParameters) : Corout
             RetirementAlerts.evaluate(applicationContext, items)
             Result.success()
         } catch (e: Exception) {
-            Log.w(TAG, "Retirement check failed", e)
+            Timber.tag(TAG).w(e, "Retirement check failed")
             Result.retry()
         }
     }

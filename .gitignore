@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+# Firebase console config (per-project; carries the Firebase API key) — kept local like local.properties.
+# Without it the build skips the Firebase plugins and the app runs Firebase-free (see app/build.gradle.kts).
+/app/google-services.json
+/app/src/*/google-services.json
