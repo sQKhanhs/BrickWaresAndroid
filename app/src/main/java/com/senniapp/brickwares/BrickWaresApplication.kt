@@ -12,7 +12,9 @@ import coil3.request.crossfade
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.LocalePrefs
+import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
+import com.senniapp.brickwares.util.RetirementAlerts
 
 /**
  * Application entry point.
@@ -28,7 +30,10 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         LocalePrefs.init(this)
         ThemeFavoritesPrefs.init(this)
         CurrencyPrefs.init(this)
+        RetirementAlertPrefs.init(this)
         AppGraph.init(this)
+        // Watches the wishlist for items that change to Retired and notifies (Settings → Notifications).
+        RetirementAlerts.start(this)
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

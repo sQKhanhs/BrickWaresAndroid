@@ -36,7 +36,8 @@ data class SettingsUiState(
     /** Whether the "Set a password" dialog is open. */
     val showSetPassword: Boolean = false,
     val currency: AppCurrency = AppCurrency.USD,
-    val retirementAlerts: Boolean = true,
+    /** Retirement alerts opt-in (persisted in RetirementAlertPrefs; off by default, needs an account). */
+    val retirementAlerts: Boolean = false,
     val analyticsConsent: Boolean = false,
     val showDeleteConfirm: Boolean = false,
     val showChangelog: Boolean = false,

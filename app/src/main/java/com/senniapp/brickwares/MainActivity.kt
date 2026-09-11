@@ -1,6 +1,7 @@
 package com.senniapp.brickwares
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,8 +20,11 @@ import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.ui.components.SplashScreen
 import com.senniapp.brickwares.ui.navigation.AuthGate
 import com.senniapp.brickwares.ui.navigation.BrickWaresApp
+import com.senniapp.brickwares.ui.navigation.BwTab
+import com.senniapp.brickwares.ui.navigation.NavRequests
 import com.senniapp.brickwares.ui.theme.BrickWaresTheme
 import com.senniapp.brickwares.ui.theme.ThemeMode
+import com.senniapp.brickwares.util.RetirementAlerts
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -46,6 +50,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleNavIntent(intent)
         setContent {
             // Theme preference lives here so the Settings toggle can re-theme the whole app.
             var themeMode by rememberSaveable { mutableStateOf(ThemeMode.LIGHT) }
@@ -70,6 +75,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    // A tapped notification while the app is already running arrives here (launchMode="singleTop").
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNavIntent(intent)
+    }
+
+    /** A notification's tap target asks to land on a tab (e.g. the Wishlist for retirement alerts). */
+    private fun handleNavIntent(intent: Intent?) {
+        when (intent?.getStringExtra(RetirementAlerts.EXTRA_OPEN_TAB)) {
+            RetirementAlerts.TAB_WISHLIST -> NavRequests.request(BwTab.Wishlist)
         }
     }
 

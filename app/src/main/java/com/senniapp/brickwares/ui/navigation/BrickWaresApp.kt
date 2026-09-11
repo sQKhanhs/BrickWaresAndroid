@@ -42,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
+import com.senniapp.brickwares.ui.components.resolve
+import com.senniapp.brickwares.util.RetirementAlerts
 import com.senniapp.brickwares.ui.login.LoginScreen
 import com.senniapp.brickwares.ui.collection.CollectionScreen
 import com.senniapp.brickwares.ui.detail.MinifigDetailScreen
@@ -105,6 +108,16 @@ fun BrickWaresApp(
     // On-demand sign-in overlay (no login wall): gated surfaces call SignInController.request().
     val showLogin by SignInController.showLogin.collectAsStateWithLifecycle()
     val isLoggedIn = rememberIsLoggedIn()
+    // An external tab request (a tapped retirement-alert notification → Wishlist), whether it arrived
+    // at launch or while running. Consumed so it fires once.
+    val requestedTab by NavRequests.tab.collectAsStateWithLifecycle()
+    LaunchedEffect(requestedTab) {
+        requestedTab?.let { tab ->
+            detailStack.clear()
+            selectedTab = tab
+            NavRequests.consume()
+        }
+    }
     // When the user finishes signing in (the modal was open), dismiss it and land on Collection.
     // A cold-start auto-login (modal never opened) leaves them on the current tab.
     LaunchedEffect(isLoggedIn) {
@@ -125,7 +138,7 @@ fun BrickWaresApp(
                     // from results, a theme-detail list, or a Set Detail overlay — so the user can
                     // start a fresh search from anywhere. (The detail's back arrow still restores the
                     // previous results, since that path doesn't reset.)
-                    if (tab == BwTab.Search) searchViewModel.resetToDefault()
+                    if (tab == BwTab.Search) searchViewModel.onEnterSearchTab()
                     selectedTab = tab
                     detailStack.clear()
                 },
@@ -206,6 +219,10 @@ fun BrickWaresApp(
                     BwTab.Settings -> SettingsScreen(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
                 }
             }
+            // Foreground retirement notice: when the app is visible, RetirementAlerts routes the "item
+            // retired" message here as a toast instead of posting a system notification.
+            val retirementNotice by RetirementAlerts.inAppNotice.collectAsStateWithLifecycle()
+            BwToast(message = retirementNotice?.resolve(), onDismiss = RetirementAlerts::clearInAppNotice)
         }
     }
 

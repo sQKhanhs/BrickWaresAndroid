@@ -41,11 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
@@ -311,8 +313,25 @@ private fun SettingsContent(
             }
 
             // ---- Notifications ----
-            Section(stringResource(R.string.settings_section_notifications)) {
-                ToggleRow(stringResource(R.string.settings_retirement_alerts), checked = state.retirementAlerts, onToggle = onToggleRetirement)
+            // Retirement alerts watch the account's wishlist, so the whole section is hidden while
+            // signed out (a setting the user can't act on is just noise). Android 13+ only shows
+            // notifications once POST_NOTIFICATIONS is granted, so switching the alerts ON asks for it
+            // (the toggle persists either way; posting is guarded if it's denied).
+            if (state.isLoggedIn) {
+                val notifPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                Section(stringResource(R.string.settings_section_notifications)) {
+                    ToggleRow(
+                        stringResource(R.string.settings_retirement_alerts),
+                        checked = state.retirementAlerts,
+                        onToggle = {
+                            if (!state.retirementAlerts && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            onToggleRetirement()
+                        },
+                        description = stringResource(R.string.settings_retirement_alerts_desc),
+                    )
+                }
             }
 
             // ---- Privacy ----

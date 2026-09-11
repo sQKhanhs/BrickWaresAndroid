@@ -18,6 +18,13 @@ interface CatalogRepository {
     suspend fun refresh()
 
     /**
+     * Re-fetches the catalog even when it's already cached. Set status (e.g. RETIRED) is derived at
+     * load time from that day's date, so a long-lived process would otherwise keep day-old statuses —
+     * the daily background retirement check needs today's. The cache is only replaced on success.
+     */
+    suspend fun reload()
+
+    /**
      * Bumps each time the in-memory cache is (re)loaded. Reactive consumers can [kotlinx.coroutines.flow.combine]
      * this with their own flow to re-read [all]/[search] once the catalog becomes available — e.g. to
      * overlay fresh catalog-derived status onto denormalized user rows.

@@ -147,6 +147,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    // Retirement alerts: daily background check (WorkManager) + foreground/background detection.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
     // Supabase (Postgrest for catalog reads, Auth for Google sign-in) + Ktor engine for Android.
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)

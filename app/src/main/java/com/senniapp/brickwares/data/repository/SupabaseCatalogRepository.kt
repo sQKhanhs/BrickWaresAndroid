@@ -93,10 +93,17 @@ class SupabaseCatalogRepository(
         const val UNREVEALED_NAME = "{?}"
     }
 
-    override suspend fun refresh() {
-        if (sets.all.isNotEmpty()) return
+    override suspend fun refresh() = load(force = false)
+
+    /** Forced re-fetch (daily retirement check): statuses are derived at load time, so re-derive today's. */
+    override suspend fun reload() = load(force = true)
+
+    private suspend fun load(force: Boolean) {
+        if (!force && sets.all.isNotEmpty()) return
         loadMutex.withLock {
-            if (sets.all.isNotEmpty()) return
+            if (!force && sets.all.isNotEmpty()) return
+            // On failure `sets` is never reassigned (only after a successful decode), so a forced reload
+            // that fails keeps serving the previous cache instead of wiping the app's catalog.
             try {
                 // Bound the fetch so a dropped connection fails fast (instead of the UI hanging on
                 // "loading") and releases the mutex promptly so a retry isn't blocked.

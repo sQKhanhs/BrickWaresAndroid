@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.CurrencyPrefs
+import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.CollectionRepository
@@ -64,6 +65,11 @@ class SettingsViewModel(
         // Reflect the persisted display currency (seeded at app start) and any later change.
         CurrencyPrefs.currency
             .onEach { currency -> _uiState.update { it.copy(currency = currency) } }
+            .launchIn(viewModelScope)
+
+        // Persisted retirement-alerts toggle (Settings → Notifications).
+        RetirementAlertPrefs.enabledFlow
+            .onEach { enabled -> _uiState.update { it.copy(retirementAlerts = enabled) } }
             .launchIn(viewModelScope)
     }
 
@@ -135,7 +141,8 @@ class SettingsViewModel(
     }
 
     fun onToggleRetirementAlerts() {
-        _uiState.update { it.copy(retirementAlerts = !it.retirementAlerts) }
+        // Persist + broadcast; the RetirementAlertPrefs collector above updates our own UiState.
+        RetirementAlertPrefs.enabled = !RetirementAlertPrefs.enabled
     }
 
     fun onToggleAnalytics() {
