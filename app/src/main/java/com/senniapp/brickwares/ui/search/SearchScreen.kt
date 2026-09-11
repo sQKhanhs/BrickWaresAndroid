@@ -58,11 +58,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
@@ -555,6 +557,38 @@ private fun SectionLabel(text: String) {
     Text(text, style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = BwTheme.colors.textMuted)
 }
 
+/**
+ * A theme's icon box (card colour + soft border), shared by the detail and list cards. Loads the
+ * hand-curated R2 icon (see [CatalogImages.themeIconUrl]); while a theme has no icon uploaded yet the
+ * request 404s and the muted "logo" placeholder shows instead of an empty box.
+ */
+@Composable
+private fun ThemeLogoBox(url: String?, width: Dp, height: Dp, corner: Dp, padding: Dp) {
+    val colors = BwTheme.colors
+    var failed by remember(url) { mutableStateOf(url == null) }
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(corner))
+            .background(colors.card)
+            .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(corner)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (failed) {
+            Text("logo", style = BwType.micro, color = colors.textFaint)
+        } else {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                onState = { if (it is AsyncImagePainter.State.Error) failed = true },
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemeCard(
@@ -576,26 +610,7 @@ private fun ThemeCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .width(140.dp)
-                    .height(80.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.card)
-                    .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (group.logoAsset != null) {
-                    AsyncImage(
-                        model = group.logoAsset,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().padding(10.dp),
-                    )
-                } else {
-                    Text("logo", style = BwType.micro, color = colors.textFaint)
-                }
-            }
+            ThemeLogoBox(url = group.logoAsset, width = 140.dp, height = 80.dp, corner = 8.dp, padding = 10.dp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(group.theme, style = BwType.cardTitle, color = colors.text)
                 Text("(${group.setCount})", style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
@@ -1034,26 +1049,7 @@ private fun ThemeListCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Same logo box as the detail card, at a smaller scale.
-            Box(
-                modifier = Modifier
-                    .width(84.dp)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(colors.card)
-                    .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (group.logoAsset != null) {
-                    AsyncImage(
-                        model = group.logoAsset,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().padding(6.dp),
-                    )
-                } else {
-                    Text("logo", style = BwType.micro, color = colors.textFaint)
-                }
-            }
+            ThemeLogoBox(url = group.logoAsset, width = 84.dp, height = 48.dp, corner = 6.dp, padding = 6.dp)
             Text(
                 group.theme,
                 style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),

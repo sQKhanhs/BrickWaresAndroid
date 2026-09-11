@@ -1,5 +1,7 @@
 package com.senniapp.brickwares.util
 
+import java.text.Normalizer
+
 /**
  * Public image URLs for a set, constructed from its number + variant (no catalog column needed —
  * both hosts are deterministic and load over plain HTTP, so Coil fetches them directly).
@@ -60,4 +62,29 @@ object CatalogImages {
         val slug = renderUrl.substring(i + marker.length).substringBefore(".jpg")
         return "https://cdn.rebrickable.com/media/thumbs/sets/$slug.jpg/${size}x${size}p.jpg"
     }
+
+    /** Public base of the hand-curated theme icons: the R2 bucket's custom domain + a `themes/` prefix. */
+    private const val THEME_ICON_BASE = "https://img.brickwares.app/themes/"
+
+    /**
+     * A theme's icon, hand-curated in R2 and addressed by a deterministic slug of the theme name — no
+     * catalog column or ingest step needed. Upload each icon as `themes/<slug>.png` (transparent PNG,
+     * ~200–400 px wide). A theme with no icon uploaded yet 404s and the card shows its placeholder.
+     * See [themeSlug] for the exact naming and scripts/theme-icons.csv for the full theme → filename list.
+     */
+    fun themeIconUrl(theme: String): String = "$THEME_ICON_BASE${themeSlug(theme)}.png"
+
+    /**
+     * "DC Comics Super Heroes" → "dc-comics-super-heroes"; "Pokémon" → "pokemon"; "Gabby's Dollhouse" →
+     * "gabbys-dollhouse". Accents stripped, apostrophes dropped, lowercase, every other run of
+     * non-alphanumerics → "-", trimmed. Must stay in step with scripts/theme-icons.csv.
+     */
+    fun themeSlug(theme: String): String =
+        Normalizer.normalize(theme, Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase()
+            .replace("'", "")
+            .replace("’", "")
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
 }

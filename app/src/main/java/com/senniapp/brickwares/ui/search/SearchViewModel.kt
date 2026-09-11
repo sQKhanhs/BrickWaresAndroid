@@ -16,6 +16,7 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -521,11 +522,8 @@ class SearchViewModel(
             }
             .sortedBy { it.theme }
 
-    private fun themeLogo(theme: String): String? = when (theme.lowercase()) {
-        "architecture" -> "file:///android_asset/themelogo-architecture.png"
-        "batman" -> "file:///android_asset/themelogo-batman.png"
-        else -> null
-    }
+    /** Hand-curated theme icon in R2, by a deterministic slug of the name (see [CatalogImages.themeIconUrl]). */
+    private fun themeLogo(theme: String): String = CatalogImages.themeIconUrl(theme)
 
     private companion object {
         /** Max live suggestions per kind (sets, minifigs) in the typing dropdown. */
