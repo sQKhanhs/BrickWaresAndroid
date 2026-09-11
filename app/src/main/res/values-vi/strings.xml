@@ -78,6 +78,7 @@
     <string name="toast_removed_wishlist">Đã xóa %1$s khỏi danh sách mong muốn</string>
     <string name="toast_coming_soon">Tính năng này chưa có trong bản xem trước</string>
     <string name="toast_account_deleted">Đã xóa tài khoản và dữ liệu của bạn</string>
+    <string name="toast_signed_out">Đã đăng xuất</string>
     <string name="toast_delete_account_failed">Không thể xóa tài khoản. Vui lòng thử lại.</string>
     <string name="toast_password_set">Đã đặt mật khẩu — giờ bạn có thể đăng nhập bằng email.</string>
     <string name="toast_password_failed">Không thể đặt mật khẩu. Vui lòng thử lại.</string>
@@ -171,6 +172,15 @@
     <string name="settings_no_internet_body">Nhập cần kết nối để đồng bộ dữ liệu. Vui lòng thử lại sau.</string>
     <string name="settings_retirement_alerts">Thông báo ngừng bán</string>
     <string name="settings_retirement_alerts_desc">Nhận thông báo khi một món trong danh sách mong muốn ngừng bán</string>
+    <string name="settings_notifications_blocked_title">Thông báo đang tắt</string>
+    <string name="settings_notifications_disabled">Thông báo của BrickWares đang bị tắt nên không thể bật cảnh báo ngừng bán. Hãy bật thông báo trong cài đặt thiết bị.</string>
+    <string name="settings_open_notification_settings">Mở cài đặt</string>
+    <!-- Developer section (debug builds only) -->
+    <string name="settings_section_developer">Nhà phát triển (chỉ bản debug)</string>
+    <string name="settings_developer_desc">Kiểm tra thiết lập Crashlytics — báo cáo sẽ gửi ở lần mở ứng dụng tiếp theo.</string>
+    <string name="settings_test_non_fatal">Gửi lỗi thử nghiệm (non-fatal) tới Crashlytics</string>
+    <string name="settings_test_crash">Buộc ứng dụng crash thử nghiệm</string>
+    <string name="toast_test_non_fatal_sent">Đã ghi lỗi thử nghiệm — có thể mất một lúc hoặc tới lần mở sau mới hiện trên Crashlytics</string>
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Thông báo ngừng bán</string>
     <string name="notif_channel_retirement_desc">Thông báo khi một món trong danh sách mong muốn chuyển sang ngừng bán</string>

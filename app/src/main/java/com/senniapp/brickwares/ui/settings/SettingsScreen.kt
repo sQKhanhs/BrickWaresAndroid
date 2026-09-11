@@ -33,10 +33,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,8 +51,13 @@ import android.app.Activity
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
@@ -70,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.ui.components.BwToast
@@ -142,9 +153,15 @@ fun SettingsScreen(
             }
         },
         onCurrencyChange = viewModel::onCurrencyChange,
-        onToggleRetirement = viewModel::onToggleRetirementAlerts,
+        onSetRetirement = viewModel::onSetRetirementAlerts,
+        onNotificationsBlocked = viewModel::onNotificationsBlocked,
+        onDismissNotificationsBlocked = viewModel::onDismissNotificationsBlocked,
+        onOpenNotificationSettings = viewModel::onOpenNotificationSettings,
+        onResumedFromNotificationSettings = viewModel::onResumedFromNotificationSettings,
         onToggleAnalytics = viewModel::onToggleAnalytics,
         onToggleChangelog = viewModel::onToggleChangelog,
+        onSendTestNonFatal = viewModel::onSendTestNonFatal,
+        onForceTestCrash = viewModel::onForceTestCrash,
         onExport = viewModel::onExportCollection,
         onImport = viewModel::onImportCollection,
         onComingSoon = viewModel::onComingSoon,
@@ -172,9 +189,15 @@ private fun SettingsContent(
     currentLanguage: AppLanguage,
     onLanguageChange: (AppLanguage) -> Unit,
     onCurrencyChange: (AppCurrency) -> Unit,
-    onToggleRetirement: () -> Unit,
+    onSetRetirement: (Boolean) -> Unit,
+    onNotificationsBlocked: () -> Unit,
+    onDismissNotificationsBlocked: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onResumedFromNotificationSettings: (Boolean) -> Unit,
     onToggleAnalytics: () -> Unit,
     onToggleChangelog: () -> Unit,
+    onSendTestNonFatal: () -> Unit,
+    onForceTestCrash: () -> Unit,
     onExport: (Uri, ContentResolver) -> Unit,
     onImport: (Uri, ContentResolver) -> Unit,
     onComingSoon: (String) -> Unit,
@@ -193,6 +216,23 @@ private fun SettingsContent(
     }
     var showImportConfirm by remember { mutableStateOf(false) }
     var showNoInternet by remember { mutableStateOf(false) }
+    // Completes an enable the user started via the blocked-notifications dialog's "Open settings":
+    // when the app returns to the foreground with notifications now allowed, alerts switch on for
+    // them (no second tap); if they came back without enabling anything, the pending intent is
+    // dropped. Observes the PROCESS lifecycle — "came back from system settings" is an app-level
+    // resume. (An observer added while already resumed gets a synthetic ON_RESUME; harmless, since
+    // nothing is pending until "Open settings" is tapped.)
+    val awaitingSettings by rememberUpdatedState(state.awaitingNotificationSettings)
+    DisposableEffect(Unit) {
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && awaitingSettings) {
+                onResumedFromNotificationSettings(notificationsAllowed(context))
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     val exportFileName = "brickwares-backup-${LocalDate.now()}.csv"
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         Column(
@@ -318,16 +358,34 @@ private fun SettingsContent(
             // notifications once POST_NOTIFICATIONS is granted, so switching the alerts ON asks for it
             // (the toggle persists either way; posting is guarded if it's denied).
             if (state.isLoggedIn) {
-                val notifPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                // The switch is controlled by the persisted pref, so it only turns ON once the Android
+                // 13+ POST_NOTIFICATIONS prompt is GRANTED. A denial — or a request the system won't
+                // show (permanently denied: the callback returns false with no dialog) — leaves it off.
+                val notifPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                    when {
+                        granted -> onSetRetirement(true)
+                        // Denied with NO dialog shown (permanently denied): rationale stays false. A fresh
+                        // "No" flips rationale to true — that user just answered, so don't nag them.
+                        (context as? Activity)?.let {
+                            !ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.POST_NOTIFICATIONS)
+                        } == true -> onNotificationsBlocked()
+                    }
+                }
                 Section(stringResource(R.string.settings_section_notifications)) {
                     ToggleRow(
                         stringResource(R.string.settings_retirement_alerts),
                         checked = state.retirementAlerts,
                         onToggle = {
-                            if (!state.retirementAlerts && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            when {
+                                state.retirementAlerts -> onSetRetirement(false)
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ->
+                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                NotificationManagerCompat.from(context).areNotificationsEnabled() -> onSetRetirement(true)
+                                // Notifications are off for the app in system settings and there's no
+                                // prompt to show → stay off, and explain + offer "Open settings".
+                                else -> onNotificationsBlocked()
                             }
-                            onToggleRetirement()
                         },
                         description = stringResource(R.string.settings_retirement_alerts_desc),
                     )
@@ -373,6 +431,24 @@ private fun SettingsContent(
                 RowDivider()
                 NavRow(stringResource(R.string.settings_rate), onClick = { onComingSoon("Rate") })
             }
+
+            // ---- Developer (debug builds only) ----
+            // Crashlytics setup checks: a test non-fatal (Timber → Crashlytics, no crash) and the Firebase
+            // docs' "force a test crash" (uncaught exception; the report uploads on the NEXT launch).
+            // Hidden in release. Crashlytics is always on, so these need no toggle.
+            if (BuildConfig.DEBUG) {
+                Section(stringResource(R.string.settings_section_developer)) {
+                    Text(
+                        stringResource(R.string.settings_developer_desc),
+                        style = BwType.body.copy(fontSize = 11.sp),
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                    )
+                    NavRow(stringResource(R.string.settings_test_non_fatal), onClick = onSendTestNonFatal)
+                    RowDivider()
+                    NavRow(stringResource(R.string.settings_test_crash), onClick = onForceTestCrash, danger = true)
+                }
+            }
         }
 
         if (state.showAvatarPicker) {
@@ -404,6 +480,18 @@ private fun SettingsContent(
 
         if (showNoInternet) {
             NoInternetDialog(onDismiss = { showNoInternet = false })
+        }
+
+        // Retirement alerts can't be enabled (notifications blocked, or the permission prompt won't
+        // show anymore): explain, and deep-link to the app's notification settings.
+        if (state.showNotificationsBlocked) {
+            NotificationsBlockedDialog(
+                onOpenSettings = {
+                    onOpenNotificationSettings() // dismiss + remember to finish the enable on return
+                    openAppNotificationSettings(context)
+                },
+                onDismiss = onDismissNotificationsBlocked,
+            )
         }
 
         // Import runs an overwrite + immediate sync; lock the UI behind a non-dismissable loading modal
@@ -615,6 +703,52 @@ private fun NoInternetDialog(onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Retirement alerts can't be enabled — notifications are off for the app, or the permission prompt
+ * won't show anymore (permanently denied). Explains why and deep-links to the fix, instead of leaving
+ * the toggle tap a silent no-op.
+ */
+@Composable
+private fun NotificationsBlockedDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    val colors = BwTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.settings_notifications_blocked_title), style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.settings_notifications_disabled),
+                    style = BwType.body.copy(fontSize = 13.sp),
+                    color = colors.textMuted,
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinePill(stringResource(R.string.action_cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+                    Pill(text = stringResource(R.string.settings_open_notification_settings), filled = true, onClick = onOpenSettings, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/** Whether the app may post notifications right now (Android 13+ runtime grant, and not disabled in device settings). */
+private fun notificationsAllowed(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) return false
+    return NotificationManagerCompat.from(context).areNotificationsEnabled()
+}
+
+/** Deep-links to the app's notification settings (Android 8+; the app-details page before that). */
+private fun openAppNotificationSettings(context: Context) {
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+    }
+    runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 /** Non-dismissable loading modal shown while a CSV import (overwrite + sync) runs. */

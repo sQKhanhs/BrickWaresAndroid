@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.local.AnalyticsPrefs
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.repository.AuthRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * ViewModel for the Settings tab. Account state (sign-in/out) is real, backed by Supabase Auth via
@@ -71,12 +73,22 @@ class SettingsViewModel(
         RetirementAlertPrefs.enabledFlow
             .onEach { enabled -> _uiState.update { it.copy(retirementAlerts = enabled) } }
             .launchIn(viewModelScope)
+
+        // Persisted usage-analytics consent (Settings → Privacy). Crashlytics is always on, not gated here.
+        AnalyticsPrefs.consentFlow
+            .onEach { consent -> _uiState.update { it.copy(analyticsConsent = consent) } }
+            .launchIn(viewModelScope)
     }
 
     // ---- Account (sign-in is handled by the shared sign-in modal via SignInController) ----
 
     fun onSignOut() {
-        viewModelScope.launch { authRepository.signOut() }
+        viewModelScope.launch {
+            authRepository.signOut()
+            // Confirm it happened — the tab stays put (no login wall), so a silent flip to the
+            // signed-out layout can read as nothing having happened.
+            _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_signed_out)) }
+        }
     }
 
     // ---- Set a password (Google-only accounts, to add email+password sign-in) ----
@@ -140,13 +152,41 @@ class SettingsViewModel(
         CurrencyPrefs.set(currency)
     }
 
-    fun onToggleRetirementAlerts() {
-        // Persist + broadcast; the RetirementAlertPrefs collector above updates our own UiState.
-        RetirementAlertPrefs.enabled = !RetirementAlertPrefs.enabled
+    /**
+     * Sets (not toggles) retirement alerts — the screen only asks for ON once the notification
+     * permission is granted, so the switch never flips on after a denial. Persist + broadcast; the
+     * RetirementAlertPrefs collector above updates our own UiState.
+     */
+    fun onSetRetirementAlerts(enabled: Boolean) {
+        RetirementAlertPrefs.enabled = enabled
+    }
+
+    /**
+     * Alerts can't be enabled because the system won't show a prompt — notifications are off for the
+     * app in device settings, or the permission was permanently denied. Opens the explain + "Open
+     * settings" dialog rather than leaving the tap a silent no-op.
+     */
+    fun onNotificationsBlocked() = _uiState.update { it.copy(showNotificationsBlocked = true) }
+
+    fun onDismissNotificationsBlocked() = _uiState.update { it.copy(showNotificationsBlocked = false) }
+
+    /** "Open settings" tapped: dismiss the dialog and remember to complete the enable on return. */
+    fun onOpenNotificationSettings() =
+        _uiState.update { it.copy(showNotificationsBlocked = false, awaitingNotificationSettings = true) }
+
+    /**
+     * The app came back to the foreground after "Open settings". If notifications are now allowed,
+     * finish the enable the user already started (no second tap); either way drop the pending intent.
+     */
+    fun onResumedFromNotificationSettings(notificationsAllowed: Boolean) {
+        if (notificationsAllowed) RetirementAlertPrefs.enabled = true
+        _uiState.update { it.copy(awaitingNotificationSettings = false) }
     }
 
     fun onToggleAnalytics() {
-        _uiState.update { it.copy(analyticsConsent = !it.analyticsConsent) }
+        // Persist + broadcast; Observability applies it to Crashlytics/Analytics live, and the
+        // AnalyticsPrefs collector above updates our own UiState.
+        AnalyticsPrefs.consent = !AnalyticsPrefs.consent
     }
 
     fun onToggleChangelog() {
@@ -196,6 +236,24 @@ class SettingsViewModel(
             _uiState.update { it.copy(importing = false, toastMessage = toast) }
         }
     }
+
+    // ---- Developer (the Settings section is only shown in debug builds) ----
+
+    /**
+     * Records a test NON-FATAL through the Timber → Crashlytics path (no crash). Appears in the console
+     * once Firebase is configured (Crashlytics is always on); non-fatals are batched, so it may take a
+     * moment or the next launch to show.
+     */
+    fun onSendTestNonFatal() {
+        Timber.tag("CrashTest").e(RuntimeException("Test non-fatal"), "Test non-fatal report from Settings → Developer")
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_test_non_fatal_sent)) }
+    }
+
+    /**
+     * Throws on the main thread — an uncaught exception that crashes the app, for the Crashlytics
+     * setup check (Firebase docs, "Force a test crash"). The report uploads on the NEXT launch.
+     */
+    fun onForceTestCrash(): Nothing = throw RuntimeException("Test Crash")
 
     /** Placeholder for actions whose real behaviour (files, external links) isn't built yet. */
     fun onComingSoon(@Suppress("UNUSED_PARAMETER") action: String) {

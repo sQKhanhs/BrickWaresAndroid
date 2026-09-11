@@ -78,6 +78,7 @@
     <string name="toast_removed_wishlist">%1$s removed from Wishlist</string>
     <string name="toast_coming_soon">This isn\'t available in this preview yet</string>
     <string name="toast_account_deleted">Your account and data have been deleted</string>
+    <string name="toast_signed_out">Signed out</string>
     <string name="toast_delete_account_failed">Couldn\'t delete your account. Please try again.</string>
     <string name="toast_password_set">Password set — you can now sign in with your email too.</string>
     <string name="toast_password_failed">Couldn\'t set the password. Please try again.</string>
@@ -172,6 +173,15 @@
     <string name="settings_no_internet_body">Importing needs a connection to sync your data. Try again later.</string>
     <string name="settings_retirement_alerts">Retirement alerts</string>
     <string name="settings_retirement_alerts_desc">Get notified when an item on your wishlist retires</string>
+    <string name="settings_notifications_blocked_title">Notifications are off</string>
+    <string name="settings_notifications_disabled">Notifications are turned off for BrickWares, so retirement alerts can\'t be enabled. Turn them on in your device settings.</string>
+    <string name="settings_open_notification_settings">Open settings</string>
+    <!-- Developer section (debug builds only) -->
+    <string name="settings_section_developer">Developer (debug only)</string>
+    <string name="settings_developer_desc">Crashlytics setup checks — a report uploads on the next app launch.</string>
+    <string name="settings_test_non_fatal">Send test non-fatal to Crashlytics</string>
+    <string name="settings_test_crash">Force a test crash</string>
+    <string name="toast_test_non_fatal_sent">Test non-fatal recorded — it may take a moment or the next launch to appear in Crashlytics</string>
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Retirement alerts</string>
     <string name="notif_channel_retirement_desc">Notifies when an item on your wishlist changes to retired</string>

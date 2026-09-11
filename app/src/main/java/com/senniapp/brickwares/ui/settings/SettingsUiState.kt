@@ -38,8 +38,13 @@ data class SettingsUiState(
     val currency: AppCurrency = AppCurrency.USD,
     /** Retirement alerts opt-in (persisted in RetirementAlertPrefs; off by default, needs an account). */
     val retirementAlerts: Boolean = false,
+    /** Crash-report + usage-analytics opt-in (persisted in AnalyticsPrefs; off by default). */
     val analyticsConsent: Boolean = false,
     val showDeleteConfirm: Boolean = false,
+    /** Retirement alerts can't be enabled (notifications blocked / prompt won't show) → explain + "Open settings". */
+    val showNotificationsBlocked: Boolean = false,
+    /** "Open settings" was tapped from that dialog — finish the enable when the app comes back with notifications allowed. */
+    val awaitingNotificationSettings: Boolean = false,
     val showChangelog: Boolean = false,
     /** Chosen profile avatar (session-only for now, like the other prefs). */
     val avatar: AvatarGender = AvatarGender.MALE,
