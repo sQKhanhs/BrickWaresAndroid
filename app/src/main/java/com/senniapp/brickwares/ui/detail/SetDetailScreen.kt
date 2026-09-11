@@ -193,6 +193,10 @@ private fun SetDetailContent(
     val isLoggedIn = rememberIsLoggedIn()
     // Tapping the hero opens a full-screen image gallery (box shot + set render, swipeable).
     var showGallery by remember { mutableStateOf(false) }
+    // Whether the hero actually loaded an image (SetThumb's terminal onResolvedUrl). Gates the gallery
+    // tap: a "No image" placeholder — every candidate 404'd — must be inert, because the viewer drops
+    // dead URLs and would otherwise open on an empty black page. Reset per set.
+    var heroLoaded by remember(state.set?.id) { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         // Catalog unavailable (no connection / error) → the error fallback replaces the page.
         if (state.offline) {
@@ -259,12 +263,14 @@ private fun SetDetailContent(
                     size = 96.dp,
                     iconSize = 40.dp,
                     corner = 12.dp,
-                    // Tap the image to open the full-screen gallery (render first, then the box shot).
-                    modifier = if (galleryImages.isNotEmpty()) {
+                    // Tap the image to open the full-screen gallery (render first, then the box shot) —
+                    // only once an image has actually loaded; the placeholder is not tappable.
+                    modifier = if (heroLoaded && galleryImages.isNotEmpty()) {
                         Modifier.clickable { showGallery = true }
                     } else {
                         Modifier
                     },
+                    onResolvedUrl = { url -> heroLoaded = url != null },
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
