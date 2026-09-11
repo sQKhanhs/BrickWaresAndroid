@@ -490,8 +490,8 @@ private fun NewSetsCard(
                         append(stringResource(R.string.home_new_sets_view_more))
                         withStyle(SpanStyle(fontSize = 19.sp)) { append("  →") }
                     },
-                    style = BwType.body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                    color = colors.brandYellow,
+                    style = BwType.body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                    color = colors.text,
                 )
             }
         }

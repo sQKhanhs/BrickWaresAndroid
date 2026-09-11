@@ -1,0 +1,31 @@
+<!-- List/grid view (2x2 compact cards). Matches the ic_bw_* style: viewBox 24, stroke 1.8. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4,4 H10 V10 H4 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M14,4 H20 V10 H14 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M4,14 H10 V20 H4 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M14,14 H20 V20 H14 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round" />
+</vector>

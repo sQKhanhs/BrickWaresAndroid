@@ -171,6 +171,13 @@
     <string name="settings_no_internet_title">No internet connection</string>
     <string name="settings_no_internet_body">Importing needs a connection to sync your data. Try again later.</string>
     <string name="settings_retirement_alerts">Retirement alerts</string>
+    <string name="settings_retirement_alerts_desc">Get notified when an item on your wishlist retires</string>
+    <!-- Retirement-alert notifications -->
+    <string name="notif_channel_retirement">Retirement alerts</string>
+    <string name="notif_channel_retirement_desc">Notifies when an item on your wishlist changes to retired</string>
+    <string name="notif_retired_title">Wishlist retirement</string>
+    <string name="notif_retired_one">%1$s has retired. Check the app for details.</string>
+    <string name="notif_retired_many">There are %1$d items in your wishlist that have retired. Check the app for details.</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Service</string>
     <string name="settings_usage_analytics">Usage analytics</string>
@@ -276,6 +283,10 @@
     <string name="search_mark_favorite_cd">Mark favorite</string>
     <string name="search_all_subthemes">All Subthemes</string>
     <string name="search_sort_label">Sort</string>
+    <string name="search_view_detail_cd">Detail view</string>
+    <string name="search_view_list_cd">List view</string>
+    <string name="search_mode_sets_cd">Browse sets</string>
+    <string name="search_mode_minifigs_cd">Browse minifigures</string>
     <string name="search_too_many">There are too many results for \"%1$s\", please narrow your search.</string>
     <string name="search_tips_title">Search Tips</string>
     <string name="search_tip_1">Include the set\'s number, name, or theme.</string>

@@ -170,6 +170,13 @@
     <string name="settings_no_internet_title">Không có kết nối internet</string>
     <string name="settings_no_internet_body">Nhập cần kết nối để đồng bộ dữ liệu. Vui lòng thử lại sau.</string>
     <string name="settings_retirement_alerts">Thông báo ngừng bán</string>
+    <string name="settings_retirement_alerts_desc">Nhận thông báo khi một món trong danh sách mong muốn ngừng bán</string>
+    <!-- Retirement-alert notifications -->
+    <string name="notif_channel_retirement">Thông báo ngừng bán</string>
+    <string name="notif_channel_retirement_desc">Thông báo khi một món trong danh sách mong muốn chuyển sang ngừng bán</string>
+    <string name="notif_retired_title">Món mong muốn đã ngừng bán</string>
+    <string name="notif_retired_one">%1$s đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
+    <string name="notif_retired_many">Có %1$d món trong danh sách mong muốn của bạn đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
     <string name="settings_privacy_policy">Chính sách bảo mật</string>
     <string name="settings_terms">Điều khoản dịch vụ</string>
     <string name="settings_usage_analytics">Phân tích sử dụng</string>
@@ -274,6 +281,10 @@
     <string name="search_mark_favorite_cd">Đánh dấu yêu thích</string>
     <string name="search_all_subthemes">Tất cả chủ đề phụ</string>
     <string name="search_sort_label">Sắp xếp</string>
+    <string name="search_view_detail_cd">Xem chi tiết</string>
+    <string name="search_view_list_cd">Xem danh sách</string>
+    <string name="search_mode_sets_cd">Duyệt bộ</string>
+    <string name="search_mode_minifigs_cd">Duyệt minifigure</string>
     <string name="search_too_many">Có quá nhiều kết quả cho \"%1$s\", vui lòng thu hẹp tìm kiếm.</string>
     <string name="search_tips_title">Mẹo tìm kiếm</string>
     <string name="search_tip_1">Bao gồm mã bộ, tên hoặc chủ đề.</string>

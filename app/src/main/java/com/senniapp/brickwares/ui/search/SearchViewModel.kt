@@ -416,6 +416,19 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * Called when the user (re)enters the Search tab from the nav bar. Beyond [resetToDefault]'s
+     * clearing of any search/theme-detail, this also restores the browse DEFAULTS — set mode,
+     * alphabetical sort, detail view — so a Favorites filter (or a mode/view switch) from a previous
+     * visit doesn't linger. (Mode-swap / cross-nav paths call [resetToDefault] directly and keep those.)
+     */
+    fun onEnterSearchTab() {
+        _uiState.update {
+            it.copy(mode = SearchMode.SETS, themeSort = ThemeSort.ALPHABETICAL, themeViewMode = ThemeViewMode.DETAIL)
+        }
+        resetToDefault()
+    }
+
     /** Freeze the current desired theme order into the paginated browse snapshot (favorites pinned).
      *  Called on browse (re)entry — never on a favorite toggle, so bookmarking doesn't reorder live. */
     private fun SearchUiState.withReorderedThemes(): SearchUiState =
@@ -424,6 +437,16 @@ class SearchViewModel(
     fun onThemeSortChange(sort: ThemeSort) {
         // Reset to page 1 (the Favorites filter changes the list length) and re-freeze the order.
         _uiState.update { it.copy(themeSort = sort, themePage = 1, minifigThemePage = 1).withReorderedThemes() }
+    }
+
+    /** Toggle the theme browse between detail cards and the compact 2-column list (favorites shared). */
+    fun onThemeViewModeChange(mode: ThemeViewMode) {
+        _uiState.update {
+            // List mode shows no set count, so its sort menu drops "Amount of sets" — if it was
+            // selected, fall back to Alphabetical.
+            val sort = if (mode == ThemeViewMode.LIST && it.themeSort == ThemeSort.COUNT) ThemeSort.ALPHABETICAL else it.themeSort
+            it.copy(themeViewMode = mode, themeSort = sort, themePage = 1, minifigThemePage = 1).withReorderedThemes()
+        }
     }
 
     fun onThemePageChange(page: Int) = _uiState.update { it.copy(themePage = page) }

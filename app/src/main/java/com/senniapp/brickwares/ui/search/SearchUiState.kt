@@ -27,6 +27,13 @@ enum class ThemeSort(val label: String) {
     FAVORITE("Favorites"),
 }
 
+/**
+ * How the theme browse renders: [DETAIL] is the full card (logo + name + count + subthemes + favorite
+ * star, one per row); [LIST] is a compact 2-column grid of just name + set count (no logo/subthemes/
+ * favorites). Shared by the set + minifig browse.
+ */
+enum class ThemeViewMode { DETAIL, LIST }
+
 /** Ordering for the sets listed inside a theme-detail view. */
 enum class ThemeDetailSort(val label: String) {
     NEWEST("Newest"),
@@ -71,6 +78,8 @@ data class SearchUiState(
     val minifigSuggestions: List<Minifig> = emptyList(),
     val themes: List<ThemeGroup> = emptyList(),
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
+    /** Detail cards vs a compact 2-column list. Shared by the set + minifig theme browse. */
+    val themeViewMode: ThemeViewMode = ThemeViewMode.DETAIL,
     /** 1-based current page for the theme browse grid (10/page). */
     val themePage: Int = 1,
     /** Frozen display order for the set theme browse — favorites pinned. Recomputed only when the
