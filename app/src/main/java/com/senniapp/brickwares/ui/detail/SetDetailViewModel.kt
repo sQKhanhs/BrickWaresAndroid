@@ -18,6 +18,7 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueContributionRepository
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.util.Observability
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,10 +82,14 @@ class SetDetailViewModel(
         }
     }
 
+    /** The set id already reported as viewed for this page open (analytics `view_item`, once per open). */
+    private var viewedId: String? = null
+
     fun load(catalogId: String) {
         this.catalogKey = catalogId
         // Force a fresh recommendation batch for this open (even when returning to a set seen before).
         relatedKey = null
+        viewedId = null
         _uiState.update { it.copy(addTarget = null, toastMessage = null) }
         rebuild()
     }
@@ -95,6 +100,12 @@ class SetDetailViewModel(
         // Resolve by canonical id ("number-variant"); fall back to a bare set number.
         val set = all.find { it.id == key } ?: all.find { it.setNumber == key }
         val sn = set?.setNumber ?: key
+        // Report the view once the set resolves (the catalog may still be loading on the first pass);
+        // rebuilds from collection/wishlist changes while the page is open don't re-report.
+        if (set != null && viewedId != set.id) {
+            viewedId = set.id
+            Observability.logItemViewed(kind = "set", id = set.id, name = set.name, theme = set.theme)
+        }
         val owned = collectionItems.find { it.setNumber == sn }
         // Keep the open copies dialog live (hero OR a recommended set), so edits/deletes/sells reflect.
         // If its item is no longer owned (last copy deleted), close it — clearing copiesSetNumber too,

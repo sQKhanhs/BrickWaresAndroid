@@ -18,6 +18,7 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueContributionRepository
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.util.Observability
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,9 +65,13 @@ class MinifigDetailViewModel(
         }
     }
 
+    /** The fig already reported as viewed for this page open (analytics `view_item`, once per open). */
+    private var viewedFig: String? = null
+
     fun load(figNumber: String) {
         this.figNum = figNumber
         valueKey = null
+        viewedFig = null
         _uiState.update { it.copy(addTarget = null, toastMessage = null, showCopies = false) }
         rebuild()
     }
@@ -74,6 +79,16 @@ class MinifigDetailViewModel(
     private fun rebuild() {
         val fn = figNum ?: return
         val fig = catalogRepo.minifigByNum(fn)
+        // Report the view once the fig resolves (catalog may still be loading); once per page open.
+        if (fig != null && viewedFig != fig.figNum) {
+            viewedFig = fig.figNum
+            Observability.logItemViewed(
+                kind = "minifig",
+                id = fig.figNum,
+                name = fig.name,
+                theme = fig.themeSubthemes.firstOrNull()?.first,
+            )
+        }
         val owned = collectionItems.find { it.itemType == ItemType.MINIFIG && it.setNumber == fn }
         val appearsIn = if (fig == null) emptyList() else catalogRepo.setsForMinifig(fn)
         // Two-state availability from the fig's sets: Retail while any containing set is still

@@ -2,6 +2,7 @@ package com.senniapp.brickwares.util
 
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -44,6 +45,7 @@ object Observability {
 
     /** Call once from `Application.onCreate`, after [AnalyticsPrefs.init]. */
     fun init(app: Application) {
+        appContext = app
         firebaseReady = FirebaseApp.getApps(app).isNotEmpty()
         // Crashlytics tree in every build (reports from dev runs too); Logcat tree only in debug.
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
@@ -62,6 +64,32 @@ object Observability {
     fun applyConsent(context: Context, enabled: Boolean) {
         if (!firebaseReady) return
         FirebaseAnalytics.getInstance(context).setAnalyticsCollectionEnabled(enabled)
+    }
+
+    /** Application context for event logging; set in [init]. */
+    @Volatile
+    private var appContext: Context? = null
+
+    /**
+     * Records that a catalog detail page was viewed — Firebase's standard `view_item` event, so the
+     * console's Events / Engagement reports answer "which sets are looked at, how often, and when"
+     * (the SDK stamps the time). Carries only catalog data (the set / minifig id, its name and theme):
+     * no user identity, and nothing at all is sent unless the user opted in to usage analytics
+     * (collection is disabled otherwise, so the SDK drops the event). [kind] is "set" or "minifig".
+     */
+    fun logItemViewed(kind: String, id: String, name: String, theme: String?) {
+        Timber.tag("Analytics").d("view_item %s %s (%s)", kind, id, theme)
+        val context = appContext ?: return
+        if (!firebaseReady) return
+        FirebaseAnalytics.getInstance(context).logEvent(
+            FirebaseAnalytics.Event.VIEW_ITEM,
+            Bundle().apply {
+                putString(FirebaseAnalytics.Param.CONTENT_TYPE, kind)
+                putString(FirebaseAnalytics.Param.ITEM_ID, id)
+                putString(FirebaseAnalytics.Param.ITEM_NAME, name.take(100))
+                if (!theme.isNullOrBlank()) putString(FirebaseAnalytics.Param.ITEM_CATEGORY, theme)
+            },
+        )
     }
 
     /**
