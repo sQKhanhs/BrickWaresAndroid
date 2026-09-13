@@ -80,7 +80,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.ui.components.BwToast
@@ -160,8 +159,9 @@ fun SettingsScreen(
         onResumedFromNotificationSettings = viewModel::onResumedFromNotificationSettings,
         onToggleAnalytics = viewModel::onToggleAnalytics,
         onToggleChangelog = viewModel::onToggleChangelog,
-        onSendTestNonFatal = viewModel::onSendTestNonFatal,
-        onForceTestCrash = viewModel::onForceTestCrash,
+        onOpenFeedback = viewModel::onOpenFeedback,
+        onCloseFeedback = viewModel::onCloseFeedback,
+        onSendFeedback = viewModel::onSendFeedback,
         onExport = viewModel::onExportCollection,
         onImport = viewModel::onImportCollection,
         onComingSoon = viewModel::onComingSoon,
@@ -196,8 +196,9 @@ private fun SettingsContent(
     onResumedFromNotificationSettings: (Boolean) -> Unit,
     onToggleAnalytics: () -> Unit,
     onToggleChangelog: () -> Unit,
-    onSendTestNonFatal: () -> Unit,
-    onForceTestCrash: () -> Unit,
+    onOpenFeedback: () -> Unit,
+    onCloseFeedback: () -> Unit,
+    onSendFeedback: (message: String, contactEmail: String?) -> Unit,
     onExport: (Uri, ContentResolver) -> Unit,
     onImport: (Uri, ContentResolver) -> Unit,
     onComingSoon: (String) -> Unit,
@@ -216,6 +217,8 @@ private fun SettingsContent(
     }
     var showImportConfirm by remember { mutableStateOf(false) }
     var showNoInternet by remember { mutableStateOf(false) }
+    // Which action the no-internet dialog explains (import vs feedback) — set before showing it.
+    var noInternetBody by remember { mutableStateOf(R.string.settings_no_internet_body) }
     // Completes an enable the user started via the blocked-notifications dialog's "Open settings":
     // when the app returns to the foreground with notifications now allowed, alerts switch on for
     // them (no second tap); if they came back without enabling anything, the pending intent is
@@ -427,27 +430,16 @@ private fun SettingsContent(
                     )
                 }
                 RowDivider()
-                NavRow(stringResource(R.string.settings_send_feedback), onClick = { onComingSoon("Feedback") })
+                // Feedback is sent live (RPC), so it needs a connection — explain instead of failing.
+                NavRow(
+                    stringResource(R.string.settings_send_feedback),
+                    onClick = {
+                        if (isOnline) onOpenFeedback()
+                        else { noInternetBody = R.string.settings_feedback_no_internet_body; showNoInternet = true }
+                    },
+                )
                 RowDivider()
                 NavRow(stringResource(R.string.settings_rate), onClick = { onComingSoon("Rate") })
-            }
-
-            // ---- Developer (debug builds only) ----
-            // Crashlytics setup checks: a test non-fatal (Timber → Crashlytics, no crash) and the Firebase
-            // docs' "force a test crash" (uncaught exception; the report uploads on the NEXT launch).
-            // Hidden in release. Crashlytics is always on, so these need no toggle.
-            if (BuildConfig.DEBUG) {
-                Section(stringResource(R.string.settings_section_developer)) {
-                    Text(
-                        stringResource(R.string.settings_developer_desc),
-                        style = BwType.body.copy(fontSize = 11.sp),
-                        color = colors.textMuted,
-                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
-                    )
-                    NavRow(stringResource(R.string.settings_test_non_fatal), onClick = onSendTestNonFatal)
-                    RowDivider()
-                    NavRow(stringResource(R.string.settings_test_crash), onClick = onForceTestCrash, danger = true)
-                }
             }
         }
 
@@ -472,14 +464,24 @@ private fun SettingsContent(
                 // Import overwrites then syncs, so it needs a connection — block it while offline.
                 onConfirm = {
                     showImportConfirm = false
-                    if (isOnline) importLauncher.launch(arrayOf("*/*")) else showNoInternet = true
+                    if (isOnline) importLauncher.launch(arrayOf("*/*"))
+                    else { noInternetBody = R.string.settings_no_internet_body; showNoInternet = true }
                 },
                 onDismiss = { showImportConfirm = false },
             )
         }
 
         if (showNoInternet) {
-            NoInternetDialog(onDismiss = { showNoInternet = false })
+            NoInternetDialog(body = noInternetBody, onDismiss = { showNoInternet = false })
+        }
+
+        if (state.showFeedback) {
+            FeedbackDialog(
+                askEmail = !state.isLoggedIn, // signed-in users can be answered on their account email
+                sending = state.sendingFeedback,
+                onSend = onSendFeedback,
+                onDismiss = onCloseFeedback,
+            )
         }
 
         // Retirement alerts can't be enabled (notifications blocked, or the permission prompt won't
@@ -586,6 +588,107 @@ private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit
     }
 }
 
+/**
+ * Settings → Send feedback: a free-text message (5–2000 chars) and, when signed out, an optional email
+ * for a reply (signed-in users are reachable on their account email). Validation here is only the
+ * user-facing part; the `submit_feedback` RPC re-validates and rate-limits server-side. While [sending]
+ * the Send pill shows a spinner and the dialog can't be dismissed (see the view-model).
+ */
+@Composable
+private fun FeedbackDialog(
+    askEmail: Boolean,
+    sending: Boolean,
+    onSend: (message: String, contactEmail: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = BwTheme.colors
+    var message by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<Int?>(null) }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = colors.brandYellow,
+        unfocusedBorderColor = colors.borderStrong,
+        focusedTextColor = colors.text,
+        unfocusedTextColor = colors.text,
+        cursorColor = colors.brandYellow,
+    )
+
+    Dialog(onDismissRequest = { if (!sending) onDismiss() }) {
+        Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.feedback_title), style = BwType.cardTitle, color = colors.text)
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.feedback_body), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { if (it.length <= FEEDBACK_MAX) { message = it; error = null } },
+                    placeholder = { Text(stringResource(R.string.feedback_placeholder)) },
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !sending,
+                    colors = fieldColors,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.feedback_counter, message.length, FEEDBACK_MAX),
+                    style = BwType.body.copy(fontSize = 11.sp),
+                    color = colors.textMuted,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                )
+                if (askEmail) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it; error = null },
+                        placeholder = { Text(stringResource(R.string.feedback_email_placeholder)) },
+                        singleLine = true,
+                        enabled = !sending,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        colors = fieldColors,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(it, FEEDBACK_MIN), style = BwType.body.copy(fontSize = 12.sp), color = colors.error)
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinePill(stringResource(R.string.action_cancel), onClick = { if (!sending) onDismiss() }, modifier = Modifier.weight(1f))
+                    if (sending) {
+                        Box(modifier = Modifier.weight(1f).height(36.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = colors.brandYellow, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        }
+                    } else {
+                        Pill(
+                            text = stringResource(R.string.action_send),
+                            filled = true,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val trimmed = message.trim()
+                                val mail = email.trim().ifBlank { null }
+                                when {
+                                    trimmed.length < FEEDBACK_MIN -> error = R.string.feedback_err_short
+                                    mail != null && !android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches() ->
+                                        error = R.string.feedback_err_email
+                                    else -> onSend(trimmed, if (askEmail) mail else null)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val FEEDBACK_MIN = 5
+private const val FEEDBACK_MAX = 2000
+
 @Composable
 private fun AvatarPickerDialog(
     selected: AvatarGender,
@@ -684,7 +787,7 @@ private fun ImportCollectionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit)
 
 /** Shown when the user confirms an import while offline — import needs a connection to sync. */
 @Composable
-private fun NoInternetDialog(onDismiss: () -> Unit) {
+private fun NoInternetDialog(onDismiss: () -> Unit, body: Int = R.string.settings_no_internet_body) {
     val colors = BwTheme.colors
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(20.dp), color = colors.card) {
@@ -692,7 +795,7 @@ private fun NoInternetDialog(onDismiss: () -> Unit) {
                 Text(stringResource(R.string.settings_no_internet_title), style = BwType.cardTitle, color = colors.text)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    stringResource(R.string.settings_no_internet_body),
+                    stringResource(body),
                     style = BwType.body.copy(fontSize = 13.sp),
                     color = colors.textMuted,
                 )

@@ -176,12 +176,6 @@
     <string name="settings_notifications_blocked_title">Notifications are off</string>
     <string name="settings_notifications_disabled">Notifications are turned off for BrickWares, so retirement alerts can\'t be enabled. Turn them on in your device settings.</string>
     <string name="settings_open_notification_settings">Open settings</string>
-    <!-- Developer section (debug builds only) -->
-    <string name="settings_section_developer">Developer (debug only)</string>
-    <string name="settings_developer_desc">Crashlytics setup checks — a report uploads on the next app launch.</string>
-    <string name="settings_test_non_fatal">Send test non-fatal to Crashlytics</string>
-    <string name="settings_test_crash">Force a test crash</string>
-    <string name="toast_test_non_fatal_sent">Test non-fatal recorded — it may take a moment or the next launch to appear in Crashlytics</string>
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Retirement alerts</string>
     <string name="notif_channel_retirement_desc">Notifies when an item on your wishlist changes to retired</string>
@@ -197,6 +191,18 @@
     <string name="settings_version">Version · v0.1.0 (preview)</string>
     <string name="settings_changelog_body">Preview build on mock data: Home, Collection, Wishlist, Search, Set Detail and Settings. Backend sync coming soon.</string>
     <string name="settings_send_feedback">Send feedback</string>
+    <string name="feedback_title">Send feedback</string>
+    <string name="feedback_body">Tell us what’s wrong, what’s missing, or what you love. We read every message.</string>
+    <string name="feedback_placeholder">Your feedback…</string>
+    <string name="feedback_email_placeholder">Email for a reply (optional)</string>
+    <string name="feedback_counter">%1$d / %2$d</string>
+    <string name="feedback_err_short">Please write at least %1$d characters.</string>
+    <string name="feedback_err_email">That email address doesn’t look right.</string>
+    <string name="action_send">Send</string>
+    <string name="toast_feedback_sent">Thanks! Your feedback was sent.</string>
+    <string name="toast_feedback_rate_limited">You’ve sent a lot of feedback recently — please try again later.</string>
+    <string name="toast_feedback_failed">Couldn’t send feedback. Please try again.</string>
+    <string name="settings_feedback_no_internet_body">Sending feedback needs a connection. Try again when you’re back online.</string>
     <string name="settings_rate">Rate BrickWares</string>
     <string name="settings_choose_avatar">Choose Avatar</string>
 

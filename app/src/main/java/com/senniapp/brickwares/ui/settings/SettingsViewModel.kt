@@ -13,6 +13,7 @@ import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.CsvTooNewException
+import com.senniapp.brickwares.data.repository.FeedbackRepository
 import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.AppCurrency
@@ -25,7 +26,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import timber.log.Timber
 
 /**
  * ViewModel for the Settings tab. Account state (sign-in/out) is real, backed by Supabase Auth via
@@ -35,6 +35,7 @@ import timber.log.Timber
 class SettingsViewModel(
     private val authRepository: AuthRepository = AuthRepository,
     private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
+    private val feedbackRepository: FeedbackRepository = FeedbackRepository(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -237,25 +238,49 @@ class SettingsViewModel(
         }
     }
 
-    // ---- Developer (the Settings section is only shown in debug builds) ----
+    /** Placeholder for actions whose real behaviour (files, external links) isn't built yet. */
+    // ---- Send feedback ----
 
-    /**
-     * Records a test NON-FATAL through the Timber → Crashlytics path (no crash). Appears in the console
-     * once Firebase is configured (Crashlytics is always on); non-fatals are batched, so it may take a
-     * moment or the next launch to show.
-     */
-    fun onSendTestNonFatal() {
-        Timber.tag("CrashTest").e(RuntimeException("Test non-fatal"), "Test non-fatal report from Settings → Developer")
-        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_test_non_fatal_sent)) }
+    fun onOpenFeedback() = _uiState.update { it.copy(showFeedback = true) }
+
+    fun onCloseFeedback() {
+        // Ignore a dismiss while a send is in flight — the toast will report the outcome.
+        if (!_uiState.value.sendingFeedback) _uiState.update { it.copy(showFeedback = false) }
     }
 
     /**
-     * Throws on the main thread — an uncaught exception that crashes the app, for the Crashlytics
-     * setup check (Firebase docs, "Force a test crash"). The report uploads on the NEXT launch.
+     * Submits the feedback (the dialog validated length / email format). Closes the dialog on success
+     * or a server-side rejection (rate-limited / invalid — nothing to retry as typed); keeps it open
+     * with the text intact on a network failure so the user can try again.
      */
-    fun onForceTestCrash(): Nothing = throw RuntimeException("Test Crash")
+    fun onSendFeedback(message: String, contactEmail: String?) {
+        if (_uiState.value.sendingFeedback) return
+        _uiState.update { it.copy(sendingFeedback = true) }
+        viewModelScope.launch {
+            val result = feedbackRepository.send(message, contactEmail)
+            _uiState.update {
+                when (result) {
+                    FeedbackRepository.Result.SENT -> it.copy(
+                        sendingFeedback = false, showFeedback = false,
+                        toastMessage = UiText.Res(R.string.toast_feedback_sent),
+                    )
+                    FeedbackRepository.Result.RATE_LIMITED -> it.copy(
+                        sendingFeedback = false, showFeedback = false,
+                        toastMessage = UiText.Res(R.string.toast_feedback_rate_limited),
+                    )
+                    FeedbackRepository.Result.INVALID -> it.copy(
+                        sendingFeedback = false, showFeedback = false,
+                        toastMessage = UiText.Res(R.string.toast_feedback_failed),
+                    )
+                    FeedbackRepository.Result.FAILED -> it.copy(
+                        sendingFeedback = false,
+                        toastMessage = UiText.Res(R.string.toast_feedback_failed),
+                    )
+                }
+            }
+        }
+    }
 
-    /** Placeholder for actions whose real behaviour (files, external links) isn't built yet. */
     fun onComingSoon(@Suppress("UNUSED_PARAMETER") action: String) {
         _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_coming_soon)) }
     }

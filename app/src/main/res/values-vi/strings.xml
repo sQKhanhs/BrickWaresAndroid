@@ -175,12 +175,6 @@
     <string name="settings_notifications_blocked_title">Thông báo đang tắt</string>
     <string name="settings_notifications_disabled">Thông báo của BrickWares đang bị tắt nên không thể bật cảnh báo ngừng bán. Hãy bật thông báo trong cài đặt thiết bị.</string>
     <string name="settings_open_notification_settings">Mở cài đặt</string>
-    <!-- Developer section (debug builds only) -->
-    <string name="settings_section_developer">Nhà phát triển (chỉ bản debug)</string>
-    <string name="settings_developer_desc">Kiểm tra thiết lập Crashlytics — báo cáo sẽ gửi ở lần mở ứng dụng tiếp theo.</string>
-    <string name="settings_test_non_fatal">Gửi lỗi thử nghiệm (non-fatal) tới Crashlytics</string>
-    <string name="settings_test_crash">Buộc ứng dụng crash thử nghiệm</string>
-    <string name="toast_test_non_fatal_sent">Đã ghi lỗi thử nghiệm — có thể mất một lúc hoặc tới lần mở sau mới hiện trên Crashlytics</string>
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Thông báo ngừng bán</string>
     <string name="notif_channel_retirement_desc">Thông báo khi một món trong danh sách mong muốn chuyển sang ngừng bán</string>
@@ -196,6 +190,18 @@
     <string name="settings_version">Phiên bản · v0.1.0 (bản xem trước)</string>
     <string name="settings_changelog_body">Bản xem trước dùng dữ liệu mẫu: Trang chủ, Bộ sưu tập, Danh sách mong muốn, Tìm kiếm, Chi tiết bộ và Cài đặt. Đồng bộ máy chủ sắp ra mắt.</string>
     <string name="settings_send_feedback">Gửi phản hồi</string>
+    <string name="feedback_title">Gửi phản hồi</string>
+    <string name="feedback_body">Hãy cho chúng tôi biết điều gì chưa ổn, còn thiếu, hay bạn thích gì. Chúng tôi đọc mọi tin nhắn.</string>
+    <string name="feedback_placeholder">Phản hồi của bạn…</string>
+    <string name="feedback_email_placeholder">Email để nhận trả lời (không bắt buộc)</string>
+    <string name="feedback_counter">%1$d / %2$d</string>
+    <string name="feedback_err_short">Vui lòng viết ít nhất %1$d ký tự.</string>
+    <string name="feedback_err_email">Địa chỉ email có vẻ không đúng.</string>
+    <string name="action_send">Gửi</string>
+    <string name="toast_feedback_sent">Cảm ơn bạn! Phản hồi đã được gửi.</string>
+    <string name="toast_feedback_rate_limited">Bạn đã gửi khá nhiều phản hồi gần đây — vui lòng thử lại sau.</string>
+    <string name="toast_feedback_failed">Không gửi được phản hồi. Vui lòng thử lại.</string>
+    <string name="settings_feedback_no_internet_body">Gửi phản hồi cần có kết nối mạng. Hãy thử lại khi có mạng.</string>
     <string name="settings_rate">Đánh giá BrickWares</string>
     <string name="settings_choose_avatar">Chọn ảnh đại diện</string>
 
