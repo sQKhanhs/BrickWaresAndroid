@@ -53,6 +53,7 @@ import com.senniapp.brickwares.ui.detail.SetDetailScreen
 import com.senniapp.brickwares.ui.home.HomeScreen
 import com.senniapp.brickwares.ui.home.NewSetsScreen
 import com.senniapp.brickwares.ui.search.SearchScreen
+import com.senniapp.brickwares.ui.search.ThemeResultsScreen
 import com.senniapp.brickwares.ui.search.SearchViewModel
 import com.senniapp.brickwares.ui.settings.SettingsScreen
 import com.senniapp.brickwares.ui.wishlist.WishlistScreen
@@ -89,9 +90,11 @@ fun BrickWaresApp(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
     // Detail navigation back-stack shown over the current tab (nav bar stays). Each entry is a set
-    // ("s:<setNumber>") or a minifig ("f:<figNum>"); the last entry is the visible detail, so opening
-    // a set/fig pushes and Back pops — travelling set → fig → set … returns step by step, not straight
-    // to the tab. Empty = the tab's own content is shown. Saveable across config change / process death.
+    // ("s:<setNumber>"), a minifig ("f:<figNum>"), the New Sets page ("n:") or a theme's result list
+    // ("t:<theme>␟<subtheme>", opened from a Set Detail's theme link); the last entry is the visible
+    // detail, so opening a set/fig pushes and Back pops — travelling set → fig → set … returns step by
+    // step, not straight to the tab. Empty = the tab's own content is shown. Saveable across config
+    // change / process death.
     val detailStack = rememberSaveable(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf<String>() }
@@ -167,6 +170,16 @@ fun BrickWaresApp(
                         searchViewModel.showSets()
                     },
                 )
+            } else if (current != null && current.startsWith("t:")) { // a theme's results (Set Detail link)
+                val (theme, subtheme) = decodeThemeEntry(current)
+                ThemeResultsScreen(
+                    theme = theme,
+                    subtheme = subtheme,
+                    viewModel = searchViewModel,
+                    onBack = popDetail,
+                    // Tapping a result pushes its detail; Back returns to this theme list.
+                    onOpenSetDetail = openSet,
+                )
             } else if (current != null && current.startsWith("n:")) { // the "New Sets" page
                 NewSetsScreen(
                     viewModel = searchViewModel,
@@ -181,11 +194,11 @@ fun BrickWaresApp(
                     onOpenSetDetail = openSet,
                     // Tapping a minifig in the set's grid pushes the minifig detail.
                     onOpenMinifig = openFig,
-                    // Tapping the theme/subtheme link opens the Search tab filtered to that theme.
+                    // Tapping the theme/subtheme link pushes that theme's result list onto the stack
+                    // (stays on the current tab), so Back returns to this set — not the Search home.
                     onOpenTheme = { theme, subtheme ->
-                        detailStack.clear()
-                        selectedTab = BwTab.Search
                         searchViewModel.openSetTheme(theme, subtheme)
+                        detailStack.add(themeEntry(theme, subtheme))
                     },
                     // Show the search FABs on the detail only when it's opened from the Search tab.
                     showSearchFab = selectedTab == BwTab.Search,
@@ -293,4 +306,19 @@ private fun NavItem(
                 .background(if (selected) colors.brandYellow else Color.Transparent),
         )
     }
+}
+
+/** Separator inside a "t:" stack entry — a control char that can't appear in a theme/subtheme name. */
+private const val THEME_ENTRY_SEP = ''
+
+/** Encodes a theme's result-list stack entry: "t:<theme><sep><subtheme>" (empty subtheme = all). */
+private fun themeEntry(theme: String, subtheme: String?): String =
+    "t:$theme$THEME_ENTRY_SEP${subtheme.orEmpty()}"
+
+/** Inverse of [themeEntry]: the theme and the subtheme (null when the entry covers the whole theme). */
+private fun decodeThemeEntry(entry: String): Pair<String, String?> {
+    val body = entry.substring(2)
+    val i = body.indexOf(THEME_ENTRY_SEP)
+    if (i < 0) return body to null
+    return body.substring(0, i) to body.substring(i + 1).ifEmpty { null }
 }

@@ -146,6 +146,71 @@ fun SearchScreen(
     )
 }
 
+/**
+ * A theme's result list hosted on the app's detail back-stack (over whichever tab is selected) — reached
+ * from a Set Detail's theme / subtheme link. It renders the same [ThemeDetailView] the Search tab shows
+ * for a theme, driven by the shared [SearchViewModel]'s theme-detail state (the caller runs
+ * [SearchViewModel.openSetTheme] when it pushes this entry), so Back returns to the Set Detail that
+ * opened it — previously the link cleared the stack and jumped to the Search tab, so Back from the
+ * theme list landed on the search home instead of the set (noticed from Home → New Sets → set → theme).
+ *
+ * Because the view-model state is shared, a deeper hop (this list → another set → *its* theme) replaces
+ * it; when this entry becomes visible again with a different theme loaded, it re-opens its own.
+ */
+@Composable
+fun ThemeResultsScreen(
+    theme: String,
+    subtheme: String?,
+    viewModel: SearchViewModel,
+    onBack: () -> Unit,
+    onOpenSetDetail: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(theme) {
+        if (state.themeDetail != theme) viewModel.openSetTheme(theme, subtheme)
+    }
+    val colors = BwTheme.colors
+    Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
+        ThemeDetailView(
+            theme = theme,
+            results = state.themeDetailPageItems,
+            sub = state.themeDetailSub,
+            subOptions = state.themeDetailSubOptions,
+            sort = state.themeDetailSort,
+            wishlistedNumbers = state.wishlistedNumbers,
+            ownedNumbers = state.ownedNumbers,
+            soldNumbers = state.soldNumbers,
+            totalCount = state.themeDetailResults.size,
+            currentPage = state.themeDetailCurrentPage,
+            pageCount = state.themeDetailPageCount,
+            onPageChange = viewModel::onThemeDetailPageChange,
+            onBack = onBack,
+            onSubChange = viewModel::onThemeDetailSubChange,
+            onSortChange = viewModel::onThemeDetailSortChange,
+            onOpenSetDetail = onOpenSetDetail,
+            onAddCollection = viewModel::onAddToCollectionClick,
+            onAddWishlist = viewModel::onAddToWishlist,
+            isFavorite = theme in state.favoriteThemes,
+            onToggleFavorite = { viewModel.onToggleFavorite(theme) },
+        )
+
+        // Shared Add-to-Collection sheet + toast (same ones the Search tab and New Sets page use).
+        state.addTarget?.let { target ->
+            AddToCollectionSheet(
+                initialSet = target,
+                initialCopy = null,
+                onDismiss = viewModel::onDismissAdd,
+                onSearch = viewModel::searchCatalog,
+                onAdd = viewModel::onAddToCollectionSubmit,
+                allowSalesMode = true,
+                onAddSale = viewModel::onAddToSalesSubmit,
+            )
+        }
+        BwToast(message = state.toastMessage?.resolve(), onDismiss = viewModel::onToastShown)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SearchContent(
