@@ -15,7 +15,7 @@ data class SubthemeCount(val name: String, val count: Int)
 data class ThemeGroup(
     val theme: String,
     val setCount: Int,
-    /** `file:///android_asset/...` for the themes that have a logo, else null (placeholder). */
+    /** The theme's icon URL (R2 `themes/<slug>.png`, see CatalogImages.themeIconUrl); null = no icon (placeholder). */
     val logoAsset: String?,
     val subthemes: List<SubthemeCount> = emptyList(),
 )

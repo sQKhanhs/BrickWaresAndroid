@@ -12,11 +12,15 @@ import coil3.request.crossfade
 import com.senniapp.brickwares.data.local.AnalyticsPrefs
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.CurrencyPrefs
+import com.senniapp.brickwares.data.local.InstallId
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
+import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.Observability
 import com.senniapp.brickwares.util.RetirementAlerts
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
 
 /**
  * Application entry point.
@@ -34,11 +38,14 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         CurrencyPrefs.init(this)
         RetirementAlertPrefs.init(this)
         AnalyticsPrefs.init(this)
+        InstallId.init(this)
         // Timber + (opt-in, Firebase-optional) Crashlytics/Analytics — before anything that might log.
         Observability.init(this)
         AppGraph.init(this)
         // Watches the wishlist for items that change to Retired and notifies (Settings → Notifications).
         RetirementAlerts.start(this)
+        // Background image warm-up (Search theme icons) — needs the app context for Coil requests.
+        ImagePrefetcher.init(this)
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
@@ -46,7 +53,20 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
             // Fade thumbnails in as they load, instead of popping — smoother list scrolling.
             .crossfade(true)
             .components {
-                add(OkHttpNetworkFetcherFactory())
+                // A dedicated OkHttp client with a wider per-host limit. OkHttp's default allows only
+                // 5 in-flight requests per host, and nearly every image comes from two hosts (our R2
+                // domain + Rebrickable's CDN). On a high-latency path (Vietnam → Cloudflare's SIN/HKG
+                // edges, ~0.3–1 s per request even when cached) a screen of 15 thumbnails would fill in
+                // three slow waves; 16 per host lets a whole screen load in one.
+                add(
+                    OkHttpNetworkFetcherFactory(
+                        callFactory = {
+                            OkHttpClient.Builder()
+                                .dispatcher(Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = 16 })
+                                .build()
+                        },
+                    ),
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     add(AnimatedImageDecoder.Factory())
                 } else {

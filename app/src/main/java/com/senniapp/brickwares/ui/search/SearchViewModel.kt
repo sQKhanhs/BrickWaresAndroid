@@ -17,6 +17,7 @@ import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.CatalogImages
+import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,13 +56,17 @@ class SearchViewModel(
             catalogRepo.revision.collect {
                 catalog = catalogRepo.all()
                 if (catalog.isNotEmpty()) {
+                    val themes = buildThemes()
                     _uiState.update {
                         it.copy(
-                            themes = buildThemes(),
+                            themes = themes,
                             newSetsByTheme = NewSets.groupedByTheme(catalog),
                             isLoading = false,
                         ).withReorderedThemes()
                     }
+                    // Warm every theme icon into Coil's disk cache now, so the theme browse (both view
+                    // modes) draws fully on first open instead of trickling in one icon per round trip.
+                    ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
                 }
             }
         }
