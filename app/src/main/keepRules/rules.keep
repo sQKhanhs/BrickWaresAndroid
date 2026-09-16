@@ -1,12 +1,36 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# Project R8 keep rules. AGP combines every *.keep file in src/main/keepRules with the default Android
+# rules (proguard-android-optimize.txt) and each library's own consumer rules — Room, WorkManager,
+# Coil, Ktor, Firebase, Credential Manager and kotlinx.serialization all ship theirs, so nothing here
+# repeats those. See https://d.android.com/r/tools/r8/keep-rules
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Verify after touching dependencies: `./gradlew :app:assembleDevRelease` must succeed with no
+# "Missing class" errors (R8 writes the rules it wanted to build/outputs/mapping/<variant>/missing_rules.txt),
+# then sign-in + sync + a set page on a *Release build — the Supabase row DTOs are the reflection hot spot.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ---- Crashlytics: readable stack traces -------------------------------------------------------------
+# Keep file + line numbers in the obfuscated APK (mapping.txt, uploaded by the Crashlytics plugin, maps
+# the renamed classes back). The source-file attribute is replaced with a constant so it leaks nothing.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+# Exception class names appear in crash titles — don't obfuscate them.
+-keep public class * extends java.lang.Exception
+
+# ---- kotlinx.serialization: the app's own @Serializable classes --------------------------------------
+# supabase-kt decodes Postgrest rows with a reified `serializer<T>()`, which looks the serializer up at
+# runtime (Companion.serializer()). The library's bundled rules cover its own types; these keep the
+# lookup path for the app's DTOs (SyncCoordinator / SupabaseCatalogRepository / ValueContributionRepository
+# / CurrencyConverter rows) while still letting R8 rename everything else.
+-keepattributes *Annotation*, InnerClasses
+-keepclassmembers @kotlinx.serialization.Serializable class com.senniapp.brickwares.** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class com.senniapp.brickwares.**
+-keepclassmembers class <1>$Companion {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-if @kotlinx.serialization.Serializable class com.senniapp.brickwares.**
+-keep,allowobfuscation,allowoptimization class <1>$$serializer {
+    *** INSTANCE;
+}

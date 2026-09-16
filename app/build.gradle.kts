@@ -70,9 +70,17 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            // R8: shrink + optimize + obfuscate code, and shrink resources. Project keep rules live in
+            // src/main/keepRules/*.keep (AGP 9 picks that source set up automatically); the default
+            // Android rules come from proguard-android-optimize.txt. Both release variants get it —
+            // devRelease is the R8 smoke test, a debug build is never obfuscated. The Crashlytics plugin
+            // uploads mapping.txt on assemble/bundle of release variants by default
+            // (mappingFileUploadEnabled = true), so release stack traces stay readable.
+            // NOTE: the AGP 9.2 `optimization { enable = true }` DSL is the experimental "gradual R8"
+            // mode (needs android.r8.gradual.support) — not the switch for this. Revisit on AGP 9.3+.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 
