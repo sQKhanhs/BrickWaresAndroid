@@ -23,7 +23,8 @@ import java.time.OffsetDateTime
 import kotlin.math.roundToLong
 
 /**
- * Reads the public `set_value_contributions` table and folds the rows into a displayed
+ * Reads the public `set_value_points` view (every contribution point, no user identity — the base
+ * `set_value_contributions` table is owner-readable only) and folds the rows into a displayed
  * [CurrentValue] (Arch Decision 17). Aggregation is **client-side** at the current catalog scale;
  * Decision 16 moves it to a DB view/RPC when the catalog grows. Writes happen elsewhere — a paid
  * price is published as a contribution by [SyncCoordinator] once the collection row has synced.
@@ -206,7 +207,7 @@ class ValueContributionRepository(
     )
 
     private companion object {
-        const val TABLE = "set_value_contributions"
+        const val TABLE = "set_value_points"
         const val TIMEOUT_MS = 8_000L
         const val TAG = "ValueContribRepo"
     }
