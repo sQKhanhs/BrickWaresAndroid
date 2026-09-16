@@ -118,7 +118,7 @@ private fun WishlistContent(
     onNavigateToSearch: () -> Unit,
     onOpenSetDetail: (String) -> Unit,
     onOpenMinifigDetail: (String) -> Unit = {},
-    onSearchCatalog: (String) -> List<CatalogSet>,
+    onSearchCatalog: suspend (String) -> List<CatalogSet>,
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
     onMoveSubmit: (CollectionItem) -> Unit,

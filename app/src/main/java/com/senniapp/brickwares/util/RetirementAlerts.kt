@@ -26,7 +26,6 @@ import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
-import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
 import kotlinx.coroutines.CoroutineScope
@@ -101,9 +100,9 @@ object RetirementAlerts {
      * items are recorded, so a repeat evaluation of the same data notifies nothing.
      */
     fun evaluate(context: Context, items: List<WishlistItem>) {
-        // Only diff against AUTHORITATIVE statuses — before the catalog has loaded, rows carry the
-        // status stored at add time, which may be stale in either direction.
-        if (CatalogRepositoryProvider.instance.all().isEmpty()) return
+        // Only diff against AUTHORITATIVE statuses — before the user-scoped catalog overlay has loaded,
+        // rows carry the status stored at add time, which may be stale in either direction (Decision 16).
+        if (!CollectionRepositoryProvider.instance.catalogOverlayReady.value) return
 
         val current = items.map { it.setNumber }.toSet()
         val retiredNow = items.filter { it.status == Availability.RETIRED }.map { it.setNumber }.toSet()

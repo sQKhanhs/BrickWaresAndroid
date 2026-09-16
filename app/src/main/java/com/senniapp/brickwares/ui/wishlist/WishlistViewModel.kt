@@ -32,8 +32,6 @@ class WishlistViewModel(
     val uiState: StateFlow<WishlistUiState> = _uiState.asStateFlow()
 
     init {
-        // Warm the catalog cache (used if the wishlist ever needs catalog lookups).
-        viewModelScope.launch { catalogRepo.refresh() }
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
                 _uiState.update { it.copy(itemsLoaded = true, items = items) }
@@ -53,7 +51,8 @@ class WishlistViewModel(
         _uiState.update { it.copy(sort = sort, page = 1) }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+    // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.
+    suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
     fun onRemove(setNumber: String) {
         val item = _uiState.value.items.find { it.setNumber == setNumber }

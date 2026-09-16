@@ -13,6 +13,7 @@ import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.Condition
 import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.ValueAggregator
@@ -20,15 +21,21 @@ import com.senniapp.brickwares.data.model.ValueGuardTier
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CurrencyConverter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 
 /**
@@ -49,11 +56,97 @@ class RoomCollectionRepository(
     private val wishlistDao = db.wishlistDao()
     private val salesDao = db.salesDao()
 
+    // User-scoped catalog cache (Decision 16): only the sets/figs the user references, so the overlays
+    // below get fresh reference data (status, box image, release-month backfill, minifig image/set-count)
+    // without the client holding the whole ~23k-set catalog in memory. Reads resolve against these maps;
+    // a background observer rebuilds them (one batch query) whenever the referenced keys change, bumping
+    // [catalogCacheRevision] so the read flows re-run. Empty until the first fetch (and after an offline
+    // failure) — the reads then fall back to each row's denormalized fields, exactly as before.
+    @Volatile private var setsById: Map<Long, CatalogSet> = emptyMap()
+    @Volatile private var setsByNumber: Map<String, CatalogSet> = emptyMap()
+    @Volatile private var figsByNum: Map<String, Minifig> = emptyMap()
+    private val catalogCacheRevision = MutableStateFlow(0)
+    private val _catalogOverlayReady = MutableStateFlow(false)
+    override val catalogOverlayReady: StateFlow<Boolean> = _catalogOverlayReady.asStateFlow()
+
     init {
-        // Warm the catalog so the status overlay below has data to reconcile against (idempotent),
-        // then warm the community value cache so cards can show the "Value" line (Decision 17).
-        // Minifigs too, so minifig items can overlay the catalog image + set-count.
-        scope.launch { catalog.refresh(); catalog.refreshMinifigs(); values.warm() }
+        // Warm the community value cache so cards can show the "Value" line (Decision 17).
+        scope.launch { values.warm() }
+        // Keep the user-scoped catalog cache in sync with the user's rows (see above).
+        scope.launch { observeReferencedCatalog() }
+    }
+
+    /**
+     * Watches the user's collection/wishlist/sales rows and, whenever the set of referenced set numbers
+     * / fig numbers changes, rebuilds [setsByNumber]/[setsById]/[figsByNum] from one batch catalog query.
+     */
+    private suspend fun observeReferencedCatalog() {
+        combine(
+            collectionDao.observeActive(),
+            wishlistDao.observeActive(),
+            salesDao.observeActive(),
+        ) { copies, wishes, sales ->
+            referencedKeys(copies, wishes, sales)
+        }.distinctUntilChanged().collect { (setNumbers, figNums) ->
+            refreshCatalogCache(setNumbers, figNums)
+        }
+    }
+
+    /** The distinct catalog keys (set numbers, fig numbers) the user's rows reference. */
+    private fun referencedKeys(
+        copies: List<CollectionCopyEntity>,
+        wishes: List<WishlistEntity>,
+        sales: List<SalesEntity>,
+    ): Pair<Set<String>, Set<String>> {
+        val setNumbers = HashSet<String>()
+        val figNums = HashSet<String>()
+        fun add(kind: String, setNumber: String, figNum: String?) {
+            if (kind == "minifig") {
+                // A minifig row's fig key is its fig_num, or (legacy rows) the set_number field.
+                figNum?.let(figNums::add)
+                figNums.add(setNumber)
+            } else {
+                setNumbers.add(setNumber)
+            }
+        }
+        copies.forEach { add(it.itemKind, it.setNumber, it.figNum) }
+        wishes.forEach { add(it.itemKind, it.setNumber, it.figNum) }
+        sales.forEach { add(it.itemKind, it.setNumber, it.figNum) }
+        return setNumbers to figNums
+    }
+
+    /** One batch refresh of the user-scoped catalog maps; keeps the last-known cache on network failure. */
+    private suspend fun refreshCatalogCache(setNumbers: Set<String>, figNums: Set<String>) {
+        try {
+            fetchAndStoreCatalog(setNumbers, figNums)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keep the last-known cache; a later row change or reconnect retries. The reads still render
+            // from the rows' denormalized fields in the meantime.
+            Timber.tag("RoomCollectionRepository").w(e, "Referenced-catalog cache refresh failed")
+            catalogCacheRevision.value += 1 // nudge the reads to fall back rather than wait forever
+        }
+    }
+
+    /** Fetch + store the user-scoped catalog maps and bump the revision; throws on a network failure. */
+    private suspend fun fetchAndStoreCatalog(setNumbers: Set<String>, figNums: Set<String>) {
+        val sets = catalog.fetchSetsByNumbers(setNumbers)
+        setsByNumber = sets.associateBy { it.setNumber }
+        setsById = sets.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        val figs = catalog.fetchMinifigsByNums(figNums)
+        figsByNum = figs.associateBy { it.figNum }
+        _catalogOverlayReady.value = true // authoritative overlay is loaded (set before the revision bump)
+        catalogCacheRevision.value += 1
+    }
+
+    override suspend fun refreshReferencedCatalog() {
+        val (setNumbers, figNums) = referencedKeys(
+            collectionDao.getActive(),
+            wishlistDao.getActive(),
+            salesDao.getActive(),
+        )
+        fetchAndStoreCatalog(setNumbers, figNums) // throws on failure so the caller (retirement worker) retries
     }
 
     // ---- Reads (Room is the source of truth) ----
@@ -66,12 +159,12 @@ class RoomCollectionRepository(
     // collector's coroutine — every ViewModel's viewModelScope, i.e. the main thread.
 
     override fun getCollectionItems(): Flow<List<CollectionItem>> =
-        combine(collectionDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
+        combine(collectionDao.observeActive(), catalogCacheRevision, values.revision) { rows, _, _ ->
             rows.groupBy { it.setNumber }.map { (_, group) -> group.toCollectionItem() }
         }.flowOn(Dispatchers.Default)
 
     override fun getWishlistItems(): Flow<List<WishlistItem>> =
-        combine(wishlistDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
+        combine(wishlistDao.observeActive(), catalogCacheRevision, values.revision) { rows, _, _ ->
             rows.map { it.toWishlistItem() }
         }.flowOn(Dispatchers.Default)
 
@@ -102,15 +195,26 @@ class RoomCollectionRepository(
         val version = CollectionCsv.versionOf(parsed)
         if (version > CollectionCsv.FORMAT_VERSION) throw CsvTooNewException(version)
         val now = System.currentTimeMillis()
+        // A hand-edited file may omit set_id — resolve those in ONE batch catalog query (Decision 16),
+        // rather than a per-row lookup against a full in-memory catalog. Minifig rows carry no set_id.
+        val setIdByNumber: Map<String, Long> = run {
+            val numbers = parsed.rows.mapNotNull { row ->
+                fun s(k: String) = row[k]?.trim()?.ifBlank { null }
+                val isFig = s("item_kind")?.lowercase() == "minifig"
+                if (isFig || s("set_id") != null) null else s("set_number")
+            }.toSet()
+            runCatching { catalog.fetchSetsByNumbers(numbers) }.getOrDefault(emptyList())
+                .mapNotNull { st -> st.setId?.let { st.setNumber to it } }.toMap()
+        }
         // Split the tagged rows into the three lists (a v1 file has no record_type → all collection).
         val copies = mutableListOf<CollectionCopyEntity>()
         val sales = mutableListOf<SalesEntity>()
         val wishlist = mutableListOf<WishlistEntity>()
         for (row in parsed.rows) {
             when (CollectionCsv.recordType(row)) {
-                "sale" -> row.toImportedSale(now)?.let(sales::add)
-                "wishlist" -> row.toImportedWishlist(now)?.let(wishlist::add)
-                else -> row.toImportedCopy(now)?.let(copies::add)
+                "sale" -> row.toImportedSale(now, setIdByNumber)?.let(sales::add)
+                "wishlist" -> row.toImportedWishlist(now, setIdByNumber)?.let(wishlist::add)
+                else -> row.toImportedCopy(now, setIdByNumber)?.let(copies::add)
             }
         }
         // Overwrite all three tables: tombstone the current rows (so the removals push), then insert the
@@ -129,14 +233,14 @@ class RoomCollectionRepository(
     }
 
     /** One CSV row → a fresh dirty [CollectionCopyEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedCopy(now: Long): CollectionCopyEntity? {
+    private fun Map<String, String>.toImportedCopy(now: Long, setIdByNumber: Map<String, Long>): CollectionCopyEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
         // The sync key: from the file, else resolved from the catalog (a hand-edited file may omit it).
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
         val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
         return CollectionCopyEntity(
             id = UUID.randomUUID().toString(),
@@ -161,13 +265,13 @@ class RoomCollectionRepository(
     }
 
     /** One CSV row → a fresh dirty [SalesEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedSale(now: Long): SalesEntity? {
+    private fun Map<String, String>.toImportedSale(now: Long, setIdByNumber: Map<String, Long>): SalesEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
         val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
         return SalesEntity(
             id = UUID.randomUUID().toString(),
@@ -190,13 +294,13 @@ class RoomCollectionRepository(
     }
 
     /** One CSV row → a fresh dirty [WishlistEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedWishlist(now: Long): WishlistEntity? {
+    private fun Map<String, String>.toImportedWishlist(now: Long, setIdByNumber: Map<String, Long>): WishlistEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) catalog.setByNumber(setNumber)?.setId else null
+        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
         return WishlistEntity(
             id = UUID.randomUUID().toString(),
             setId = setId, figNum = if (isFig) (figNum ?: setNumber) else figNum, itemKind = kind,
@@ -214,7 +318,7 @@ class RoomCollectionRepository(
     }
 
     override fun getSoldItems(): Flow<List<SoldItem>> =
-        combine(salesDao.observeActive(), catalog.revision, values.revision) { rows, _, _ ->
+        combine(salesDao.observeActive(), catalogCacheRevision, values.revision) { rows, _, _ ->
             rows.map { entity ->
                 val cat = catalogFor(entity.setId, entity.setNumber)
                 val value = if (entity.figNum != null) values.valueForFig(entity.figNum) else values.valueFor(entity.setId)
@@ -241,10 +345,6 @@ class RoomCollectionRepository(
                 )
             }
         }.flowOn(Dispatchers.Default)
-
-    override fun searchCatalog(query: String): List<CatalogSet> = catalog.search(query)
-
-    override fun getCatalog(): List<CatalogSet> = catalog.all()
 
     // ---- Writes (local Room first, then request a sync) ----
 
@@ -500,10 +600,15 @@ class RoomCollectionRepository(
         }
     }
 
-    private suspend fun resolveCatalog(setNumber: String): CatalogSet? {
-        catalog.refresh()
-        return catalog.setByNumber(setNumber)
-    }
+    /** The catalog set for an add/wishlist write — the user-scoped cache first, else a one-set query. */
+    private suspend fun resolveCatalog(setNumber: String): CatalogSet? =
+        setsByNumber[setNumber] ?: try {
+            catalog.fetchSet(setNumber)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
 
     private fun ItemType.dbKind() = if (this == ItemType.MINIFIG) "minifig" else "set"
     private fun String.toItemType() = if (this == "minifig") ItemType.MINIFIG else ItemType.SET
@@ -521,10 +626,10 @@ class RoomCollectionRepository(
      * month 0 before ingestion derived it) refresh to the current catalog value.
      */
     private fun catalogFor(setId: Long?, setNumber: String): CatalogSet? =
-        setId?.let { catalog.setById(it) } ?: catalog.setByNumber(setNumber)
+        setId?.let { setsById[it] } ?: setsByNumber[setNumber]
 
     /** The catalog minifig for a fig_num (for the image + set-count overlay), or null. */
-    private fun minifigFor(figNum: String?) = figNum?.let { catalog.minifigByNum(it) }
+    private fun minifigFor(figNum: String?) = figNum?.let { figsByNum[it] }
 
     /**
      * Reflect a just-written paid price in the community value cache immediately (Decision 17), so the

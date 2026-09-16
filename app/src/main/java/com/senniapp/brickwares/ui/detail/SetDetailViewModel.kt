@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.Copy
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * ViewModel for the Set Detail page. [load] points it at a set number; it then resolves the set
@@ -55,13 +57,14 @@ class SetDetailViewModel(
     // The set id we last fetched a current value for, so rebuild() refetches only on a set change.
     private var valueKey: String? = null
 
+    // The resolved hero set for the current [catalogKey], fetched once per open (Decision 16 — no full
+    // catalog in memory); its minifig grid; and whether the fetch failed (drives the offline state).
+    private var resolvedSet: CatalogSet? = null
+    private var minifigGrid: List<Minifig> = emptyList()
+    private var resolveFailed = false
+
     init {
-        // Warm the catalog + minifig caches, then rebuild so the set + its minifig grid resolve.
-        viewModelScope.launch {
-            catalogRepo.refresh()
-            catalogRepo.refreshMinifigs()
-            rebuild()
-        }
+        // Collection/wishlist/sales changes re-run the (network-free) overlay rebuild over the cached set.
         viewModelScope.launch {
             repository.getCollectionItems().collect { collectionItems = it; rebuild() }
         }
@@ -74,34 +77,62 @@ class SetDetailViewModel(
     }
 
     /** Retry after an offline/error state (the error fallback's Retry button): re-fetch + rebuild. */
-    fun retry() {
-        viewModelScope.launch {
-            catalogRepo.refresh()
-            catalogRepo.refreshMinifigs()
-            rebuild()
-        }
-    }
+    fun retry() = resolveAndRebuild()
 
     /** The set id already reported as viewed for this page open (analytics `view_item`, once per open). */
     private var viewedId: String? = null
 
     fun load(catalogId: String) {
         this.catalogKey = catalogId
-        // Force a fresh recommendation batch for this open (even when returning to a set seen before).
+        // Force a fresh set + recommendation fetch for this open (even when returning to a set seen before).
         relatedKey = null
         viewedId = null
+        resolvedSet = null
         _uiState.update { it.copy(addTarget = null, toastMessage = null) }
-        rebuild()
+        resolveAndRebuild()
+    }
+
+    /**
+     * Fetch the hero set (by id/number), its same-theme recommendations, and its minifig grid ONCE per
+     * open (all DB queries), then run the overlay [rebuild]. Ownership/value overlays afterward are
+     * recomputed by [rebuild] over the cached set with no further network.
+     */
+    private fun resolveAndRebuild() {
+        val key = catalogKey ?: return
+        viewModelScope.launch {
+            val set = try {
+                catalogRepo.fetchSet(key)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("SetDetailVM").w(e, "fetchSet failed for %s", key)
+                resolveFailed = true
+                null
+            }
+            resolvedSet = set
+            if (set != null) {
+                resolveFailed = false
+                // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — once per open.
+                if (relatedKey != set.id) {
+                    val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
+                    val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
+                    relatedSnapshot = runCatching { catalogRepo.setsInTheme(set.theme) }.getOrDefault(emptyList())
+                        .filter { it.id != set.id && it.setNumber !in ownedNumbers && it.setNumber !in wishlistedNumbers }
+                        .shuffled()
+                        .take(3)
+                    relatedKey = set.id
+                }
+                minifigGrid = set.setId?.let { runCatching { catalogRepo.fetchMinifigsForSet(it) }.getOrDefault(emptyList()) } ?: emptyList()
+            }
+            rebuild()
+        }
     }
 
     private fun rebuild() {
         val key = catalogKey ?: return
-        val all = catalogRepo.all()
-        // Resolve by canonical id ("number-variant"); fall back to a bare set number.
-        val set = all.find { it.id == key } ?: all.find { it.setNumber == key }
+        val set = resolvedSet
         val sn = set?.setNumber ?: key
-        // Report the view once the set resolves (the catalog may still be loading on the first pass);
-        // rebuilds from collection/wishlist changes while the page is open don't re-report.
+        // Report the view once the set resolves; rebuilds from collection/wishlist changes don't re-report.
         if (set != null && viewedId != set.id) {
             viewedId = set.id
             Observability.logItemViewed(kind = "set", id = set.id, name = set.name, theme = set.theme)
@@ -117,32 +148,19 @@ class SetDetailViewModel(
         val copiesSn = openCs?.takeIf { copiesItem != null || copiesSales.isNotEmpty() }
         val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
         val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
-        // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — captured ONCE per
-        // page open. The snapshot does NOT refilter as the user adds/wishlists here, so a card stays
-        // put (its buttons just flip); a fresh batch (excluding the newly-added) is drawn next open.
-        if (set != null && relatedKey != set.id) {
-            relatedSnapshot = all
-                .filter {
-                    it.theme == set.theme && it.id != set.id &&
-                        it.setNumber !in ownedNumbers && it.setNumber !in wishlistedNumbers
-                }
-                .shuffled()
-                .take(3)
-            relatedKey = set.id
-        }
         _uiState.update {
             it.copy(
                 loaded = true,
                 set = set,
-                // No catalog to resolve against (offline / not loaded) → show the no-internet placeholder.
-                offline = set == null && all.isEmpty(),
+                // Couldn't resolve the set from the DB (offline / error) → no-internet placeholder.
+                offline = set == null && resolveFailed,
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 ownedItem = owned,
                 isWishlisted = wishlist.any { w -> w.setNumber == sn },
                 isSold = soldItems.any { s -> s.setNumber == sn },
                 copiesSales = copiesSales,
-                minifigs = if (set == null) emptyList() else catalogRepo.minifigsForSet(set.setId),
+                minifigs = if (set == null) emptyList() else minifigGrid,
                 related = if (set == null) emptyList() else relatedSnapshot,
                 ownedNumbers = ownedNumbers,
                 wishlistedNumbers = wishlistedNumbers,
@@ -314,12 +332,13 @@ class SetDetailViewModel(
     /** The exact [CatalogSet] the copies dialog is for — the hero or a recommended set (right variant). */
     private fun SetDetailUiState.copiesTargetSet(): CatalogSet? {
         val sn = copiesSetNumber ?: return null
+        // The copies dialog only ever opens for the hero or a recommendation card, so those cover it.
         return set?.takeIf { it.setNumber == sn }
             ?: related.firstOrNull { it.setNumber == sn }
-            ?: catalogRepo.setByNumber(sn)
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+    // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.
+    suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
     fun onToastShown() {
         _uiState.update { it.copy(toastMessage = null) }

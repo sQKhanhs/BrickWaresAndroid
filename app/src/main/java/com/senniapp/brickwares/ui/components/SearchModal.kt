@@ -44,9 +44,14 @@ import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /** How many quick-search results the modal shows before the user should narrow the query. */
 private const val SEARCH_MODAL_MAX = 20
+
+/** Debounce before a live catalog query fires, so fast typing doesn't hit the DB per key. */
+private const val SEARCH_DEBOUNCE_MS = 180L
 
 /**
  * Quick-search overlay: type to filter the catalog live, tap a result to act on it. Sets open their
@@ -56,16 +61,35 @@ private const val SEARCH_MODAL_MAX = 20
  */
 @Composable
 fun SearchModal(
-    onSearch: (String) -> List<CatalogSet>,
+    onSearch: suspend (String) -> List<CatalogSet>,
     onOpenSetDetail: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSearchMinifigs: ((String) -> List<Minifig>)? = null,
+    onSearchMinifigs: (suspend (String) -> List<Minifig>)? = null,
     onSelectMinifig: ((Minifig) -> Unit)? = null,
 ) {
     val colors = BwTheme.colors
     var query by remember { mutableStateOf("") }
-    val results = if (query.isBlank()) emptyList() else onSearch(query).take(SEARCH_MODAL_MAX)
-    val figResults = if (query.isBlank() || onSearchMinifigs == null) emptyList() else onSearchMinifigs(query).take(SEARCH_MODAL_MAX)
+    // Live results are DB queries now (Decision 16 — the catalog isn't held in memory), run off the
+    // composition on a debounce keyed to the query so a new keystroke cancels the in-flight search.
+    var results by remember { mutableStateOf<List<CatalogSet>>(emptyList()) }
+    var figResults by remember { mutableStateOf<List<Minifig>>(emptyList()) }
+    LaunchedEffect(query) {
+        if (query.isBlank()) {
+            results = emptyList()
+            figResults = emptyList()
+        } else {
+            delay(SEARCH_DEBOUNCE_MS)
+            try {
+                results = onSearch(query).take(SEARCH_MODAL_MAX)
+                figResults = onSearchMinifigs?.invoke(query)?.take(SEARCH_MODAL_MAX) ?: emptyList()
+            } catch (e: CancellationException) {
+                throw e // a newer keystroke cancelled this search — let it unwind, don't blank the results
+            } catch (e: Exception) {
+                results = emptyList()
+                figResults = emptyList()
+            }
+        }
+    }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {

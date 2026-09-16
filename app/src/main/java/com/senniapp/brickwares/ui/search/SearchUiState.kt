@@ -98,6 +98,8 @@ data class SearchUiState(
     val themeDetail: String? = null,
     val themeDetailSub: String = ALL_SUBTHEMES,
     val themeDetailSort: ThemeDetailSort = ThemeDetailSort.NEWEST,
+    /** The open theme's sets are fetched on demand (Decision 16); true while that query is in flight. */
+    val themeDetailLoading: Boolean = false,
     val themeDetailResults: List<CatalogSet> = emptyList(),
     val themeDetailSubOptions: List<SubthemeCount> = emptyList(),
     /** 1-based current page for the theme-detail results (numbered pagination). */

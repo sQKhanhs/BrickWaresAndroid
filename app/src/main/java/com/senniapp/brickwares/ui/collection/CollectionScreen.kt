@@ -160,7 +160,7 @@ private fun CollectionContent(
     onAddClick: () -> Unit,
     onItemDetail: (CollectionItem) -> Unit,
     onDismissAddSheet: () -> Unit,
-    onSearchCatalog: (String) -> List<CatalogSet>,
+    onSearchCatalog: suspend (String) -> List<CatalogSet>,
     onAddItem: (CollectionItem) -> Unit,
     onAddSale: (CollectionItem, Long) -> Unit,
     onEditSaleSubmit: (CollectionItem, Long) -> Unit,

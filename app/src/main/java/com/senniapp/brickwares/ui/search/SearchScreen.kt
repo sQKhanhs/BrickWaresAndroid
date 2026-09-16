@@ -235,7 +235,7 @@ private fun SearchContent(
     onAddToWishlist: (CatalogSet) -> Unit,
     onAddToCollectionClick: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
-    onSearchCatalog: (String) -> List<CatalogSet>,
+    onSearchCatalog: suspend (String) -> List<CatalogSet>,
     onAddToCollectionSubmit: (CollectionItem) -> Unit,
     onAddToSalesSubmit: (CollectionItem, Long) -> Unit,
     onToastShown: () -> Unit,
@@ -249,7 +249,7 @@ private fun SearchContent(
     onMinifigPageChange: (Int) -> Unit,
     onAddMinifig: (Minifig) -> Unit,
     onWishlistMinifig: (Minifig) -> Unit,
-    onSearchMinifigsForModal: (String) -> List<Minifig>,
+    onSearchMinifigsForModal: suspend (String) -> List<Minifig>,
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors

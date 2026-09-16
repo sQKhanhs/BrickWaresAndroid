@@ -38,8 +38,6 @@ class CollectionViewModel(
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
 
     init {
-        // Warm the catalog cache so the Add-sheet's set-number search has data.
-        viewModelScope.launch { catalogRepo.refresh() }
         // Summary is derived from the live items so the stat row reads 0 when empty and updates as
         // copies are added/removed (no longer a static snapshot).
         viewModelScope.launch {
@@ -104,12 +102,12 @@ class CollectionViewModel(
         }
     }
 
-    /** The catalog record for the open detail set/fig (from a collection item, a sale, or the catalog). */
+    /** The catalog record for the open detail set/fig — built from the user's own (already-overlaid) row. */
     private fun detailCatalog(): CatalogSet? {
         val sn = _uiState.value.detailSetNumber ?: return null
         _uiState.value.items.find { it.setNumber == sn }?.let { return catalogFrom(it) }
         _uiState.value.soldItems.find { it.setNumber == sn }?.let { return catalogFrom(it) }
-        return catalogRepo.setByNumber(sn)
+        return null
     }
 
     /** From the merged modal's Collection tab (add-another-copy or empty-state): open the Add sheet. */
@@ -134,7 +132,8 @@ class CollectionViewModel(
         }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+    // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.
+    suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
     /**
      * Submits the Add sheet. In edit mode (editingCopy set) it replaces that copy and reopens
@@ -315,13 +314,12 @@ class CollectionViewModel(
         retailPrice = item.retailPrice, status = item.status,
     )
 
-    /** Resolve the full catalog record for a sale (for the edit sheet), falling back to sale data. */
+    /** The catalog record for a sale's edit sheet, built from the (already catalog-overlaid) sale row. */
     private fun catalogFrom(sold: SoldItem): CatalogSet =
-        catalogRepo.setByNumber(sold.setNumber)
-            ?: CatalogSet(
-                setNumber = sold.setNumber, name = sold.name, itemType = sold.itemType,
-                theme = sold.theme, releaseYear = sold.releaseYear, releaseMonth = sold.releaseMonth,
-                pieces = 0, minifigs = 0,
-                retailPrice = sold.retailPrice.takeIf { it > 0L }, status = Availability.AVAILABLE,
-            )
+        CatalogSet(
+            setNumber = sold.setNumber, name = sold.name, itemType = sold.itemType,
+            theme = sold.theme, releaseYear = sold.releaseYear, releaseMonth = sold.releaseMonth,
+            pieces = sold.pieces, minifigs = sold.minifigs,
+            retailPrice = sold.retailPrice.takeIf { it > 0L }, status = sold.status,
+        )
 }

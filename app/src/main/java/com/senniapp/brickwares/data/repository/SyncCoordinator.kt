@@ -5,6 +5,8 @@ import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
 import com.senniapp.brickwares.data.model.Availability
+import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.SyncStateStore
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
@@ -116,11 +118,8 @@ class SyncCoordinator(
 
     private suspend fun sync(uid: String): Boolean = mutex.withLock {
         runCatching {
-            // Both catalogs must be loaded before pull() reconstructs rows from set_id / fig_num.
-            catalog.refresh()
-            catalog.refreshMinifigs()
             push(uid)
-            pull()
+            pull() // reconstructs each pulled row's display fields via a batch catalog query (Decision 16)
             syncState.setLastAccountId(uid)
             // Refresh the community value cache so a just-contributed paid price shows on the cards.
             ValueRepositoryProvider.instance.warm()
@@ -208,34 +207,49 @@ class SyncCoordinator(
             syncState.clearPullCursors()
             syncState.setPullCursorVersion(PULL_CURSOR_VERSION)
         }
-        pullTable<RemoteCopy>("collection_copies") { applyCopy(it) }
-        pullTable<RemoteWish>("wishlist_items") { applyWish(it) }
-        pullTable<RemoteSale>("sales") { applySale(it) }
+        val copies = fetchTable<RemoteCopy>("collection_copies")
+        val wishes = fetchTable<RemoteWish>("wishlist_items")
+        val sales = fetchTable<RemoteSale>("sales")
+        // Rebuild each pulled row's denormalized display fields from the catalog. Resolve every referenced
+        // set/fig for all three tables in ONE batch per kind (Decision 16 — the client no longer holds the
+        // whole catalog); best-effort, so a catalog blip leaves rows keyed by their identity rather than
+        // aborting the pull. Cursors advance only AFTER a table's rows apply, so a failure re-pulls them.
+        val setIds = (copies.mapNotNull { it.setId } + wishes.mapNotNull { it.setId } + sales.mapNotNull { it.setId }).toSet()
+        val figNums = (copies.mapNotNull { it.figNum } + wishes.mapNotNull { it.figNum } + sales.mapNotNull { it.figNum }).toSet()
+        val sets = runCatching { catalog.fetchSetsByIds(setIds) }.getOrDefault(emptyList())
+            .mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        val figs = runCatching { catalog.fetchMinifigsByNums(figNums) }.getOrDefault(emptyList())
+            .associateBy { it.figNum }
+        copies.forEach { applyCopy(it, sets, figs) }; advanceCursor("collection_copies", copies)
+        wishes.forEach { applyWish(it, sets, figs) }; advanceCursor("wishlist_items", wishes)
+        sales.forEach { applySale(it, sets, figs) }; advanceCursor("sales", sales)
     }
 
     /**
-     * Pull one table's rows stamped after that table's own cursor, apply them, then advance the cursor
-     * to the newest SERVER stamp actually received — never the client clock. Ascending order means that
-     * if PostgREST caps the page (max-rows), the next sync resumes from the last row we did get instead
-     * of skipping the rest.
+     * Fetch one table's rows stamped after that table's own cursor. Ascending order means that if
+     * PostgREST caps the page (max-rows), the next sync resumes from the last row we did get instead of
+     * skipping the rest. The cursor is advanced separately ([advanceCursor]) only after the rows apply.
      */
-    private suspend inline fun <reified T : RemoteRow> pullTable(table: String, apply: (T) -> Unit) {
+    private suspend inline fun <reified T : RemoteRow> fetchTable(table: String): List<T> {
         val cursor = syncState.pullCursor(table)
-        val rows = client.from(table).select {
+        return client.from(table).select {
             filter { if (cursor != null) gt(SERVER_UPDATED_AT, cursor) }
             order(SERVER_UPDATED_AT, Order.ASCENDING)
         }.decodeList<T>()
-        rows.forEach { apply(it) }
+    }
+
+    /** Advance a table's pull cursor to the newest SERVER stamp actually received (never the client clock). */
+    private suspend fun advanceCursor(table: String, rows: List<RemoteRow>) {
         rows.mapNotNull { it.serverUpdatedAt }.maxByOrNull { parseIso(it) }?.let { syncState.setPullCursor(table, it) }
     }
 
-    private suspend fun applyCopy(r: RemoteCopy) {
+    private suspend fun applyCopy(r: RemoteCopy, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = collectionDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins
         // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
-        val set = r.setId?.let { catalog.setById(it) }
-        val fig = if (set == null) r.figNum?.let { catalog.minifigByNum(it) } else null
+        val set = r.setId?.let { sets[it] }
+        val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
         collectionDao.upsert(
             CollectionCopyEntity(
@@ -255,12 +269,12 @@ class SyncCoordinator(
         )
     }
 
-    private suspend fun applyWish(r: RemoteWish) {
+    private suspend fun applyWish(r: RemoteWish, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return
-        val set = r.setId?.let { catalog.setById(it) }
-        val fig = if (set == null) r.figNum?.let { catalog.minifigByNum(it) } else null
+        val set = r.setId?.let { sets[it] }
+        val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
         wishlistDao.upsert(
             WishlistEntity(
@@ -276,13 +290,13 @@ class SyncCoordinator(
         )
     }
 
-    private suspend fun applySale(r: RemoteSale) {
+    private suspend fun applySale(r: RemoteSale, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = salesDao.getById(r.id)
         if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins (LWW)
         // Polymorphic like copies: a minifig sale has fig_num only — reconstruct from the fig catalog.
-        val set = r.setId?.let { catalog.setById(it) }
-        val fig = if (set == null) r.figNum?.let { catalog.minifigByNum(it) } else null
+        val set = r.setId?.let { sets[it] }
+        val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
         salesDao.upsert(
             SalesEntity(

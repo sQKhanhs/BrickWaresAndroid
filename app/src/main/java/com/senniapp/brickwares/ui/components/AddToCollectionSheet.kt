@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,12 +55,17 @@ import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.moneyFieldText
 import com.senniapp.brickwares.util.moneyInputToAmount
 import com.senniapp.brickwares.util.sanitizeMoneyInput
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 /** Input caps for the numeric fields: 10 price digits (≈ 10B₫, above any real set) and 4 quantity
  *  digits — so a stray very long number can't be typed. */
 private const val MAX_PRICE_DIGITS = 10
 private const val MAX_QTY_DIGITS = 4
+
+/** Debounce before a live-suggestion catalog query fires, so fast typing doesn't hit the DB per key. */
+private const val SEARCH_DEBOUNCE_MS = 180L
 
 /**
  * The Add-to-Collection bottom sheet. Shared by the Collection tab (add/edit a copy), the Wishlist
@@ -78,7 +84,7 @@ fun AddToCollectionSheet(
     initialSet: CatalogSet?,
     initialCopy: Copy?,
     onDismiss: () -> Unit,
-    onSearch: (String) -> List<CatalogSet>,
+    onSearch: suspend (String) -> List<CatalogSet>,
     onAdd: (CollectionItem) -> Unit,
     allowSalesMode: Boolean = false,
     onAddSale: (CollectionItem, Long) -> Unit = { _, _ -> },
@@ -120,7 +126,23 @@ fun AddToCollectionSheet(
     var dateAdded by remember { mutableStateOf(initialCopy?.dateAdded ?: LocalDate.now().toString()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    val suggestions = if (selected == null) onSearch(query) else emptyList()
+    // Live suggestions are a DB query now (Decision 16 — the catalog isn't held in memory), so they run
+    // off the composition on a debounce keyed to the query; a new keystroke cancels the in-flight search.
+    var suggestions by remember { mutableStateOf<List<CatalogSet>>(emptyList()) }
+    LaunchedEffect(query, selected) {
+        if (selected != null || query.isBlank()) {
+            suggestions = emptyList()
+        } else {
+            delay(SEARCH_DEBOUNCE_MS)
+            suggestions = try {
+                onSearch(query)
+            } catch (e: CancellationException) {
+                throw e // a newer keystroke cancelled this search — let it unwind, don't blank the list
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

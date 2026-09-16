@@ -1,6 +1,5 @@
 package com.senniapp.brickwares.data.repository
 
-import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.CollectionSummary
 import com.senniapp.brickwares.data.model.Condition
@@ -10,6 +9,7 @@ import com.senniapp.brickwares.data.model.ThemeSummary
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.util.AppCurrency
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Source of collection data for the UI layer. The mock implementation returns
@@ -26,11 +26,19 @@ interface CollectionRepository {
 
     fun getCollectionItems(): Flow<List<CollectionItem>>
 
-    /** Catalog search (LIKE-style substring match on set number, name, or theme). */
-    fun searchCatalog(query: String): List<CatalogSet>
+    /**
+     * Force-refresh the user-scoped catalog cache (the referenced sets/figs) from the network and await
+     * it, so a subsequent [getWishlistItems]/[getCollectionItems] read carries today's status. Throws on
+     * a network failure so the daily retirement worker can retry instead of diffing stale data.
+     */
+    suspend fun refreshReferencedCatalog()
 
-    /** The full reference catalog (used by the Search tab's theme browser). */
-    fun getCatalog(): List<CatalogSet>
+    /**
+     * True once the user-scoped catalog overlay has successfully loaded at least once. The retirement
+     * diff waits for this so it never baselines or fires on stale add-time status (before Decision 16
+     * this was "the in-memory catalog is non-empty").
+     */
+    val catalogOverlayReady: StateFlow<Boolean>
 
     /**
      * Adds an item's copies to the collection. If a set with the same number already exists,

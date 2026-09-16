@@ -19,11 +19,14 @@ import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.NewSets
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * ViewModel for the Search tab. Catalog lookups use the repository's LIKE-style
@@ -36,8 +39,11 @@ class SearchViewModel(
     private val catalogRepo: CatalogRepository = CatalogRepositoryProvider.instance,
 ) : ViewModel() {
 
-    private var catalog: List<CatalogSet> = emptyList()
-    private var minifigs: List<Minifig> = emptyList()
+    // The open theme's sets / minifigs, fetched on demand (Decision 16). Subtheme filter / sort /
+    // pagination run over these bounded lists.
+    private var themeSets: List<CatalogSet> = emptyList()
+    private var minifigThemeItems: List<Minifig> = emptyList()
+    private var suggestJob: Job? = null
     private val _uiState = MutableStateFlow(
         // Seed favorites from disk so bookmarked themes survive an app restart.
         SearchUiState(
@@ -49,28 +55,9 @@ class SearchViewModel(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
-        // Rebuild the browser whenever the catalog (re)loads (revision bumps on every successful load)
-        // — covers the first load, the error-fallback Retry, and a reconnect satisfied by any
-        // component's refresh, so the themes always repopulate.
-        viewModelScope.launch {
-            catalogRepo.revision.collect {
-                catalog = catalogRepo.all()
-                if (catalog.isNotEmpty()) {
-                    val themes = buildThemes()
-                    _uiState.update {
-                        it.copy(
-                            themes = themes,
-                            newSetsByTheme = NewSets.groupedByTheme(catalog),
-                            isLoading = false,
-                        ).withReorderedThemes()
-                    }
-                    // Warm every theme icon into Coil's disk cache now, so the theme browse (both view
-                    // modes) draws fully on first open instead of trickling in one icon per round trip.
-                    ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
-                }
-            }
-        }
-        viewModelScope.launch { catalogRepo.refresh() }
+        // Theme browse + New Sets come from server-side count queries (Decision 16), not a full
+        // in-memory catalog. Loaded once here and re-run by [retry].
+        loadBrowse()
         // Keep the browse marks in sync with the stored favorites. Beyond an in-VM toggle, this fires
         // when an account switch / deletion wipes them (ThemeFavoritesPrefs.clear), so the previous
         // account's stars disappear on a live Search screen without waiting for a restart.
@@ -80,13 +67,9 @@ class SearchViewModel(
         viewModelScope.launch {
             ThemeFavoritesPrefs.minifigThemesFlow.collect { favs -> _uiState.update { it.copy(favoriteMinifigThemes = favs) } }
         }
-        // Load minifigs up front too — the search bar is GLOBAL (searches sets + minifigs regardless
-        // of the browse mode), so the minifig cache must be ready even before entering minifig mode.
-        loadMinifigs()
-        // Surface catalog load failures (no connection / error) so the UI can show the error fallback.
-        viewModelScope.launch {
-            catalogRepo.loadError.collect { failed -> _uiState.update { it.copy(loadError = failed) } }
-        }
+        // Load the minifig theme browse up front too — the search bar is GLOBAL (searches sets AND
+        // minifigs regardless of the browse mode), so its counts must be ready before minifig mode.
+        loadMinifigBrowse()
         // Observe the wishlist so result cards can show a "Wishlisted" state.
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
@@ -108,27 +91,67 @@ class SearchViewModel(
         }
     }
 
-    /** Retry after a catalog load failure (the error fallback's Retry button). */
+    /** Retry after a browse-load failure (the error fallback's Retry button). */
     fun retry() {
+        loadBrowse()
+        loadMinifigBrowse()
+    }
+
+    /**
+     * Load the theme browse (theme + subtheme counts) and the New Sets grouping via server-side
+     * queries — no full catalog in memory (Decision 16). Sets [SearchUiState.loadError] on failure so
+     * the error/retry fallback shows.
+     */
+    private fun loadBrowse() {
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            // On success the catalog `revision` bumps and the observer rebuilds the themes; on failure
-            // `loadError` stays set (observed) so the error fallback remains.
-            catalogRepo.refresh()
-            _uiState.update { it.copy(isLoading = false) }
+            try {
+                val counts = catalogRepo.themeCounts()
+                val subsByTheme = catalogRepo.subthemeCounts().groupBy { it.theme }
+                val themes = counts.map { c ->
+                    ThemeGroup(
+                        theme = c.theme,
+                        setCount = c.setCount,
+                        logoAsset = themeLogo(c.theme),
+                        subthemes = subsByTheme[c.theme].orEmpty()
+                            .map { SubthemeCount(it.subtheme, it.setCount) }
+                            .sortedBy { it.name },
+                    )
+                }.sortedBy { it.theme }
+                val candidates = catalogRepo.newSetCandidates()
+                _uiState.update {
+                    it.copy(
+                        themes = themes,
+                        newSetsByTheme = NewSets.groupedByTheme(candidates),
+                        isLoading = false,
+                        loadError = false,
+                    ).withReorderedThemes()
+                }
+                // Warm the theme icons into Coil's disk cache so the browse draws fully on first open.
+                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("SearchVM").w(e, "theme browse load failed")
+                _uiState.update { it.copy(isLoading = false, loadError = true) }
+            }
         }
     }
 
     fun onQueryChange(query: String) {
-        _uiState.update {
-            it.copy(
-                query = query,
-                submittedQuery = null,
-                // Live suggestions in the dropdown: sets first, then minifigs (matched by name or fig
-                // code, e.g. "fig-017485"). The FAB search modal already lists both the same way.
-                suggestions = if (query.isBlank()) emptyList() else catalogRepo.search(query, limit = SUGGESTION_LIMIT),
-                minifigSuggestions = if (query.isBlank()) emptyList() else catalogRepo.searchMinifigs(query).take(SUGGESTION_LIMIT),
-            )
+        _uiState.update { it.copy(query = query, submittedQuery = null) }
+        // Set suggestions are a DB query now (Decision 16), so debounce per keystroke; minifig
+        // suggestions still come from the in-memory minifig cache.
+        suggestJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(suggestions = emptyList(), minifigSuggestions = emptyList()) }
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(SUGGEST_DEBOUNCE_MS)
+            val sets = runCatching { catalogRepo.searchSets(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
+            val figs = runCatching { catalogRepo.fetchMinifigsMatching(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
+            _uiState.update { it.copy(suggestions = sets, minifigSuggestions = figs) }
         }
     }
 
@@ -136,12 +159,13 @@ class SearchViewModel(
     fun onSubmit() {
         val q = _uiState.value.query.trim()
         if (q.isBlank()) return
-        _uiState.update {
-            it.copy(
-                submittedQuery = q, suggestions = emptyList(),
-                results = catalogRepo.search(q),
-                minifigItems = catalogRepo.searchMinifigs(q), minifigThemeDetail = null, minifigPage = 1,
-            )
+        _uiState.update { it.copy(submittedQuery = q, suggestions = emptyList()) }
+        viewModelScope.launch {
+            val sets = runCatching { catalogRepo.searchSets(q, limit = SEARCH_LIMIT) }.getOrDefault(emptyList())
+            val figs = runCatching { catalogRepo.fetchMinifigsMatching(q, limit = SEARCH_LIMIT) }.getOrDefault(emptyList())
+            _uiState.update {
+                it.copy(results = sets, minifigItems = figs, minifigThemeDetail = null, minifigPage = 1)
+            }
         }
     }
 
@@ -154,7 +178,6 @@ class SearchViewModel(
     fun showMinifigs() {
         resetToDefault()
         _uiState.update { it.copy(mode = SearchMode.MINIFIGS) }
-        if (minifigs.isEmpty()) loadMinifigs()
     }
 
     /** Enter the set browse home directly (used when switching to set search from a Minifig Detail). */
@@ -170,15 +193,33 @@ class SearchViewModel(
         // query — so toggling from inside a theme's item list lands on the main page, not a stale list.
         resetToDefault()
         _uiState.update { it.copy(mode = next) }
-        if (next == SearchMode.MINIFIGS && minifigs.isEmpty()) loadMinifigs()
     }
 
-    private fun loadMinifigs() {
+    /** Minifig theme browse (theme + subtheme counts) via DB views — no full minifig list in memory. */
+    private fun loadMinifigBrowse() {
         _uiState.update { it.copy(minifigsLoading = true) }
         viewModelScope.launch {
-            catalogRepo.refreshMinifigs()
-            minifigs = catalogRepo.allMinifigs()
-            _uiState.update { it.copy(minifigThemes = buildMinifigThemes(), minifigsLoading = false).withReorderedThemes() }
+            try {
+                val counts = catalogRepo.minifigThemeCounts()
+                val subsByTheme = catalogRepo.minifigSubthemeCounts().groupBy { it.theme }
+                val themes = counts.map { c ->
+                    ThemeGroup(
+                        theme = c.theme,
+                        setCount = c.setCount,
+                        logoAsset = themeLogo(c.theme),
+                        subthemes = subsByTheme[c.theme].orEmpty()
+                            .map { SubthemeCount(it.subtheme, it.setCount) }
+                            .sortedBy { it.name },
+                    )
+                }.sortedBy { it.theme }
+                _uiState.update { it.copy(minifigThemes = themes, minifigsLoading = false).withReorderedThemes() }
+                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("SearchVM").w(e, "minifig browse load failed")
+                _uiState.update { it.copy(minifigsLoading = false) }
+            }
         }
     }
 
@@ -202,15 +243,31 @@ class SearchViewModel(
     }
 
     private fun openMinifigThemeDetail(theme: String, sub: String) {
+        // Show the shell, then fetch this theme's figs (bounded); subtheme/sort/pagination run in memory.
         _uiState.update {
             it.copy(
                 minifigThemeDetail = theme,
                 minifigThemeDetailSub = sub,
                 minifigThemeDetailSort = MinifigSort.NAME,
-                minifigThemeDetailSubOptions = minifigSubthemesFor(theme),
-                minifigItems = minifigThemeResults(theme, sub, MinifigSort.NAME),
+                minifigThemeDetailSubOptions = emptyList(),
+                minifigItems = emptyList(),
                 minifigPage = 1,
             )
+        }
+        viewModelScope.launch {
+            val fetched = runCatching { catalogRepo.minifigsInTheme(theme) }.getOrElse { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Timber.tag("SearchVM").w(e, "minifigsInTheme failed for %s", theme)
+                emptyList()
+            }
+            minifigThemeItems = fetched
+            _uiState.update {
+                if (it.minifigThemeDetail != theme) return@update it
+                it.copy(
+                    minifigThemeDetailSubOptions = minifigSubthemesFromItems(fetched, theme),
+                    minifigItems = minifigThemeResults(theme, it.minifigThemeDetailSub, it.minifigThemeDetailSort),
+                )
+            }
         }
     }
 
@@ -237,9 +294,8 @@ class SearchViewModel(
     }
 
     private fun minifigThemeResults(theme: String, sub: String, sort: MinifigSort): List<Minifig> {
-        val filtered = minifigs.filter { m ->
-            if (sub == ALL_SUBTHEMES) theme in m.themes else (theme to sub) in m.themeSubthemes
-        }
+        // Filter the OPEN theme's fetched figs (already scoped to this theme by the query).
+        val filtered = minifigThemeItems.filter { m -> sub == ALL_SUBTHEMES || (theme to sub) in m.themeSubthemes }
         return when (sort) {
             MinifigSort.NAME -> filtered.sortedBy { it.name }
             // Minifigs have no retail price, so "value" sorts use the community current value.
@@ -254,9 +310,8 @@ class SearchViewModel(
     private fun figValue(figNum: String): Long =
         ValueRepositoryProvider.instance.valueForFig(figNum)?.amountUsdCents ?: 0L
 
-    private fun minifigSubthemesFor(theme: String): List<SubthemeCount> =
-        minifigs.filter { theme in it.themes }
-            .flatMap { f -> f.themeSubthemes.filter { it.first == theme }.map { it.second } }
+    private fun minifigSubthemesFromItems(items: List<Minifig>, theme: String): List<SubthemeCount> =
+        items.flatMap { f -> f.themeSubthemes.filter { it.first == theme }.map { it.second } }
             .groupingBy { it }.eachCount()
             .map { (name, count) -> SubthemeCount(name, count) }
             .sortedBy { it.name }
@@ -291,19 +346,6 @@ class SearchViewModel(
     /** Tapping a minifig subtheme link → that theme's figs filtered to the subtheme. */
     fun onMinifigSubthemeClick(theme: String, subtheme: String) = openMinifigThemeDetail(theme, subtheme)
 
-    // Same ThemeGroup shape as the set browser (so ThemeCard + its subtheme links are reused).
-    // count = minifigs in the theme; subthemes = the sets' subthemes (with per-subtheme fig counts).
-    private fun buildMinifigThemes(): List<ThemeGroup> {
-        val byTheme = minifigs.flatMap { fig -> fig.themes.map { it to fig } }.groupBy({ it.first }, { it.second })
-        return byTheme.map { (theme, figs) ->
-            val subs = figs.flatMap { f -> f.themeSubthemes.filter { it.first == theme }.map { it.second } }
-                .groupingBy { it }.eachCount()
-                .map { (name, count) -> SubthemeCount(name, count) }
-                .sortedBy { it.name }
-            ThemeGroup(theme, figs.size, themeLogo(theme), subs)
-        }
-    }
-
     /** Tapping a theme card opens the theme-detail list (all subthemes). */
     fun onThemeClick(theme: String) = openThemeDetail(theme, ALL_SUBTHEMES)
 
@@ -322,6 +364,8 @@ class SearchViewModel(
     }
 
     private fun openThemeDetail(theme: String, sub: String) {
+        // Show the theme-detail shell immediately (loading), then fetch just this theme's sets
+        // (bounded) — subtheme filter / sort / pagination run over that list in memory (Decision 16).
         _uiState.update {
             it.copy(
                 // Clear any in-progress search so the theme-filtered list is what shows (and Back from it
@@ -330,19 +374,37 @@ class SearchViewModel(
                 themeDetail = theme,
                 themeDetailSub = sub,
                 themeDetailSort = ThemeDetailSort.NEWEST,
-                themeDetailSubOptions = subthemesFor(theme),
-                themeDetailResults = themeDetailResults(theme, sub, ThemeDetailSort.NEWEST),
+                themeDetailLoading = true,
+                themeDetailSubOptions = emptyList(),
+                themeDetailResults = emptyList(),
                 themeDetailPage = 1,
             )
+        }
+        viewModelScope.launch {
+            val fetched = runCatching { catalogRepo.setsInTheme(theme) }.getOrElse { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Timber.tag("SearchVM").w(e, "setsInTheme failed for %s", theme)
+                emptyList()
+            }
+            themeSets = fetched
+            _uiState.update {
+                // Ignore a stale result if the user has since navigated to another theme / closed it.
+                if (it.themeDetail != theme) return@update it
+                it.copy(
+                    themeDetailLoading = false,
+                    themeDetailSubOptions = subthemesFrom(fetched),
+                    themeDetailResults = themeDetailResults(it.themeDetailSub, it.themeDetailSort),
+                )
+            }
         }
     }
 
     fun onThemeDetailSubChange(sub: String) {
         _uiState.update {
-            val theme = it.themeDetail ?: return@update it
+            if (it.themeDetail == null) return@update it
             it.copy(
                 themeDetailSub = sub,
-                themeDetailResults = themeDetailResults(theme, sub, it.themeDetailSort),
+                themeDetailResults = themeDetailResults(sub, it.themeDetailSort),
                 themeDetailPage = 1,
             )
         }
@@ -350,10 +412,10 @@ class SearchViewModel(
 
     fun onThemeDetailSortChange(sort: ThemeDetailSort) {
         _uiState.update {
-            val theme = it.themeDetail ?: return@update it
+            if (it.themeDetail == null) return@update it
             it.copy(
                 themeDetailSort = sort,
-                themeDetailResults = themeDetailResults(theme, it.themeDetailSub, sort),
+                themeDetailResults = themeDetailResults(it.themeDetailSub, sort),
                 themeDetailPage = 1,
             )
         }
@@ -369,10 +431,9 @@ class SearchViewModel(
         }
     }
 
-    private fun themeDetailResults(theme: String, sub: String, sort: ThemeDetailSort): List<CatalogSet> {
-        val filtered = catalog.filter {
-            it.theme.equals(theme, ignoreCase = true) && (sub == ALL_SUBTHEMES || it.subtheme == sub)
-        }
+    /** Filter + sort the OPEN theme's fetched sets ([themeSets]) — no full-catalog scan (Decision 16). */
+    private fun themeDetailResults(sub: String, sort: ThemeDetailSort): List<CatalogSet> {
+        val filtered = themeSets.filter { sub == ALL_SUBTHEMES || it.subtheme == sub }
         return when (sort) {
             ThemeDetailSort.NEWEST -> filtered.sortedByDescending { it.releaseYear * 100 + it.releaseMonth }
             ThemeDetailSort.OLDEST -> filtered.sortedBy { it.releaseYear * 100 + it.releaseMonth }
@@ -382,9 +443,8 @@ class SearchViewModel(
         }
     }
 
-    private fun subthemesFor(theme: String): List<SubthemeCount> =
-        catalog.filter { it.theme.equals(theme, ignoreCase = true) }
-            .groupingBy { it.subtheme }.eachCount()
+    private fun subthemesFrom(sets: List<CatalogSet>): List<SubthemeCount> =
+        sets.groupingBy { it.subtheme }.eachCount()
             .map { (name, count) -> SubthemeCount(name, count) }
             .sortedBy { it.name }
 
@@ -473,9 +533,10 @@ class SearchViewModel(
         _uiState.update { it.copy(favoriteMinifigThemes = next) }
     }
 
-    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+    // Add-sheet / quick-search suggestions — DB queries now (Decision 16); the composables debounce them.
+    suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
-    fun searchMinifigs(query: String): List<Minifig> = catalogRepo.searchMinifigs(query)
+    suspend fun searchMinifigs(query: String): List<Minifig> = catalogRepo.fetchMinifigsMatching(query)
 
     // ---- Add to wishlist ----
 
@@ -517,21 +578,18 @@ class SearchViewModel(
         _uiState.update { it.copy(toastMessage = null) }
     }
 
-    private fun buildThemes(): List<ThemeGroup> =
-        catalog.groupBy { it.theme }
-            .map { (theme, sets) ->
-                val subs = sets.groupingBy { it.subtheme }.eachCount()
-                    .map { (name, count) -> SubthemeCount(name, count) }
-                    .sortedBy { it.name }
-                ThemeGroup(theme, sets.size, themeLogo(theme), subs)
-            }
-            .sortedBy { it.theme }
-
     /** Hand-curated theme icon in R2, by a deterministic slug of the name (see [CatalogImages.themeIconUrl]). */
     private fun themeLogo(theme: String): String = CatalogImages.themeIconUrl(theme)
 
     private companion object {
         /** Max live suggestions per kind (sets, minifigs) in the typing dropdown. */
         const val SUGGESTION_LIMIT = 6
+
+        /** Debounce (ms) before firing the set-suggestion DB query on each keystroke. */
+        const val SUGGEST_DEBOUNCE_MS = 250L
+
+        /** Cap on submitted-search results (the old in-memory search was uncapped; a cap keeps the DB
+         *  query + result render bounded for broad terms). */
+        const val SEARCH_LIMIT = 100
     }
 }

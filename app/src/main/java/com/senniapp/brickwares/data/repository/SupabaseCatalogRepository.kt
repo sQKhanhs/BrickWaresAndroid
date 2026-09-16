@@ -1,6 +1,5 @@
 package com.senniapp.brickwares.data.repository
 
-import timber.log.Timber
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
@@ -11,68 +10,24 @@ import com.senniapp.brickwares.util.CurrencyConverter
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
-import kotlinx.coroutines.CancellationException
+import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
 /**
- * Supabase-backed catalog. Fetches the `sets` table once, maps rows to [CatalogSet], and caches
- * the result in memory together with its lookup indexes; subsequent [all]/[search]/[setById]/
- * [setByNumber] serve from the cache with no further network.
+ * Supabase-backed catalog (Decision 16). Every call is a bounded DB query — browse/search over indexed
+ * columns and count views, single-row detail fetches, and batch resolves for the user's referenced
+ * sets/figs. Nothing is held in memory beyond the FX rates the [init] block warms for price mapping.
  */
 class SupabaseCatalogRepository(
     private val client: SupabaseClient,
 ) : CatalogRepository {
-
-    /**
-     * The loaded set catalog plus its lookup indexes, built ONCE per load. Per-row consumers (the
-     * collection/wishlist/sales overlays, the sync pull, detail pages) resolve a set in O(1) instead
-     * of scanning the list — that scan was O(rows × catalog) on every flow emission. One immutable
-     * holder so the list and its indexes always swap together.
-     */
-    private class SetIndex(val all: List<CatalogSet>) {
-        val byId: Map<Long, CatalogSet> = all.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
-        // Lowest variant wins when several sets share a number (CMF series), so the pick is deterministic.
-        val byNumber: Map<String, CatalogSet> = HashMap<String, CatalogSet>(all.size).also { m ->
-            all.sortedBy { it.numberVariant }.forEach { m.putIfAbsent(it.setNumber, it) }
-        }
-
-        companion object {
-            val EMPTY = SetIndex(emptyList())
-        }
-    }
-
-    private class MinifigIndex(val all: List<Minifig>) {
-        val byNum: Map<String, Minifig> = all.associateBy { it.figNum }
-
-        companion object {
-            val EMPTY = MinifigIndex(emptyList())
-        }
-    }
-
-    @Volatile
-    private var sets: SetIndex = SetIndex.EMPTY
-
-    @Volatile
-    private var figs: MinifigIndex = MinifigIndex.EMPTY
-    private val minifigMutex = Mutex()
-    private val loadMutex = Mutex()
-    private val _revision = MutableStateFlow(0)
-    override val revision: StateFlow<Int> = _revision.asStateFlow()
-    private val _loadError = MutableStateFlow(false)
-    override val loadError: StateFlow<Boolean> = _loadError.asStateFlow()
 
     init {
         // Warm the FX rates in the background (best-effort) so they don't block the catalog load —
@@ -85,126 +40,257 @@ class SupabaseCatalogRepository(
     private companion object {
         const val LOAD_TIMEOUT_MS = 15_000L
 
+        /** Max keys per `in.(...)` batch query, so a large user collection can't blow the URL length. */
+        const val IN_CHUNK = 200
+
         /**
          * Brickset's placeholder name for an unrevealed/announced-but-unnamed set. Such rows carry no
          * real data yet (no name, image, pieces, or price), so they're filtered out of the catalog —
          * showing them is just scatter in search/browse. They reappear once Brickset names the set.
          */
         const val UNREVEALED_NAME = "{?}"
+
+        /** The `sets` columns the app reads, shared by the full load and the server-side queries. */
+        const val SET_COLS =
+            "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,render_url,year,pieces," +
+                "minifigs,availability,notes,notes_vi,launch_date,exit_date," +
+                "set_prices(region,retail_price,date_first_available,date_last_available)"
+
+        /** The `minifigs` columns + the join to each fig's sets (for themes / set-count), shared by the
+         *  full load and the server-side queries. */
+        const val MINIFIG_COLS = "fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"
     }
 
-    override suspend fun refresh() = load(force = false)
+    // ---- Server-side queries (Decision 16). Suspend + throw on failure; callers handle loading/error. ----
 
-    /** Forced re-fetch (daily retirement check): statuses are derived at load time, so re-derive today's. */
-    override suspend fun reload() = load(force = true)
+    /** Escape the user's text so their `%`/`_` are treated literally in the ILIKE pattern. */
+    private fun likePattern(q: String): String =
+        "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
-    private suspend fun load(force: Boolean) {
-        if (!force && sets.all.isNotEmpty()) return
-        loadMutex.withLock {
-            if (!force && sets.all.isNotEmpty()) return
-            // On failure `sets` is never reassigned (only after a successful decode), so a forced reload
-            // that fails keeps serving the previous cache instead of wiping the app's catalog.
-            try {
-                // Bound the fetch so a dropped connection fails fast (instead of the UI hanging on
-                // "loading") and releases the mutex promptly so a retry isn't blocked.
-                withTimeout(LOAD_TIMEOUT_MS) {
-                    val rows = client.from("sets")
-                        .select(
-                            Columns.raw(
-                                "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,render_url,year,pieces," +
-                                    "minifigs,availability,notes,notes_vi,launch_date,exit_date,set_prices(region,retail_price,date_first_available,date_last_available)",
-                            ),
-                        )
-                        .decodeList<SetRow>()
-                    // Drop unrevealed placeholder sets (Brickset name "{?}", no real data yet) so they
-                    // don't scatter search/browse — they'll show once Brickset actually names them.
-                    // distinctBy(id) guards against a duplicate row for the same number+variant in the
-                    // catalog: [CatalogSet.id] is the key for every list, and a dup crashes LazyColumn.
-                    sets = SetIndex(
-                        rows.map { it.toCatalogSet() }
-                            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-                            .distinctBy { it.id },
-                    )
+    override suspend fun searchSets(query: String, limit: Int): List<CatalogSet> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val pattern = likePattern(q)
+        return withTimeout(LOAD_TIMEOUT_MS) {
+            client.from("sets").select(Columns.raw(SET_COLS)) {
+                filter {
+                    neq("name", UNREVEALED_NAME)
+                    or {
+                        ilike("set_number", pattern)
+                        ilike("name", pattern)
+                        ilike("theme", pattern)
+                    }
                 }
-                _loadError.value = false
-                // Signal consumers (e.g. the collection/wishlist status overlay) that the cache is ready.
-                _revision.value += 1
-            } catch (e: TimeoutCancellationException) {
-                _loadError.value = true
-                Timber.tag("CatalogRepository").e(e, "Catalog load timed out")
-            } catch (e: CancellationException) {
-                throw e // genuine coroutine cancellation — never swallow it
-            } catch (e: Exception) {
-                // Don't crash the app on a network/permission failure — flag the error so catalog-backed
-                // screens show the error/offline fallback, leave the cache empty, and allow a retry.
-                _loadError.value = true
-                Timber.tag("CatalogRepository").e(e, "Failed to load catalog from Supabase")
-            }
+                order("year", Order.DESCENDING)
+                limit(limit.toLong())
+            }.decodeList<SetRow>()
+                .map { it.toCatalogSet() }
+                .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+                .distinctBy { it.id }
         }
     }
 
-    override fun all(): List<CatalogSet> = sets.all
-
-    override fun search(query: String, limit: Int): List<CatalogSet> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return emptyList()
-        // One contains() per set against the pre-lowercased key (zero allocations), and the sequence
-        // stops at [limit] hits rather than scanning the whole catalog and truncating afterwards.
-        return sets.all.asSequence().filter { q in it.searchKey }.take(limit).toList()
+    override suspend fun themeCounts(): List<ThemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("catalog_theme_counts").select().decodeList<ThemeCountRow>()
+            .map { ThemeCount(it.theme, it.setCount) }
     }
 
-    override fun setById(setId: Long): CatalogSet? = sets.byId[setId]
+    override suspend fun subthemeCounts(): List<ThemeSubthemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("catalog_subtheme_counts").select().decodeList<SubthemeCountRow>()
+            .map { ThemeSubthemeCount(it.theme, it.subtheme, it.setCount) }
+    }
 
-    override fun setByNumber(setNumber: String): CatalogSet? = sets.byNumber[setNumber]
-
-    override suspend fun refreshMinifigs() {
-        if (figs.all.isNotEmpty()) return
-        minifigMutex.withLock {
-            if (figs.all.isNotEmpty()) return
-            try {
-                withTimeout(LOAD_TIMEOUT_MS) {
-                    // Each fig + the sets it's in (for the set-count, theme browse, and the detail's
-                    // "appears in" list) via the join — set_id from the link, theme/subtheme from sets.
-                    val rows = client.from("minifigs")
-                        .select(Columns.raw("fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"))
-                        .decodeList<MinifigRow>()
-                    // distinctBy(figNum) for the same reason as sets: figNum is the list key, and a
-                    // duplicate minifig row would crash the LazyColumn/grid that renders them.
-                    figs = MinifigIndex(rows.map { it.toMinifig() }.distinctBy { it.figNum })
-                }
-                _loadError.value = false
-                _revision.value += 1
-            } catch (e: TimeoutCancellationException) {
-                _loadError.value = true
-                Timber.tag("CatalogRepository").e(e, "Minifig load timed out")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _loadError.value = true
-                Timber.tag("CatalogRepository").e(e, "Failed to load minifigs from Supabase")
+    override suspend fun setsInTheme(theme: String): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("sets").select(Columns.raw(SET_COLS)) {
+            filter {
+                eq("theme", theme)
+                neq("name", UNREVEALED_NAME)
             }
+        }.decodeList<SetRow>()
+            .map { it.toCatalogSet() }
+            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+            .distinctBy { it.id }
+    }
+
+    override suspend fun fetchSet(catalogKey: String): CatalogSet? = withTimeout(LOAD_TIMEOUT_MS) {
+        // catalogKey is CatalogSet.id ("<number>-<variant>") or a bare number. Try the exact
+        // number+variant first, then fall back to the number (lowest variant).
+        val dash = catalogKey.lastIndexOf('-')
+        val variant = if (dash > 0) catalogKey.substring(dash + 1).toIntOrNull() else null
+        val number = if (variant != null) catalogKey.substring(0, dash) else catalogKey
+        val exact = if (variant != null) {
+            client.from("sets").select(Columns.raw(SET_COLS)) {
+                filter { eq("set_number", number); eq("number_variant", variant) }
+                limit(1)
+            }.decodeList<SetRow>().firstOrNull()
+        } else {
+            null
+        }
+        val row = exact ?: client.from("sets").select(Columns.raw(SET_COLS)) {
+            filter { eq("set_number", number) }
+            order("number_variant", Order.ASCENDING)
+            limit(1)
+        }.decodeList<SetRow>().firstOrNull()
+        row?.toCatalogSet()?.takeIf { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+    }
+
+    override suspend fun fetchSetsByNumbers(numbers: Collection<String>): List<CatalogSet> {
+        val keys = numbers.filter { it.isNotBlank() }.distinct()
+        if (keys.isEmpty()) return emptyList()
+        // Chunked so a large collection can't blow the URL length of the `in.(...)` filter. Lowest
+        // variant per number wins (mirrors setByNumber) so a CMF-style multi-variant number is stable.
+        return keys.chunked(IN_CHUNK).flatMap { chunk ->
+            withTimeout(LOAD_TIMEOUT_MS) {
+                client.from("sets").select(Columns.raw(SET_COLS)) {
+                    filter {
+                        isIn("set_number", chunk)
+                        neq("name", UNREVEALED_NAME)
+                    }
+                    order("number_variant", Order.ASCENDING)
+                }.decodeList<SetRow>()
+            }
+        }
+            .map { it.toCatalogSet() }
+            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+            .groupBy { it.setNumber }
+            .mapNotNull { (_, group) -> group.minByOrNull { it.numberVariant } }
+    }
+
+    override suspend fun fetchSetsByIds(ids: Collection<Long>): List<CatalogSet> {
+        val keys = ids.distinct()
+        if (keys.isEmpty()) return emptyList()
+        return keys.chunked(IN_CHUNK).flatMap { chunk ->
+            withTimeout(LOAD_TIMEOUT_MS) {
+                client.from("sets").select(Columns.raw(SET_COLS)) {
+                    filter { isIn("set_id", chunk) }
+                }.decodeList<SetRow>()
+            }
+        }
+            .map { it.toCatalogSet() }
+            .distinctBy { it.setId }
+    }
+
+    override suspend fun fetchMinifigsByNums(figNums: Collection<String>): List<Minifig> {
+        val keys = figNums.filter { it.isNotBlank() }.distinct()
+        if (keys.isEmpty()) return emptyList()
+        return keys.chunked(IN_CHUNK).flatMap { chunk ->
+            withTimeout(LOAD_TIMEOUT_MS) {
+                client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
+                    filter { isIn("fig_num", chunk) }
+                }.decodeList<MinifigRow>()
+            }
+        }
+            .map { it.toMinifig() }
+            .distinctBy { it.figNum }
+    }
+
+    override suspend fun newSetCandidates(): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
+        // Start of the previous month — the widest cutoff that still covers pending (future launch)
+        // and current/previous-month releases; NewSets narrows to the exact rule over these.
+        val cutoff = LocalDate.now().withDayOfMonth(1).minusMonths(1).toString()
+        client.from("sets").select(Columns.raw(SET_COLS)) {
+            filter {
+                gte("launch_date", cutoff)
+                neq("name", UNREVEALED_NAME)
+            }
+        }.decodeList<SetRow>()
+            .map { it.toCatalogSet() }
+            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+            .distinctBy { it.id }
+    }
+
+    // ---- Minifig server-side queries (Decision 16) ----
+
+    override suspend fun fetchMinifigsMatching(query: String, limit: Int): List<Minifig> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val pattern = likePattern(q)
+        return withTimeout(LOAD_TIMEOUT_MS) {
+            client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
+                filter { or { ilike("fig_num", pattern); ilike("name", pattern) } }
+                limit(limit.toLong())
+            }.decodeList<MinifigRow>().map { it.toMinifig() }.distinctBy { it.figNum }
         }
     }
 
-    override fun allMinifigs(): List<Minifig> = figs.all
-
-    override fun searchMinifigs(query: String): List<Minifig> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return emptyList()
-        return figs.all.filter { q in it.searchKey }
+    override suspend fun minifigThemeCounts(): List<ThemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("catalog_minifig_theme_counts").select().decodeList<MinifigThemeCountRow>()
+            .map { ThemeCount(it.theme, it.minifigCount) }
     }
 
-    override fun minifigByNum(figNum: String): Minifig? = figs.byNum[figNum]
-
-    override fun setsForMinifig(figNum: String): List<CatalogSet> {
-        val fig = figs.byNum[figNum] ?: return emptyList()
-        return fig.setIds.mapNotNull { sets.byId[it] }.sortedByDescending { it.releaseYear }
+    override suspend fun minifigSubthemeCounts(): List<ThemeSubthemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("catalog_minifig_subtheme_counts").select().decodeList<MinifigSubthemeCountRow>()
+            .map { ThemeSubthemeCount(it.theme, it.subtheme, it.minifigCount) }
     }
 
-    override fun minifigsForSet(setId: Long?): List<Minifig> {
-        if (setId == null) return emptyList()
-        return figs.all.filter { setId in it.setIds }.sortedBy { it.figNum }
+    override suspend fun minifigsInTheme(theme: String): List<Minifig> = withTimeout(LOAD_TIMEOUT_MS) {
+        // !inner so only figs that appear in a set of this theme come back; the embedded sets are also
+        // filtered to this theme, which is what the in-theme browse wants.
+        client.from("minifigs").select(
+            Columns.raw("fig_num,name,num_parts,image_url,set_minifigs!inner(set_id,sets!inner(theme,subtheme))"),
+        ) {
+            filter { eq("set_minifigs.sets.theme", theme) }
+        }.decodeList<MinifigRow>().map { it.toMinifig() }.distinctBy { it.figNum }
     }
+
+    override suspend fun fetchMinifig(figNum: String): Minifig? = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
+            filter { eq("fig_num", figNum) }
+            limit(1)
+        }.decodeList<MinifigRow>().firstOrNull()?.toMinifig()
+    }
+
+    override suspend fun fetchSetsForMinifig(figNum: String): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
+        client.from("set_minifigs").select(Columns.raw("sets($SET_COLS)")) {
+            filter { eq("fig_num", figNum) }
+        }.decodeList<SetWrapperRow>()
+            .mapNotNull { it.sets?.toCatalogSet() }
+            .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+            .distinctBy { it.id }
+            .sortedByDescending { it.releaseYear }
+    }
+
+    override suspend fun fetchMinifigsForSet(setId: Long): List<Minifig> = withTimeout(LOAD_TIMEOUT_MS) {
+        // The grid needs only fig identity/image, so skip the theme join (avoids recursive embedding).
+        client.from("set_minifigs").select(Columns.raw("minifigs(fig_num,name,num_parts,image_url)")) {
+            filter { eq("set_id", setId) }
+        }.decodeList<MinifigWrapperRow>()
+            .mapNotNull { it.minifigs?.toMinifig() }
+            .distinctBy { it.figNum }
+            .sortedBy { it.figNum }
+    }
+
+    /** Row shape for the `catalog_theme_counts` view (theme + set count). */
+    @Serializable
+    private data class ThemeCountRow(val theme: String, @SerialName("set_count") val setCount: Int)
+
+    /** Row shape for the `catalog_subtheme_counts` view (theme + subtheme + set count). */
+    @Serializable
+    private data class SubthemeCountRow(
+        val theme: String,
+        val subtheme: String,
+        @SerialName("set_count") val setCount: Int,
+    )
+
+    /** Row shape for the `catalog_minifig_theme_counts` view. */
+    @Serializable
+    private data class MinifigThemeCountRow(val theme: String, @SerialName("minifig_count") val minifigCount: Int)
+
+    /** Row shape for the `catalog_minifig_subtheme_counts` view. */
+    @Serializable
+    private data class MinifigSubthemeCountRow(
+        val theme: String,
+        val subtheme: String,
+        @SerialName("minifig_count") val minifigCount: Int,
+    )
+
+    /** Wrapper for a `set_minifigs -> sets(...)` embedded row (sets a minifig appears in). */
+    @Serializable
+    private data class SetWrapperRow(val sets: SetRow? = null)
+
+    /** Wrapper for a `set_minifigs -> minifigs(...)` embedded row (figs in a set). */
+    @Serializable
+    private data class MinifigWrapperRow(val minifigs: MinifigRow? = null)
 
     /** Row shape for the `sets` table columns we read (unknown columns are ignored by the decoder). */
     @Serializable

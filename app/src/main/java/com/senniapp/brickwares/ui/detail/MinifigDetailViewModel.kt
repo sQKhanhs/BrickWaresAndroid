@@ -19,6 +19,7 @@ import com.senniapp.brickwares.data.repository.ValueContributionRepository
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.Observability
+import timber.log.Timber
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,24 +47,19 @@ class MinifigDetailViewModel(
     private var soldItems: List<SoldItem> = emptyList()
     private var valueKey: String? = null
 
+    // The resolved fig + the sets it appears in, fetched once per open (Decision 16 — no minifig cache);
+    // resolveFailed drives the offline placeholder.
+    private var resolvedFig: Minifig? = null
+    private var appearsInSets: List<CatalogSet> = emptyList()
+    private var resolveFailed = false
+
     init {
-        viewModelScope.launch {
-            catalogRepo.refresh()
-            catalogRepo.refreshMinifigs()
-            rebuild()
-        }
         viewModelScope.launch { repository.getCollectionItems().collect { collectionItems = it; rebuild() } }
         viewModelScope.launch { repository.getWishlistItems().collect { wishlist = it; rebuild() } }
         viewModelScope.launch { repository.getSoldItems().collect { soldItems = it; rebuild() } }
     }
 
-    fun retry() {
-        viewModelScope.launch {
-            catalogRepo.refresh()
-            catalogRepo.refreshMinifigs()
-            rebuild()
-        }
-    }
+    fun retry() = resolveAndRebuild()
 
     /** The fig already reported as viewed for this page open (analytics `view_item`, once per open). */
     private var viewedFig: String? = null
@@ -72,14 +68,37 @@ class MinifigDetailViewModel(
         this.figNum = figNumber
         valueKey = null
         viewedFig = null
+        resolvedFig = null
         _uiState.update { it.copy(addTarget = null, toastMessage = null, showCopies = false) }
-        rebuild()
+        resolveAndRebuild()
+    }
+
+    /** Fetch the fig + the sets it appears in ONCE per open (DB queries), then run the overlay rebuild. */
+    private fun resolveAndRebuild() {
+        val fn = figNum ?: return
+        viewModelScope.launch {
+            val fig = try {
+                catalogRepo.fetchMinifig(fn)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("MinifigDetailVM").w(e, "fetchMinifig failed for %s", fn)
+                resolveFailed = true
+                null
+            }
+            resolvedFig = fig
+            appearsInSets = if (fig == null) emptyList() else {
+                resolveFailed = false
+                runCatching { catalogRepo.fetchSetsForMinifig(fn) }.getOrDefault(emptyList())
+            }
+            rebuild()
+        }
     }
 
     private fun rebuild() {
         val fn = figNum ?: return
-        val fig = catalogRepo.minifigByNum(fn)
-        // Report the view once the fig resolves (catalog may still be loading); once per page open.
+        val fig = resolvedFig
+        // Report the view once the fig resolves; once per page open.
         if (fig != null && viewedFig != fig.figNum) {
             viewedFig = fig.figNum
             Observability.logItemViewed(
@@ -90,7 +109,7 @@ class MinifigDetailViewModel(
             )
         }
         val owned = collectionItems.find { it.itemType == ItemType.MINIFIG && it.setNumber == fn }
-        val appearsIn = if (fig == null) emptyList() else catalogRepo.setsForMinifig(fn)
+        val appearsIn = if (fig == null) emptyList() else appearsInSets
         // Two-state availability from the fig's sets: Retail while any containing set is still
         // obtainable (available / exclusive / GWP / pending); else Retired (all retired, or
         // promo/magazine — never sold at retail). Null = unknown (no sets resolved / catalog not loaded).
@@ -100,8 +119,8 @@ class MinifigDetailViewModel(
             it.copy(
                 loaded = true,
                 fig = fig,
-                // No minifig catalog to resolve against (offline / not loaded) → placeholder.
-                offline = fig == null && catalogRepo.allMinifigs().isEmpty(),
+                // Couldn't resolve the fig from the DB (offline / error) → placeholder.
+                offline = fig == null && resolveFailed,
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 ownedItem = owned,
@@ -224,9 +243,10 @@ class MinifigDetailViewModel(
     fun onAddSaleForFig() = _uiState.update { it.copy(showCopies = false, editingCopy = null, addSalesMode = true, addTarget = it.fig?.let(::figAsCatalogSet)) }
     fun onEditCopy(copy: Copy) = _uiState.update { it.copy(showCopies = false, editingCopy = copy, addSalesMode = false, addTarget = it.fig?.let(::figAsCatalogSet)) }
 
-    fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.search(query)
+    // Add-sheet / quick-search suggestions — DB queries now (Decision 16); the composables debounce them.
+    suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
-    fun searchMinifigs(query: String): List<Minifig> = catalogRepo.searchMinifigs(query)
+    suspend fun searchMinifigs(query: String): List<Minifig> = catalogRepo.fetchMinifigsMatching(query)
 
     fun onToastShown() = _uiState.update { it.copy(toastMessage = null) }
 

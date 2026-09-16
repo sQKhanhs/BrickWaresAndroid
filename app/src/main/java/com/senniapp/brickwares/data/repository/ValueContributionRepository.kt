@@ -56,7 +56,6 @@ class ValueContributionRepository(
      * the previous cache intact.
      */
     suspend fun warm() {
-        catalog.refresh()
         val rows = runCatching {
             withTimeout(TIMEOUT_MS) { client.from(TABLE).select().decodeList<Row>() }
         }.getOrElse {
@@ -67,12 +66,19 @@ class ValueContributionRepository(
         val now = System.currentTimeMillis()
         val bySet = rows.filter { it.setId != null }.groupBy { it.setId!! }
         val byFig = rows.filter { it.figNum != null }.groupBy { it.figNum!! }
+        // Resolve the retail/status anchor for the contributed sets in ONE batch query (Decision 16 — the
+        // client no longer holds the whole catalog); an unresolved set falls back to the no-anchor band.
+        val catSets = runCatching { catalog.fetchSetsByIds(bySet.keys) }.getOrElse {
+            if (it is CancellationException) throw it
+            Timber.tag(TAG).w(it, "value warm catalog resolve failed")
+            emptyList()
+        }.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
         // Keep the raw points so [applyLocalPaid] can re-aggregate one key without another fetch. The
         // DB is now authoritative (it includes any just-synced contribution), replacing optimistic ones.
         setPoints = bySet.mapValues { (_, rs) -> rs.toPoints() }
         figPoints = byFig.mapValues { (_, rs) -> rs.toPoints() }
         cache = bySet.mapValues { (id, rs) ->
-            val set = catalog.setById(id)
+            val set = catSets[id]
             val tier = ValueAggregator.tierOf(set?.status ?: Availability.AVAILABLE, set?.retiredYear ?: 0, set?.retiredMonth ?: 0, now)
             ValueAggregator.aggregate(rs.toPoints(), set?.retailPrice, tier, now)
         }

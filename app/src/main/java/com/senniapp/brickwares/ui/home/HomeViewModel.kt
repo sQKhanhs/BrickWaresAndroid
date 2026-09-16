@@ -94,22 +94,24 @@ class HomeViewModel(
             }
             .launchIn(viewModelScope)
 
-        // "New LEGO Sets" preview — recompute when the catalog (re)loads (revision bumps on each
-        // successful load, so rev > 0 means a load has completed). refresh() is idempotent (the Search
-        // VM also warms it app-wide). catalogReady gates the whole page so the section appears with the
-        // rest of Home instead of popping in later.
-        catalogRepo.revision
-            .onEach { rev ->
-                val newSets = NewSets.select(catalogRepo.all()).take(NEW_SETS_PREVIEW)
-                _uiState.update { it.copy(newSets = newSets, catalogReady = it.catalogReady || rev > 0) }
+        // "New LEGO Sets" preview — a server-side query for the recent/upcoming candidates (Decision 16,
+        // no full catalog in memory), narrowed by NewSets. catalogReady gates the whole page so the
+        // section appears with the rest of Home instead of popping in later; a failure still releases
+        // the page (the card is simply absent) — Home is never held on a network error.
+        loadNewSets()
+    }
+
+    private fun loadNewSets() {
+        viewModelScope.launch {
+            try {
+                val newSets = NewSets.select(catalogRepo.newSetCandidates()).take(NEW_SETS_PREVIEW)
+                _uiState.update { it.copy(newSets = newSets, catalogReady = true) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(catalogReady = true) }
             }
-            .launchIn(viewModelScope)
-        // A failed catalog load still releases the page (the new-sets card is simply absent) — never
-        // hold Home on a network error.
-        catalogRepo.loadError
-            .onEach { failed -> if (failed) _uiState.update { it.copy(catalogReady = true) } }
-            .launchIn(viewModelScope)
-        viewModelScope.launch { catalogRepo.refresh() }
+        }
     }
 
     fun onShareClick() {

@@ -169,7 +169,7 @@ private fun SetDetailContent(
     onRecommendRemoveWishlist: (CatalogSet) -> Unit,
     onRecommendSeeDetail: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
-    onSearchCatalog: (String) -> List<CatalogSet>,
+    onSearchCatalog: suspend (String) -> List<CatalogSet>,
     onAddCollectionSubmit: (CollectionItem) -> Unit,
     onAddSaleSubmit: (CollectionItem, Long) -> Unit,
     onSeeCopies: () -> Unit,
