@@ -9,15 +9,18 @@ import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.senniapp.brickwares.data.local.AccountPrefs
 import com.senniapp.brickwares.data.local.AnalyticsPrefs
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.data.local.InstallId
 import com.senniapp.brickwares.data.local.LocalePrefs
+import com.senniapp.brickwares.data.local.RatePrefs
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.Observability
+import com.senniapp.brickwares.util.RatePrompt
 import com.senniapp.brickwares.util.RetirementAlerts
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -39,11 +42,15 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         RetirementAlertPrefs.init(this)
         AnalyticsPrefs.init(this)
         InstallId.init(this)
+        RatePrefs.init(this)
+        AccountPrefs.init(this)
         // Timber + (opt-in, Firebase-optional) Crashlytics/Analytics — before anything that might log.
         Observability.init(this)
         AppGraph.init(this)
         // Watches the wishlist for items that change to Retired and notifies (Settings → Notifications).
         RetirementAlerts.start(this)
+        // Asks engaged users (collection/sales + wishlist thresholds) for a Play Store rating.
+        RatePrompt.start()
         // Background image warm-up (Search theme icons) — needs the app context for Coil requests.
         ImagePrefetcher.init(this)
     }

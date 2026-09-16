@@ -7,6 +7,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
+import com.senniapp.brickwares.data.local.AccountPrefs
 import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
@@ -27,10 +28,13 @@ import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -38,6 +42,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.security.MessageDigest
 import java.util.UUID
+import timber.log.Timber
 
 /** Signed-in user, as the app cares about it (derived from the Supabase session). */
 data class AuthUser(
@@ -77,6 +82,9 @@ sealed interface SignInResult {
     /** Sign-up failed: an account with this email already exists. */
     data object EmailAlreadyRegistered : SignInResult
 
+    /** Set-password: the account already had this password (nothing to add — it just wasn't known locally). */
+    data object PasswordAlreadySet : SignInResult
+
     /** The auth request was rate-limited (too many attempts / emails). */
     data object TooManyRequests : SignInResult
 
@@ -93,24 +101,57 @@ sealed interface SignInResult {
  * off of — and where the account-switch guard (last_account_id, Arch Decision 10) will live.
  */
 object AuthRepository {
+    private const val TAG = "Auth"
 
     private val client get() = SupabaseClientProvider.client
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** Bumped when we learn (from the server, or a set-password result) that an account has a password. */
+    private val passwordRevision = MutableStateFlow(0)
+
+    /** User ids already asked `has_password()` this process (one round trip per account). */
+    private val passwordChecked = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /**
      * The live auth state, held as a hot [StateFlow] shared eagerly from app start. Being hot means it
      * always has a current [value], so UI collectors (e.g. `rememberIsLoggedIn`) start from the real
-     * state instead of flashing [Loading]/logged-out for a frame on every recomposition.
+     * state instead of flashing [Loading]/logged-out for a frame on every recomposition. Combined with
+     * [passwordRevision] so learning "this account has a password" re-derives [AuthUser.isGoogleOnly].
      */
-    val authState: StateFlow<AuthState> = client.auth.sessionStatus.map { status ->
+    val authState: StateFlow<AuthState> = combine(client.auth.sessionStatus, passwordRevision) { status, _ ->
         when (status) {
             is SessionStatus.Authenticated ->
-                status.session.user?.let { AuthState.SignedIn(it.toAuthUser()) } ?: AuthState.SignedOut
+                status.session.user?.let { user ->
+                    val mapped = user.toAuthUser()
+                    // A Google-only account may still have a password (set from another device, or
+                    // before a reinstall) — ask the server once; when it does, the flag flips and the
+                    // state re-emits with isGoogleOnly = false ("Set password" hides).
+                    if (mapped.isGoogleOnly) checkPasswordOnServer(mapped.id)
+                    AuthState.SignedIn(mapped)
+                } ?: AuthState.SignedOut
             is SessionStatus.NotAuthenticated -> AuthState.SignedOut
             is SessionStatus.RefreshFailure -> AuthState.SignedOut
             is SessionStatus.Initializing -> AuthState.Loading
         }
     }.stateIn(scope, SharingStarted.Eagerly, AuthState.Loading)
+
+    private fun checkPasswordOnServer(userId: String) {
+        if (!passwordChecked.add(userId)) return
+        scope.launch {
+            runCatching { client.postgrest.rpc("has_password").decodeAs<Boolean>() }
+                .onSuccess { has -> if (has) markPasswordSet(userId) }
+                .onFailure { e ->
+                    passwordChecked.remove(userId) // let a later emission retry (e.g. offline now)
+                    Timber.tag(TAG).w(e, "has_password check failed")
+                }
+        }
+    }
+
+    /** Records that [userId] has a password and re-emits [authState] so the UI reflects it. */
+    private fun markPasswordSet(userId: String) {
+        AccountPrefs.markPasswordSet(userId)
+        passwordRevision.value = passwordRevision.value + 1
+    }
 
     /**
      * Launches the native Google account picker and establishes a Supabase session from the returned
@@ -239,13 +280,25 @@ object AuthRepository {
      */
     suspend fun setPassword(newPassword: String): SignInResult = try {
         client.auth.updateUser { password = newPassword }
+        // Remember it for this account so the "Set password" button goes away (see AccountPrefs).
+        client.auth.currentUserOrNull()?.id?.let { markPasswordSet(it) }
         SignInResult.Success
     } catch (e: AuthRestException) {
         when (e.errorCode) {
             AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
-            else -> SignInResult.Error(e.errorDescription)
+            // "New password should be different from the old password" — i.e. the account ALREADY
+            // has one (set elsewhere / before a reinstall). Not a failure for our purposes: record it.
+            AuthErrorCode.SamePassword -> {
+                client.auth.currentUserOrNull()?.id?.let { markPasswordSet(it) }
+                SignInResult.PasswordAlreadySet
+            }
+            else -> {
+                Timber.tag(TAG).w(e, "setPassword rejected: %s", e.errorCode)
+                SignInResult.Error(e.errorDescription)
+            }
         }
     } catch (e: Exception) {
+        Timber.tag(TAG).w(e, "setPassword failed")
         SignInResult.Error(e.message ?: "Couldn't set the password")
     }
 
@@ -293,7 +346,9 @@ private fun io.github.jan.supabase.auth.user.UserInfo.toAuthUser(): AuthUser {
         email = email,
         displayName = name,
         avatarUrl = meta.string("avatar_url") ?: meta.string("picture"),
-        isGoogleOnly = "google" in providers && "email" !in providers,
+        // Google identity, no email identity, and no password set from this app (AccountPrefs) —
+        // the last check is what hides "Set password" after it has been used.
+        isGoogleOnly = "google" in providers && "email" !in providers && !AccountPrefs.hasPassword(id),
     )
 }
 

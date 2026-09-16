@@ -76,11 +76,11 @@
     <string name="toast_added_wishlist">Đã thêm %1$s vào danh sách mong muốn</string>
     <string name="toast_removed_collection">Đã xóa %1$s khỏi bộ sưu tập</string>
     <string name="toast_removed_wishlist">Đã xóa %1$s khỏi danh sách mong muốn</string>
-    <string name="toast_coming_soon">Tính năng này chưa có trong bản xem trước</string>
     <string name="toast_account_deleted">Đã xóa tài khoản và dữ liệu của bạn</string>
     <string name="toast_signed_out">Đã đăng xuất</string>
     <string name="toast_delete_account_failed">Không thể xóa tài khoản. Vui lòng thử lại.</string>
     <string name="toast_password_set">Đã đặt mật khẩu — giờ bạn có thể đăng nhập bằng email.</string>
+    <string name="toast_password_already_set">Tài khoản này đã có mật khẩu — bạn có thể đăng nhập bằng email.</string>
     <string name="toast_password_failed">Không thể đặt mật khẩu. Vui lòng thử lại.</string>
 
     <!-- Sign-in messages -->
@@ -203,6 +203,12 @@
     <string name="toast_feedback_failed">Không gửi được phản hồi. Vui lòng thử lại.</string>
     <string name="settings_feedback_no_internet_body">Gửi phản hồi cần có kết nối mạng. Hãy thử lại khi có mạng.</string>
     <string name="settings_rate">Đánh giá BrickWares</string>
+    <string name="settings_rate_subtitle">Thích ứng dụng? Một đánh giá nhanh giúp ích rất nhiều.</string>
+    <string name="rate_prompt_title">Bạn thích BrickWares chứ?</string>
+    <string name="rate_prompt_body">Bộ sưu tập của bạn đã khá đồ sộ rồi! Nếu có một phút, hãy đánh giá trên Google Play để giúp những người sưu tầm khác tìm thấy ứng dụng.</string>
+    <string name="action_rate_now">Đánh giá trên Google Play</string>
+    <string name="action_not_now">Để sau</string>
+    <string name="rate_prompt_never">Đừng hỏi lại</string>
     <string name="settings_choose_avatar">Chọn ảnh đại diện</string>
 
     <!-- ============ Collection / Sales ============ -->

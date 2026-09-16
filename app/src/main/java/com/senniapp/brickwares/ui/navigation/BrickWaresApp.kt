@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -43,8 +44,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.RateAppDialog
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.components.resolve
+import com.senniapp.brickwares.util.RatePrompt
 import com.senniapp.brickwares.util.RetirementAlerts
 import com.senniapp.brickwares.ui.login.LoginScreen
 import com.senniapp.brickwares.ui.collection.CollectionScreen
@@ -242,6 +245,18 @@ fun BrickWaresApp(
     // On-demand sign-in modal (its own window; shown over the tabs when a gated action is tapped).
     if (showLogin) {
         LoginScreen(onDismiss = { SignInController.dismiss() })
+    }
+
+    // "Enjoying BrickWares?" rating prompt — raised by RatePrompt once the collection/sales + wishlist
+    // thresholds are met; held back while the sign-in modal is up so two dialogs don't stack.
+    val showRatePrompt by RatePrompt.show.collectAsStateWithLifecycle()
+    if (showRatePrompt && !showLogin) {
+        val context = LocalContext.current
+        RateAppDialog(
+            onRate = { RatePrompt.onRateNow(context) },
+            onLater = RatePrompt::onLater,
+            onNever = RatePrompt::onNever,
+        )
     }
 }
 

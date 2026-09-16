@@ -100,11 +100,22 @@ class SettingsViewModel(
     /** Sets the password on the current (Google) account; closes the dialog and toasts the outcome. */
     fun onSetPassword(newPassword: String) {
         viewModelScope.launch {
-            val toast = when (authRepository.setPassword(newPassword)) {
+            val result = authRepository.setPassword(newPassword)
+            val toast = when (result) {
                 SignInResult.Success -> UiText.Res(R.string.toast_password_set)
+                SignInResult.PasswordAlreadySet -> UiText.Res(R.string.toast_password_already_set)
                 else -> UiText.Res(R.string.toast_password_failed)
             }
-            _uiState.update { it.copy(showSetPassword = false, toastMessage = toast) }
+            // Either way the account now provably has a password → no longer "Google-only"; the
+            // repository also re-emits the auth state, so this just avoids a one-frame lag.
+            val hasPassword = result == SignInResult.Success || result == SignInResult.PasswordAlreadySet
+            _uiState.update {
+                it.copy(
+                    showSetPassword = false,
+                    toastMessage = toast,
+                    isGoogleOnly = if (hasPassword) false else it.isGoogleOnly,
+                )
+            }
         }
     }
 
@@ -279,10 +290,6 @@ class SettingsViewModel(
                 }
             }
         }
-    }
-
-    fun onComingSoon(@Suppress("UNUSED_PARAMETER") action: String) {
-        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_coming_soon)) }
     }
 
     fun onToastShown() {

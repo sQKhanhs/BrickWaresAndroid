@@ -90,6 +90,15 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.ui.theme.ThemeMode
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.RatePrompt
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 // Public legal pages, hosted on the web (brickwares.app) rather than baked into the app, so the text
@@ -164,7 +173,6 @@ fun SettingsScreen(
         onSendFeedback = viewModel::onSendFeedback,
         onExport = viewModel::onExportCollection,
         onImport = viewModel::onImportCollection,
-        onComingSoon = viewModel::onComingSoon,
         onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
@@ -201,7 +209,6 @@ private fun SettingsContent(
     onSendFeedback: (message: String, contactEmail: String?) -> Unit,
     onExport: (Uri, ContentResolver) -> Unit,
     onImport: (Uri, ContentResolver) -> Unit,
-    onComingSoon: (String) -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -248,7 +255,8 @@ private fun SettingsContent(
             Text(stringResource(R.string.settings_title), style = BwType.wordmark, color = colors.text, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
 
             // ---- Account ----
-            Section(stringResource(R.string.settings_section_account)) {
+            // Signed out, the section is only the sign-in button — no grey card behind it.
+            Section(stringResource(R.string.settings_section_account), card = state.isLoggedIn) {
                 if (state.isLoggedIn) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -276,13 +284,28 @@ private fun SettingsContent(
                             Text(stringResource(R.string.settings_offline), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                         }
                     }
-                    // Google-only account → offer to add a password so email + password sign-in works too.
-                    if (state.isGoogleOnly && isOnline) {
-                        RowDivider()
-                        NavRow(stringResource(R.string.settings_set_password), onClick = onOpenSetPassword)
-                    }
                     RowDivider()
-                    NavRow(stringResource(R.string.settings_delete_account), onClick = onRequestDelete, danger = true)
+                    // Account actions as half-width buttons (no chevrons): "Set password" only for a
+                    // Google-only account (adds email + password sign-in) and needs network; "Delete
+                    // account" is the outlined-red destructive one. Side by side when both show.
+                    val showSetPassword = state.isGoogleOnly && isOnline
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = if (showSetPassword) Arrangement.spacedBy(8.dp) else Arrangement.Center,
+                    ) {
+                        if (showSetPassword) {
+                            OutlinePill(
+                                stringResource(R.string.settings_set_password),
+                                onClick = onOpenSetPassword,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        DangerOutlinePill(
+                            text = stringResource(R.string.settings_delete_account),
+                            onClick = onRequestDelete,
+                            modifier = if (showSetPassword) Modifier.weight(1f) else Modifier.fillMaxWidth(0.5f),
+                        )
+                    }
                 } else {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
@@ -439,7 +462,9 @@ private fun SettingsContent(
                     },
                 )
                 RowDivider()
-                NavRow(stringResource(R.string.settings_rate), onClick = { onComingSoon("Rate") })
+                // Stands out from the plain rows (yellow card + star) and wiggles now and then to
+                // catch the eye. Opens the Play listing; also settles the engagement prompt.
+                RateRow(onClick = { RatePrompt.openStore(context) })
             }
         }
 
@@ -880,7 +905,7 @@ private fun ImportLoadingDialog() {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(title: String, card: Boolean = true, content: @Composable () -> Unit) {
     val colors = BwTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -889,12 +914,14 @@ private fun Section(title: String, content: @Composable () -> Unit) {
             color = colors.textMuted,
             modifier = Modifier.padding(start = 4.dp),
         )
+        // [card] = false drops the grey surface (e.g. the signed-out Account section is just a button).
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(colors.surface)
-                .padding(horizontal = 14.dp),
+                .then(
+                    if (card) Modifier.clip(RoundedCornerShape(14.dp)).background(colors.surface).padding(horizontal = 14.dp)
+                    else Modifier,
+                ),
         ) {
             content()
         }
@@ -905,6 +932,90 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 private fun RowDivider() {
     HorizontalDivider(color = BwTheme.colors.border)
 }
+
+/**
+ * "Rate BrickWares" — deliberately unlike the other rows: a brand-yellow card with the star, a bold
+ * label + a one-line nudge, and a periodic **wiggle** (a short horizontal shake of the card with the
+ * star rocking in time, then a pause) so it catches the eye without being constantly in motion.
+ */
+@Composable
+private fun RateRow(onClick: () -> Unit) {
+    val colors = BwTheme.colors
+    // The wiggle is tied to VISIBILITY, not a clock that starts when Settings opens: the row sits at
+    // the bottom of a long scroll, so it bursts as soon as it scrolls into view, then repeats every
+    // WIGGLE_PERIOD_MS while it stays on screen, and rests while it's off screen.
+    val shake = remember { Animatable(0f) }
+    var visible by remember { mutableStateOf(false) }
+    val screenHeightPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    LaunchedEffect(visible) {
+        if (!visible) return@LaunchedEffect
+        delay(WIGGLE_FIRST_DELAY_MS)
+        while (true) {
+            shake.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = WIGGLE_BURST_MS
+                    0f at 0
+                    -1f at 80
+                    1f at 160
+                    -0.7f at 240
+                    0.7f at 320
+                    -0.3f at 400
+                    0f at WIGGLE_BURST_MS
+                },
+            )
+            delay(WIGGLE_PERIOD_MS - WIGGLE_BURST_MS)
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+            .onGloballyPositioned { coords ->
+                val b = coords.boundsInWindow()
+                visible = b.height > 0f && b.bottom > 0f && b.top < screenHeightPx
+            }
+            .graphicsLayer { translationX = shake.value * 4.dp.toPx() }
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.brandYellow)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .graphicsLayer { rotationZ = shake.value * 14f }
+                .clip(RoundedCornerShape(11.dp))
+                .background(colors.onYellow),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_bw_star),
+                contentDescription = null,
+                tint = colors.brandYellow,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.settings_rate),
+                style = BwType.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                color = colors.onYellow,
+            )
+            Text(
+                stringResource(R.string.settings_rate_subtitle),
+                style = BwType.body.copy(fontSize = 11.sp),
+                color = colors.onYellow.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+private const val WIGGLE_PERIOD_MS = 3000L
+private const val WIGGLE_BURST_MS = 480
+private const val WIGGLE_FIRST_DELAY_MS = 250L
 
 @Composable
 private fun NavRow(label: String, onClick: () -> Unit, danger: Boolean = false, enabled: Boolean = true) {
@@ -1052,6 +1163,21 @@ private fun OutlinePill(text: String, onClick: () -> Unit, modifier: Modifier = 
         contentAlignment = Alignment.Center,
     ) {
         Text(text, style = BwType.body.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp), color = colors.text)
+    }
+}
+
+@Composable
+private fun DangerOutlinePill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = BwTheme.colors
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .border(BorderStroke(1.dp, colors.error), RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = BwType.body.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp), color = colors.error)
     }
 }
 

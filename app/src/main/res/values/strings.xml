@@ -76,11 +76,11 @@
     <string name="toast_added_wishlist">%1$s added to Wishlist</string>
     <string name="toast_removed_collection">%1$s removed from Collection</string>
     <string name="toast_removed_wishlist">%1$s removed from Wishlist</string>
-    <string name="toast_coming_soon">This isn\'t available in this preview yet</string>
     <string name="toast_account_deleted">Your account and data have been deleted</string>
     <string name="toast_signed_out">Signed out</string>
     <string name="toast_delete_account_failed">Couldn\'t delete your account. Please try again.</string>
     <string name="toast_password_set">Password set — you can now sign in with your email too.</string>
+    <string name="toast_password_already_set">This account already has a password — you can sign in with your email.</string>
     <string name="toast_password_failed">Couldn\'t set the password. Please try again.</string>
 
     <!-- Sign-in messages -->
@@ -146,7 +146,7 @@
     <string name="settings_change_avatar_cd">Change avatar</string>
     <string name="settings_sign_out">Sign Out</string>
     <string name="settings_offline">Offline</string>
-    <string name="settings_set_password">Set a password</string>
+    <string name="settings_set_password">Set password</string>
     <string name="set_password_title">Set a password</string>
     <string name="set_password_body">Add a password so you can also sign in with your email — not just Google.</string>
     <string name="settings_delete_account">Delete account</string>
@@ -204,6 +204,12 @@
     <string name="toast_feedback_failed">Couldn’t send feedback. Please try again.</string>
     <string name="settings_feedback_no_internet_body">Sending feedback needs a connection. Try again when you’re back online.</string>
     <string name="settings_rate">Rate BrickWares</string>
+    <string name="settings_rate_subtitle">Enjoying the app? A quick rating helps a lot.</string>
+    <string name="rate_prompt_title">Enjoying BrickWares?</string>
+    <string name="rate_prompt_body">You’ve built quite a collection! If you have a moment, a rating on Google Play helps other collectors find the app.</string>
+    <string name="action_rate_now">Rate on Google Play</string>
+    <string name="action_not_now">Not now</string>
+    <string name="rate_prompt_never">Don’t ask again</string>
     <string name="settings_choose_avatar">Choose Avatar</string>
 
     <!-- ============ Collection / Sales ============ -->
