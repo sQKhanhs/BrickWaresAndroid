@@ -223,7 +223,13 @@ fun BrickWaresApp(
                         onOpenMinifigDetail = openFig,
                     )
                     BwTab.Wishlist -> WishlistScreen(
-                        onNavigateToSearch = { selectedTab = BwTab.Search },
+                        // Match the Search nav tap: reset to the browse home, don't drop the user back
+                        // into the Search tab's last theme/results view.
+                        onNavigateToSearch = {
+                            detailStack.clear()
+                            searchViewModel.onEnterSearchTab()
+                            selectedTab = BwTab.Search
+                        },
                         onOpenSetDetail = openSet,
                         onOpenMinifigDetail = openFig,
                     )
