@@ -146,7 +146,7 @@ private fun HomeContent(
                     // not BwTheme.currency, so a fresh switch never pairs an old amount with a new symbol.
                     currency = state.currency,
                     showGif = showHeroGif,
-                    showNoValue = shown.setCount <= HeroAssets.NO_VALUE_MAX_SETS,
+                    showNoValue = !HeroAssets.showsDrop(shown.setCount, shown.minifigCount),
                     onGifFinished = onGifFinished,
                 )
                 Spacer(Modifier.height(14.dp))
@@ -228,12 +228,20 @@ private object HeroAssets {
     /** Collections above this many sets show the larger celebratory drop. */
     const val SET_THRESHOLD = 100
 
-    /**
-     * At or below this many sets the hero shows the static "no value" brick ([NO_VALUE]) instead of
-     * the celebratory drop — the collection is too small to have meaningful value yet. Once the user
-     * owns more than this, the drop plays.
-     */
-    const val NO_VALUE_MAX_SETS = 3
+    // The hero shows the celebratory Lego-drop only once the collection is substantial enough to
+    // feel earned; below that it's the static "no value" brick. A user qualifies for the drop with
+    // more than 5 sets, OR more than 15 minifigs, OR more than 3 sets AND more than 10 minifigs — so
+    // both set-heavy and minifig-heavy collectors trigger it (2026-09-16).
+    private const val DROP_SETS_ONLY = 5
+    private const val DROP_MINIFIGS_ONLY = 15
+    private const val DROP_COMBO_SETS = 3
+    private const val DROP_COMBO_MINIFIGS = 10
+
+    /** Whether the hero plays the celebratory drop (vs the static "no value" brick) for this collection. */
+    fun showsDrop(setCount: Int, minifigCount: Int): Boolean =
+        setCount > DROP_SETS_ONLY ||
+            minifigCount > DROP_MINIFIGS_ONLY ||
+            (setCount > DROP_COMBO_SETS && minifigCount > DROP_COMBO_MINIFIGS)
 
     /** Static single-brick art shown while the collection is tiny (see [NO_VALUE_MAX_SETS]). */
     const val NO_VALUE = "file:///android_asset/no_value.png"
