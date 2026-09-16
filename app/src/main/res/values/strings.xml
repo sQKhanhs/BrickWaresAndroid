@@ -189,11 +189,14 @@
     <string name="settings_data_attribution">Data attribution</string>
     <string name="settings_attribution_body">Catalog data from Brickset and Rebrickable. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</string>
     <string name="settings_version">Version · v0.1.0 (preview)</string>
-    <string name="settings_changelog_body">Preview build on mock data: Home, Collection, Wishlist, Search, Set Detail and Settings. Backend sync coming soon.</string>
     <string name="settings_send_feedback">Send feedback</string>
     <string name="feedback_title">Send feedback</string>
     <string name="feedback_body">Tell us what’s wrong, what’s missing, or what you love. We read every message.</string>
     <string name="feedback_placeholder">Your feedback…</string>
+    <string name="feedback_category_label">Category</string>
+    <string name="feedback_category_bug">Bug report</string>
+    <string name="feedback_category_feature">New feature request</string>
+    <string name="feedback_category_other">Other</string>
     <string name="feedback_email_placeholder">Email for a reply (optional)</string>
     <string name="feedback_counter">%1$d / %2$d</string>
     <string name="feedback_err_short">Please write at least %1$d characters.</string>

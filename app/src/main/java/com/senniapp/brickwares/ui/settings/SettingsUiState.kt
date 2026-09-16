@@ -45,7 +45,6 @@ data class SettingsUiState(
     val showNotificationsBlocked: Boolean = false,
     /** "Open settings" was tapped from that dialog — finish the enable when the app comes back with notifications allowed. */
     val awaitingNotificationSettings: Boolean = false,
-    val showChangelog: Boolean = false,
     /** Whether the "Send feedback" dialog is open. */
     val showFeedback: Boolean = false,
     /** A feedback submission is in flight (the dialog's Send shows a spinner and ignores taps). */

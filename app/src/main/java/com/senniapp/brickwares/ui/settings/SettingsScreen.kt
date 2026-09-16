@@ -1,6 +1,7 @@
 package com.senniapp.brickwares.ui.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +83,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.LocalePrefs
+import com.senniapp.brickwares.data.repository.FeedbackCategory
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.rememberIsOnline
@@ -167,7 +169,6 @@ fun SettingsScreen(
         onOpenNotificationSettings = viewModel::onOpenNotificationSettings,
         onResumedFromNotificationSettings = viewModel::onResumedFromNotificationSettings,
         onToggleAnalytics = viewModel::onToggleAnalytics,
-        onToggleChangelog = viewModel::onToggleChangelog,
         onOpenFeedback = viewModel::onOpenFeedback,
         onCloseFeedback = viewModel::onCloseFeedback,
         onSendFeedback = viewModel::onSendFeedback,
@@ -203,10 +204,9 @@ private fun SettingsContent(
     onOpenNotificationSettings: () -> Unit,
     onResumedFromNotificationSettings: (Boolean) -> Unit,
     onToggleAnalytics: () -> Unit,
-    onToggleChangelog: () -> Unit,
     onOpenFeedback: () -> Unit,
     onCloseFeedback: () -> Unit,
-    onSendFeedback: (message: String, contactEmail: String?) -> Unit,
+    onSendFeedback: (message: String, contactEmail: String?, category: FeedbackCategory) -> Unit,
     onExport: (Uri, ContentResolver) -> Unit,
     onImport: (Uri, ContentResolver) -> Unit,
     onToastShown: () -> Unit,
@@ -253,6 +253,9 @@ private fun SettingsContent(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(stringResource(R.string.settings_title), style = BwType.wordmark, color = colors.text, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
+
+            // ---- App logo + version (centered identity header) ----
+            VersionHeader()
 
             // ---- Account ----
             // Signed out, the section is only the sign-in button — no grey card behind it.
@@ -443,16 +446,6 @@ private fun SettingsContent(
                     )
                 }
                 RowDivider()
-                NavRow(stringResource(R.string.settings_version), onClick = onToggleChangelog)
-                if (state.showChangelog) {
-                    Text(
-                        stringResource(R.string.settings_changelog_body),
-                        style = BwType.body.copy(fontSize = 11.sp),
-                        color = colors.textMuted2,
-                        modifier = Modifier.padding(bottom = 12.dp),
-                    )
-                }
-                RowDivider()
                 // Feedback is sent live (RPC), so it needs a connection — explain instead of failing.
                 NavRow(
                     stringResource(R.string.settings_send_feedback),
@@ -623,12 +616,14 @@ private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit
 private fun FeedbackDialog(
     askEmail: Boolean,
     sending: Boolean,
-    onSend: (message: String, contactEmail: String?) -> Unit,
+    onSend: (message: String, contactEmail: String?, category: FeedbackCategory) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = BwTheme.colors
     var message by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(FeedbackCategory.BUG) }
+    var categoryOpen by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<Int?>(null) }
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = colors.brandYellow,
@@ -645,6 +640,37 @@ private fun FeedbackDialog(
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.feedback_body), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                 Spacer(Modifier.height(16.dp))
+                // Category selector — saved to the DB so feedback can be sorted (bug / feature / other).
+                Text(
+                    stringResource(R.string.feedback_category_label),
+                    style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                    color = colors.textMuted,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(10.dp))
+                            .clickable(enabled = !sending) { categoryOpen = true }
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(category.labelRes), style = BwType.body.copy(fontSize = 13.sp), color = colors.text)
+                        Text("▾", style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
+                    }
+                    DropdownMenu(expanded = categoryOpen, onDismissRequest = { categoryOpen = false }) {
+                        FeedbackCategory.entries.forEach { c ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(c.labelRes), color = colors.text) },
+                                onClick = { category = c; categoryOpen = false },
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = message,
                     onValueChange = { if (it.length <= FEEDBACK_MAX) { message = it; error = null } },
@@ -700,7 +726,7 @@ private fun FeedbackDialog(
                                     trimmed.length < FEEDBACK_MIN -> error = R.string.feedback_err_short
                                     mail != null && !android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches() ->
                                         error = R.string.feedback_err_email
-                                    else -> onSend(trimmed, if (askEmail) mail else null)
+                                    else -> onSend(trimmed, if (askEmail) mail else null, category)
                                 }
                             },
                         )
@@ -901,6 +927,35 @@ private fun ImportLoadingDialog() {
                 )
             }
         }
+    }
+}
+
+/**
+ * Centered identity header at the top of Settings: the app logo, with the version number beneath it.
+ * Both are centered. Tapping the version toggles the changelog (its old home was a row in About), which
+ * expands, also centered, below.
+ */
+@Composable
+private fun VersionHeader() {
+    val colors = BwTheme.colors
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.brickwares_launcher),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(16.dp)),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.settings_version),
+            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            color = colors.textMuted,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(6.dp),
+        )
     }
 }
 

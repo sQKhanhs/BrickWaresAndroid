@@ -13,6 +13,7 @@ import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.CsvTooNewException
+import com.senniapp.brickwares.data.repository.FeedbackCategory
 import com.senniapp.brickwares.data.repository.FeedbackRepository
 import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
@@ -201,9 +202,6 @@ class SettingsViewModel(
         AnalyticsPrefs.consent = !AnalyticsPrefs.consent
     }
 
-    fun onToggleChangelog() {
-        _uiState.update { it.copy(showChangelog = !it.showChangelog) }
-    }
 
     // ---- Export / import collection (CSV) ----
 
@@ -264,11 +262,11 @@ class SettingsViewModel(
      * or a server-side rejection (rate-limited / invalid — nothing to retry as typed); keeps it open
      * with the text intact on a network failure so the user can try again.
      */
-    fun onSendFeedback(message: String, contactEmail: String?) {
+    fun onSendFeedback(message: String, contactEmail: String?, category: FeedbackCategory) {
         if (_uiState.value.sendingFeedback) return
         _uiState.update { it.copy(sendingFeedback = true) }
         viewModelScope.launch {
-            val result = feedbackRepository.send(message, contactEmail)
+            val result = feedbackRepository.send(message, contactEmail, category)
             _uiState.update {
                 when (result) {
                     FeedbackRepository.Result.SENT -> it.copy(

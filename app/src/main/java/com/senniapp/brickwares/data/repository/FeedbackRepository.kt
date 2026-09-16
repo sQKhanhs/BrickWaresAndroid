@@ -1,7 +1,9 @@
 package com.senniapp.brickwares.data.repository
 
 import android.os.Build
+import androidx.annotation.StringRes
 import com.senniapp.brickwares.BuildConfig
+import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.InstallId
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.SupabaseClient
@@ -21,12 +23,19 @@ import java.util.Locale
  * [InstallId] as their rate-limit key. Device context (app/OS version, model, locale) rides along so a
  * report like "it's slow" is actionable without asking.
  */
+/** The category a user tags their feedback with (stored so feedback can be sorted). [wire] matches the DB check. */
+enum class FeedbackCategory(val wire: String, @StringRes val labelRes: Int) {
+    BUG("bug", R.string.feedback_category_bug),
+    FEATURE("feature", R.string.feedback_category_feature),
+    OTHER("other", R.string.feedback_category_other),
+}
+
 class FeedbackRepository(
     private val client: SupabaseClient = SupabaseClientProvider.client,
 ) {
     enum class Result { SENT, RATE_LIMITED, INVALID, FAILED }
 
-    suspend fun send(message: String, contactEmail: String?): Result {
+    suspend fun send(message: String, contactEmail: String?, category: FeedbackCategory): Result {
         val params = buildJsonObject {
             put("p_message", message.trim())
             put("p_contact_email", contactEmail?.trim()?.ifBlank { null })
@@ -35,6 +44,7 @@ class FeedbackRepository(
             put("p_device", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
             put("p_locale", Locale.getDefault().toLanguageTag())
             put("p_install_id", InstallId.value)
+            put("p_category", category.wire)
         }
         return try {
             withTimeout(TIMEOUT_MS) { client.postgrest.rpc("submit_feedback", params) }

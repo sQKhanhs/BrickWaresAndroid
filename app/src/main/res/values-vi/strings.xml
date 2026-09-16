@@ -188,11 +188,14 @@
     <string name="settings_data_attribution">Nguồn dữ liệu</string>
     <string name="settings_attribution_body">Dữ liệu danh mục từ Brickset và Rebrickable. LEGO® là thương hiệu của Tập đoàn LEGO, đơn vị không tài trợ hay xác nhận ứng dụng này.</string>
     <string name="settings_version">Phiên bản · v0.1.0 (bản xem trước)</string>
-    <string name="settings_changelog_body">Bản xem trước dùng dữ liệu mẫu: Trang chủ, Bộ sưu tập, Danh sách mong muốn, Tìm kiếm, Chi tiết bộ và Cài đặt. Đồng bộ máy chủ sắp ra mắt.</string>
     <string name="settings_send_feedback">Gửi phản hồi</string>
     <string name="feedback_title">Gửi phản hồi</string>
     <string name="feedback_body">Hãy cho chúng tôi biết điều gì chưa ổn, còn thiếu, hay bạn thích gì. Chúng tôi đọc mọi tin nhắn.</string>
     <string name="feedback_placeholder">Phản hồi của bạn…</string>
+    <string name="feedback_category_label">Loại phản hồi</string>
+    <string name="feedback_category_bug">Báo lỗi</string>
+    <string name="feedback_category_feature">Yêu cầu tính năng mới</string>
+    <string name="feedback_category_other">Khác</string>
     <string name="feedback_email_placeholder">Email để nhận trả lời (không bắt buộc)</string>
     <string name="feedback_counter">%1$d / %2$d</string>
     <string name="feedback_err_short">Vui lòng viết ít nhất %1$d ký tự.</string>
