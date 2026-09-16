@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Auto Backup rules for API < 31 (API 31+ uses data_extraction_rules.xml — keep the two in sync).
+
+   WHITELIST: once any <include> is present, ONLY the listed files are backed up. That is the point:
+   everything below is a harmless user preference, and everything NOT listed stays on the device —
+     * the Supabase session (access + refresh token) in the default prefs file
+       "<applicationId>_preferences.xml" (supabase-kt's SettingsSessionManager; the name varies per
+       flavor, which is why this is a whitelist and not an exclude);
+     * the Room database "brickwares.db" (+ -wal/-shm) — rebuilt from the server by SyncCoordinator
+       after sign-in, so a stale or foreign-account copy must never be restored;
+     * the sync cursor DataStore (files/datastore/sync_state.preferences_pb) — MUST go with the DB:
+       restoring the cursor without the DB would make the app skip every row it "already pulled";
+     * brickwares_install.xml — the feedback rate-limit install id should be fresh per device;
+     * fx_rates.xml (FX cache), Firebase / Crashlytics / WorkManager state.
+   See https://developer.android.com/guide/topics/data/autobackup#IncludingFiles
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <include domain="sharedpref" path="brickwares_currency.xml" />
+    <include domain="sharedpref" path="brickwares_locale.xml" />
+    <include domain="sharedpref" path="brickwares_analytics.xml" />
+    <include domain="sharedpref" path="brickwares_rate.xml" />
+    <include domain="sharedpref" path="brickwares_retirement_alerts.xml" />
+    <include domain="sharedpref" path="brickwares_theme_favorites.xml" />
+    <include domain="sharedpref" path="brickwares_account.xml" />
 </full-backup-content>
