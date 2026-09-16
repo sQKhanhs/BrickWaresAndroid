@@ -17,3 +17,10 @@ local.properties
 # Without it the build skips the Firebase plugins and the app runs Firebase-free (see app/build.gradle.kts).
 /app/google-services.json
 /app/src/*/google-services.json
+
+# Release signing: the upload keystore + its properties never enter git (H2/H3 of the 2026-09-16 audit).
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties

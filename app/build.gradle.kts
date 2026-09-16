@@ -31,6 +31,37 @@ val prodSupabaseAnonKey: String =
         ?: System.getenv("BRICKWARES_PROD_ANON_KEY")?.takeIf { it.isNotBlank() }
         ?: ""
 
+// Release signing (the Play UPLOAD key — Play App Signing re-signs with the real app key). All four
+// values come from local.properties (gitignored) or same-named environment variables, never source:
+//   BRICKWARES_KEYSTORE_FILE=C:/Users/<you>/keys/brickwares-upload.jks   (absolute, or relative to app/)
+//   BRICKWARES_KEYSTORE_PASSWORD=…
+//   BRICKWARES_KEY_ALIAS=upload
+//   BRICKWARES_KEY_PASSWORD=…
+// Create it once with keytool (choose your own passwords; back the .jks up OUTSIDE the repo — losing it
+// means a new upload key via Play Console support):
+//   keytool -genkeypair -v -keystore brickwares-upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
+// When these are NOT set, prodRelease stays UNSIGNED (assembles, can't be installed) — never signed with
+// the debug key by accident — while devRelease falls back to the debug key so an R8 build can be Run.
+fun secret(name: String): String? =
+    localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(name)?.takeIf { it.isNotBlank() }
+val releaseKeystoreFile: String? = secret("BRICKWARES_KEYSTORE_FILE")
+val hasReleaseKeystore = releaseKeystoreFile != null &&
+    secret("BRICKWARES_KEYSTORE_PASSWORD") != null &&
+    secret("BRICKWARES_KEY_ALIAS") != null &&
+    secret("BRICKWARES_KEY_PASSWORD") != null
+// Fail at configuration time with the actual cause instead of AGP's late "Keystore file … not found".
+// The classic mistake: backslashes in local.properties are ESCAPES (`C:\Users` reads as `C:Users`, a
+// relative path under app/). Use forward slashes: C:/Users/<you>/…/brickwares-upload.jks
+if (hasReleaseKeystore && !file(releaseKeystoreFile!!).isFile) {
+    throw GradleException(
+        "BRICKWARES_KEYSTORE_FILE points to '${file(releaseKeystoreFile)}' which does not exist. " +
+            "Use an absolute path with FORWARD slashes in local.properties (backslashes are escape " +
+            "characters there), e.g. C:/Users/<you>/…/brickwares-upload.jks, and make sure the file " +
+            "name ends in .jks.",
+    )
+}
+
 // Dev (local Supabase) URL. Defaults to 10.0.2.2 — the Android EMULATOR's alias for the host's
 // localhost. To test on a PHYSICAL device on the same Wi-Fi, override with
 // BRICKWARES_DEV_SUPABASE_URL=http://<your-PC-LAN-IP>:54321 in local.properties (or env); the phone
@@ -68,8 +99,26 @@ android {
         )
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile!!)
+                storePassword = secret("BRICKWARES_KEYSTORE_PASSWORD")
+                keyAlias = secret("BRICKWARES_KEY_ALIAS")
+                keyPassword = secret("BRICKWARES_KEY_PASSWORD")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Signing: the upload key when configured (see the BRICKWARES_KEYSTORE_* block above). A build
+            // type's signingConfig wins over a flavor's, so with the keystore present BOTH release variants
+            // use it; without it this stays null and the dev flavor's debug-key fallback (below) applies —
+            // prodRelease is then unsigned on purpose.
+            signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release") else null
             // R8: shrink + optimize + obfuscate code, and shrink resources. Project keep rules live in
             // src/main/keepRules/*.keep (AGP 9 picks that source set up automatically); the default
             // Android rules come from proguard-android-optimize.txt. Both release variants get it —
@@ -93,6 +142,10 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             resValue("string", "app_name", "BrickWares Dev")
+            // devRelease is the R8 smoke test: sign it with the debug key so Android Studio can Run it
+            // without an upload keystore on the machine. Only takes effect when the release build type has
+            // no signingConfig of its own (no keystore configured) — see buildTypes.release.
+            signingConfig = signingConfigs.getByName("debug")
             // Local Supabase (CLI + Docker). Defaults to the emulator's host alias (10.0.2.2); set
             // BRICKWARES_DEV_SUPABASE_URL in local.properties to the host LAN IP for a physical device.
             buildConfigField("String", "SUPABASE_URL", "\"$devSupabaseUrl\"")
