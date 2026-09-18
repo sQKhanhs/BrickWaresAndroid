@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
@@ -50,6 +51,13 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
+    /**
+     * Turnstile gate for the captcha-protected email calls (sign-up, password sign-in, resend). The
+     * screen renders [TurnstileCaptchaHost] for it; [acquireCaptcha] awaits the token. Disabled when the
+     * flavor ships no site key (dev by default).
+     */
+    val captcha = CaptchaGate(BuildConfig.TURNSTILE_SITE_KEY)
+
     init {
         // When sign-in completes through ANY path (email, OTP verify, Google), clear the form so a
         // later reopen — e.g. after signing out in the same session — starts fresh instead of
@@ -94,10 +102,12 @@ class LoginViewModel(
 
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
+            // Bot check first (invisible for normal users); a failed/dismissed check never reaches Auth.
+            val token = acquireCaptcha() ?: return@launch
             val result = if (s.mode == LoginMode.SIGN_IN) {
-                authRepository.signInWithEmail(s.email, s.password)
+                authRepository.signInWithEmail(s.email, s.password, captchaToken = token.value)
             } else {
-                authRepository.signUpWithEmail(s.email, s.password, languageTag)
+                authRepository.signUpWithEmail(s.email, s.password, languageTag, captchaToken = token.value)
             }
             _uiState.update {
                 when (result) {
@@ -120,6 +130,7 @@ class LoginViewModel(
                         pendingPassword = "", info = UiText.Res(R.string.login_info_needs_confirm),
                     )
                     SignInResult.InvalidCredentials -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_invalid_credentials))
+                    SignInResult.CaptchaFailed -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_captcha))
                     SignInResult.EmailAlreadyRegistered -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_email_exists))
                     SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
                     is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
@@ -167,13 +178,19 @@ class LoginViewModel(
         if (System.currentTimeMillis() < s.resendCooldownUntil) return // still cooling down
         _uiState.update { it.copy(signingIn = true, error = null, info = null) }
         viewModelScope.launch {
-            val result = authRepository.resendSignUpCode(s.pendingEmail)
+            val token = acquireCaptcha() ?: return@launch
+            val result = authRepository.resendSignUpCode(s.pendingEmail, captchaToken = token.value)
             _uiState.update {
                 when (result) {
                     SignInResult.Success -> it.copy(
                         signingIn = false, info = UiText.Res(R.string.login_code_resent),
                         resendCooldownUntil = System.currentTimeMillis() + RESEND_COOLDOWN_MS,
+                        // The new email supersedes the old code — empty the boxes so the stale digits
+                        // aren't submitted by mistake. Only on success: after a failed resend (rate
+                        // limit, captcha) the previous code is still the valid one, so keep it.
+                        code = "",
                     )
+                    SignInResult.CaptchaFailed -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_captcha))
                     SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
                     is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
                     else -> it.copy(signingIn = false)
@@ -181,6 +198,25 @@ class LoginViewModel(
             }
         }
     }
+
+    /**
+     * Runs the Turnstile gate and returns the token holder to send — `value` is null when the gate is
+     * disabled (no site key → no token, the server isn't enforcing). Returns null after showing the
+     * captcha error (and clearing the spinner) when the check failed or the user dismissed it, so
+     * callers just `?: return`.
+     */
+    private suspend fun acquireCaptcha(): CaptchaToken? = when (val outcome = captcha.acquire()) {
+        CaptchaOutcome.Disabled -> CaptchaToken(null)
+        is CaptchaOutcome.Token -> CaptchaToken(outcome.value)
+        CaptchaOutcome.Failed -> {
+            _uiState.update { it.copy(signingIn = false, error = UiText.Res(R.string.login_err_captcha)) }
+            null
+        }
+    }
+
+    /** Wrapper so "gate disabled" (send nothing) and "gate failed" (abort) stay distinct at call sites. */
+    @JvmInline
+    private value class CaptchaToken(val value: String?)
 
     /** Leaves the code step, returning to the email/password form. */
     fun onBackFromCode() = _uiState.update {

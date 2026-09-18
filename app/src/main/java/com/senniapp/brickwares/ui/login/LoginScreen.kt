@@ -358,6 +358,9 @@ fun LoginScreen(
                     color = colors.textMuted,
                     modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).clickable(onClick = dismiss),
                 )
+                // Turnstile bot check for the email calls — invisible unless Cloudflare asks for a
+                // checkbox, then it overlays the card (see TurnstileCaptcha.kt). Last child → on top.
+                TurnstileCaptchaHost(gate = viewModel.captcha, languageTag = appLang, modifier = Modifier.matchParentSize())
             }
         }
     }

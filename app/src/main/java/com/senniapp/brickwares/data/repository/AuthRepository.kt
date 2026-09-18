@@ -79,6 +79,10 @@ sealed interface SignInResult {
     /** Sign-in failed: wrong email or password. */
     data object InvalidCredentials : SignInResult
 
+    /** GoTrue rejected (or required and didn't get) the Turnstile `captcha_token` — expired, reused, or
+     *  the app has no site key while the project enforces captcha. Ask the user to try again. */
+    data object CaptchaFailed : SignInResult
+
     /** Sign-up failed: an account with this email already exists. */
     data object EmailAlreadyRegistered : SignInResult
 
@@ -102,6 +106,23 @@ sealed interface SignInResult {
  */
 object AuthRepository {
     private const val TAG = "Auth"
+
+    /**
+     * An Auth error the UI has no specific message for. Log the server's error CODE + HTTP status so a
+     * "Something went wrong" is diagnosable from Logcat/Crashlytics (2026-09-19: a sign-up failed with
+     * nothing in the log). The description is debug-only — GoTrue echoes the email address in some.
+     */
+    private fun rejected(call: String, e: AuthRestException): SignInResult.Error {
+        Timber.tag(TAG).w("%s rejected: code=%s status=%d", call, e.error, e.statusCode)
+        if (BuildConfig.DEBUG) Timber.tag(TAG).d("%s detail: %s", call, e.errorDescription)
+        return SignInResult.Error(e.errorDescription)
+    }
+
+    /** Non-Auth failure (network, timeout, parsing) on an auth call — logged with its stack. */
+    private fun failed(call: String, e: Exception, fallback: String): SignInResult.Error {
+        Timber.tag(TAG).w(e, "%s failed", call)
+        return SignInResult.Error(e.message ?: fallback)
+    }
 
     private val client get() = SupabaseClientProvider.client
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -202,11 +223,16 @@ object AuthRepository {
         }
     }
 
-    /** Email + password sign-in (for users without a Google account). */
-    suspend fun signInWithEmail(email: String, password: String): SignInResult = try {
+    /**
+     * Email + password sign-in (for users without a Google account). [captchaToken] is the Turnstile
+     * token from `CaptchaGate` (null when the gate is disabled) — GoTrue requires one on the password
+     * grant once captcha is enabled on the project (handoff §0ar).
+     */
+    suspend fun signInWithEmail(email: String, password: String, captchaToken: String? = null): SignInResult = try {
         client.auth.signInWith(Email) {
             this.email = email.trim()
             this.password = password
+            this.captchaToken = captchaToken
         }
         SignInResult.Success
     } catch (e: AuthRestException) {
@@ -214,11 +240,12 @@ object AuthRepository {
             // An unconfirmed account → route the UI back to the code step, not a dead-end error.
             AuthErrorCode.EmailNotConfirmed -> SignInResult.EmailNotConfirmed
             AuthErrorCode.InvalidCredentials -> SignInResult.InvalidCredentials
+            AuthErrorCode.CaptchaFailed -> SignInResult.CaptchaFailed
             AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
-            else -> SignInResult.Error(e.errorDescription)
+            else -> rejected("signInWithEmail", e)
         }
     } catch (e: Exception) {
-        SignInResult.Error(e.message ?: "Couldn't sign in")
+        failed("signInWithEmail", e, "Couldn't sign in")
     }
 
     /**
@@ -228,10 +255,16 @@ object AuthRepository {
      * session is created and this returns [SignInResult.Success]; if email confirmation is required
      * (prod default), no session yet → [SignInResult.EmailConfirmationRequired].
      */
-    suspend fun signUpWithEmail(email: String, password: String, languageTag: String): SignInResult = try {
+    suspend fun signUpWithEmail(
+        email: String,
+        password: String,
+        languageTag: String,
+        captchaToken: String? = null,
+    ): SignInResult = try {
         client.auth.signUpWith(Email) {
             this.email = email.trim()
             this.password = password
+            this.captchaToken = captchaToken
             data = buildJsonObject { put("lang", languageTag) }
         }
         if (client.auth.currentUserOrNull() != null) SignInResult.Success
@@ -239,11 +272,12 @@ object AuthRepository {
     } catch (e: AuthRestException) {
         when (e.errorCode) {
             AuthErrorCode.EmailExists, AuthErrorCode.UserAlreadyExists -> SignInResult.EmailAlreadyRegistered
+            AuthErrorCode.CaptchaFailed -> SignInResult.CaptchaFailed
             AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
-            else -> SignInResult.Error(e.errorDescription)
+            else -> rejected("signUpWithEmail", e)
         }
     } catch (e: Exception) {
-        SignInResult.Error(e.message ?: "Couldn't create account")
+        failed("signUpWithEmail", e, "Couldn't create account")
     }
 
     /**
@@ -260,17 +294,19 @@ object AuthRepository {
         SignInResult.Error(e.message ?: "Couldn't verify the code")
     }
 
-    /** Re-sends the sign-up confirmation code to [email] (e.g. the first one expired or was missed). */
-    suspend fun resendSignUpCode(email: String): SignInResult = try {
-        client.auth.resendEmail(OtpType.Email.SIGNUP, email.trim())
+    /** Re-sends the sign-up confirmation code to [email] (e.g. the first one expired or was missed).
+     *  `/resend` is captcha-protected too, so it takes the same [captchaToken] as sign-up. */
+    suspend fun resendSignUpCode(email: String, captchaToken: String? = null): SignInResult = try {
+        client.auth.resendEmail(OtpType.Email.SIGNUP, email.trim(), captchaToken = captchaToken)
         SignInResult.Success
     } catch (e: AuthRestException) {
         when (e.errorCode) {
+            AuthErrorCode.CaptchaFailed -> SignInResult.CaptchaFailed
             AuthErrorCode.OverEmailSendRateLimit, AuthErrorCode.OverRequestRateLimit -> SignInResult.TooManyRequests
-            else -> SignInResult.Error(e.errorDescription)
+            else -> rejected("resendSignUpCode", e)
         }
     } catch (e: Exception) {
-        SignInResult.Error(e.message ?: "Couldn't resend the code")
+        failed("resendSignUpCode", e, "Couldn't resend the code")
     }
 
     /**

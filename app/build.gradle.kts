@@ -62,6 +62,15 @@ if (hasReleaseKeystore && !file(releaseKeystoreFile!!).isFile) {
     )
 }
 
+// Cloudflare Turnstile SITE key (PUBLIC — it ships in the APK; the matching secret lives only in the
+// Supabase dashboard / supabase/.env). Prod = the brickwares.app "BrickWares" widget, Managed mode.
+// Dev = blank → the in-app gate is skipped (local captcha is off and the emulator can't reach
+// challenges.cloudflare.com). Override for EITHER flavor with BRICKWARES_TURNSTILE_SITE_KEY in
+// local.properties/env — e.g. Cloudflare's test keys: 1x00000000000000000000AA always passes invisibly,
+// 3x00000000000000000000FF always forces the checkbox, 2x00000000000000000000AB always fails.
+val turnstileSiteKeyOverride: String? = secret("BRICKWARES_TURNSTILE_SITE_KEY")
+val prodTurnstileSiteKey = "0x4AAAAAAE4T5dPOi1S4zDrZ"
+
 // Dev (local Supabase) URL. Defaults to 10.0.2.2 — the Android EMULATOR's alias for the host's
 // localhost. To test on a PHYSICAL device on the same Wi-Fi, override with
 // BRICKWARES_DEV_SUPABASE_URL=http://<your-PC-LAN-IP>:54321 in local.properties (or env); the phone
@@ -156,6 +165,8 @@ android {
                 "SUPABASE_ANON_KEY",
                 "\"sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH\"",
             )
+            // No captcha locally unless overridden (see turnstileSiteKeyOverride).
+            buildConfigField("String", "TURNSTILE_SITE_KEY", "\"${turnstileSiteKeyOverride ?: ""}\"")
         }
         create("prod") {
             dimension = "environment"
@@ -164,6 +175,7 @@ android {
             // Real prod publishable key is injected from local.properties / env (not committed). Blank →
             // the preProd*Build guard below fails the build instead of shipping a key-less APK.
             buildConfigField("String", "SUPABASE_ANON_KEY", "\"$prodSupabaseAnonKey\"")
+            buildConfigField("String", "TURNSTILE_SITE_KEY", "\"${turnstileSiteKeyOverride ?: prodTurnstileSiteKey}\"")
         }
     }
 

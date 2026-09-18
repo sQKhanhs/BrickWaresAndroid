@@ -95,6 +95,8 @@
     <string name="login_err_email_exists">Email này đã có tài khoản. Hãy đăng nhập.</string>
     <string name="login_err_too_many">Quá nhiều lần thử. Vui lòng thử lại sau giây lát.</string>
     <string name="login_err_generic">Đã có lỗi xảy ra. Vui lòng thử lại.</string>
+    <string name="login_err_captcha">Chúng tôi chưa xác nhận được bạn không phải robot. Vui lòng thử lại.</string>
+    <string name="login_captcha_title">Kiểm tra bảo mật nhanh</string>
 
     <!-- ============ Bottom navigation ============ -->
     <string name="nav_home">Trang chủ</string>

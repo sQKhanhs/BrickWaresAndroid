@@ -212,11 +212,23 @@ token_verifications = 30
 # Number of Web3 logins that can be made in a 5 minute interval per IP address.
 web3 = 30
 
-# Configure one of the supported captcha providers: `hcaptcha`, `turnstile`.
-# [auth.captcha]
-# enabled = true
-# provider = "hcaptcha"
-# secret = ""
+# Bot protection for the EMAIL auth flows — GoTrue then requires a `captcha_token` on /signup,
+# /token?grant_type=password, /resend, /recover and /otp (Google ID-token sign-in, token refresh and
+# OTP /verify are exempt). Provider: Cloudflare Turnstile, widget "BrickWares" on brickwares.app in
+# MANAGED mode — invisible for normal users, a checkbox only when Cloudflare suspects automation. The
+# app fetches the token from https://brickwares.app/captcha in a hidden WebView (ui/login/
+# TurnstileCaptcha.kt) and sends it with sign-up / password sign-in / resend (handoff §0ar).
+#
+# LOCAL default = OFF: the dev flavor ships no site key (its gate is skipped) and the emulator's DNS can't
+# reach challenges.cloudflare.com anyway. To exercise the gate locally on a real device: set enabled =
+# true, put TURNSTILE_SECRET=1x0000000000000000000000000000000AA (Cloudflare's always-pass TEST secret) in
+# supabase/.env, BRICKWARES_TURNSTILE_SITE_KEY=1x00000000000000000000AA in local.properties, then
+# `supabase stop && supabase start`. PROD is configured on the dashboard (Authentication → Attack
+# Protection → Enable Captcha → Turnstile → the widget's REAL secret) — not from this file.
+[auth.captcha]
+enabled = false
+provider = "turnstile"
+secret = "env(TURNSTILE_SECRET)"
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
@@ -234,8 +246,10 @@ secure_password_change = false
 max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
-# Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Number of seconds before the email OTP expires (defaults to 1 hour). 10 minutes: plenty for an emailed
+# code, and 6× less brute-force window. Mirrors prod (dashboard → Auth → Providers → Email → "Email OTP
+# Expiration"); the confirmation template's "expires in …" wording must match (templates/confirmation.html).
+otp_expiry = 600
 
 # Real SMTP for the LOCAL stack — routes auth email (sign-up confirmation, password reset) through
 # Resend instead of the Mailpit test inbox, so you can verify true end-to-end delivery from dev.
@@ -251,7 +265,7 @@ host = "smtp.resend.com"
 port = 465
 user = "resend"
 pass = "env(RESEND_API_KEY)"
-admin_email = "no-reply@brickwares.app"
+admin_email = "no-reply@mail.brickwares.app"
 sender_name = "BrickWares"
 
 # OTP sign-up confirmation email — shows the 6-digit code ({{ .Token }}) the app verifies, since

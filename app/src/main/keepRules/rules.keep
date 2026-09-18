@@ -34,3 +34,10 @@
 -keep,allowobfuscation,allowoptimization class <1>$$serializer {
     *** INSTANCE;
 }
+
+# ---- Turnstile WebView bridge (ui/login/TurnstileCaptcha.kt) -----------------------------------------
+# The captcha page calls BrickWaresCaptcha.onToken / onError / onInteractive by NAME. The default rules
+# already keep @JavascriptInterface methods; this makes the dependency explicit.
+-keepclassmembers class com.senniapp.brickwares.ui.login.TurnstileBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
