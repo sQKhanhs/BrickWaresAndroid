@@ -310,6 +310,88 @@ async function r2Put(key, body, contentType) {
   });
 }
 
+// R2 occasionally returns a transient 5xx ("InternalError — please try again") or drops the connection.
+// Retry those with exponential backoff so a long (~14h) harvest doesn't leave a set un-hosted on a single
+// flaky response (which would otherwise be skipped and only picked up on a much later run). Returns the
+// last Response (ok or not) so the caller logs + skips a genuinely stuck set; returns null on a network
+// error that never produced a response. A non-5xx failure (e.g. 4xx auth) is returned immediately.
+async function r2PutRetry(key, body, contentType, label, attempts = 4) {
+  for (let i = 1; ; i++) {
+    let up;
+    try {
+      up = await r2Put(key, body, contentType);
+    } catch (e) {
+      if (i >= attempts) { console.warn(`  ${label}: R2 upload network error "${e.message}" — gave up after ${attempts} tries`); return null; }
+      await sleep(1000 * 2 ** i);
+      continue;
+    }
+    if (up.ok || up.status < 500 || i >= attempts) return up;
+    console.warn(`  ${label}: R2 upload HTTP ${up.status} — retry ${i}/${attempts - 1} in ${2 ** i}s`);
+    await sleep(1000 * 2 ** i);
+  }
+}
+
+// HEAD an object to see if it's already on R2. boxOnlyRun writes seed.sql only at the very END, so a run
+// that dies mid-way leaves boxes on R2 that seed.sql doesn't yet record — checking R2 directly is the real
+// idempotency (a resume skips them with no BrickLink hit instead of re-downloading). True = present.
+async function r2Exists(key) {
+  const region = "auto", svc = "s3";
+  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const day = amzDate.slice(0, 8);
+  const payloadHash = sha256hex(""); // HEAD has no body
+  const uri = "/" + [R2_BUCKET, ...key.split("/")].map(encodeURIComponent).join("/");
+  const canonicalHeaders = `host:${R2_HOST}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = ["HEAD", uri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const scope = `${day}/${region}/${svc}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256hex(canonicalRequest)].join("\n");
+  const signature = createHmac("sha256", signingKey(R2_SECRET_ACCESS_KEY, day, region, svc)).update(stringToSign).digest("hex");
+  const auth = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const res = await fetch(`https://${R2_HOST}${uri}`, {
+    method: "HEAD",
+    headers: { Authorization: auth, "x-amz-date": amzDate, "x-amz-content-sha256": payloadHash },
+  });
+  return res.status === 200;
+}
+
+// AWS-canonical RFC-3986 encoding for query strings (encodeURIComponent leaves ! * ' ( ) alone).
+const encodeRfc3986 = (s) => encodeURIComponent(s).replace(/[!*'()]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+
+// List every object key under [prefix] via S3 ListObjectsV2 (paginated, 1000/page). ONE bulk call in
+// place of thousands of per-object HEADs: a resume then skips already-hosted boxes with an in-memory Set
+// lookup (the per-object HEAD approach made the resume ~5x slower — each a fresh TLS round-trip).
+async function r2ListKeys(prefix) {
+  const keys = new Set();
+  let token;
+  do {
+    const region = "auto", svc = "s3";
+    const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+    const day = amzDate.slice(0, 8);
+    const payloadHash = sha256hex(""); // GET has no body
+    const params = { "list-type": "2", "max-keys": "1000", prefix };
+    if (token) params["continuation-token"] = token;
+    const query = Object.keys(params).sort().map((k) => `${encodeRfc3986(k)}=${encodeRfc3986(params[k])}`).join("&");
+    const uri = "/" + encodeURIComponent(R2_BUCKET);
+    const canonicalHeaders = `host:${R2_HOST}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+    const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+    const canonicalRequest = ["GET", uri, query, canonicalHeaders, signedHeaders, payloadHash].join("\n");
+    const scope = `${day}/${region}/${svc}/aws4_request`;
+    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256hex(canonicalRequest)].join("\n");
+    const signature = createHmac("sha256", signingKey(R2_SECRET_ACCESS_KEY, day, region, svc)).update(stringToSign).digest("hex");
+    const auth = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    const res = await fetch(`https://${R2_HOST}${uri}?${query}`, {
+      headers: { Authorization: auth, "x-amz-date": amzDate, "x-amz-content-sha256": payloadHash },
+    });
+    if (!res.ok) throw new Error(`R2 list HTTP ${res.status}: ${(await res.text()).slice(0, 140)}`);
+    const xml = await res.text();
+    for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) keys.add(m[1]);
+    token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+      ? (xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/) || [])[1]
+      : undefined;
+  } while (token);
+  return keys;
+}
+
 // Returns Map<setID, publicBoxUrl> = the boxes we now have on R2 (carrying forward [existingBySetId],
 // re-hosting any not-yet-on-R2 URL). No-op unless enabled + configured.
 async function rehostBoxImages(sets, existingBySetId = new Map()) {
@@ -324,13 +406,28 @@ async function rehostBoxImages(sets, existingBySetId = new Map()) {
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
   console.log(`Box re-host -> R2 bucket "${R2_BUCKET}"; new downloads ${maxNew === Infinity ? "uncapped" : `capped at ${maxNew}`}, ~${delay}ms apart.`);
 
+  // One-time listing of what's already on R2 → an in-memory Set for O(1) skip lookups on resume (a run
+  // that died mid-way already uploaded boxes seed.sql doesn't record). Falls back to per-object HEAD.
+  let r2Keys = null;
+  try {
+    r2Keys = await r2ListKeys("sets/");
+    console.log(`  ${r2Keys.size} box objects already on R2 (listed) — skipped without a BrickLink hit.`);
+  } catch (e) {
+    console.warn(`  R2 list failed (${e.message}) — falling back to per-object HEAD checks.`);
+  }
+
   let got = 0, skipped = 0, missing = 0, streak403 = 0;
   for (const s of sets) {
     const number = s.number;
     if (!number) continue;
     const variant = variantOf(s);
     const already = existingBySetId.get(s.setID);
-    if (already && already.startsWith(`${R2_BASE}/`)) { skipped++; continue; } // already on R2 → no BrickLink hit
+    if (already && already.startsWith(`${R2_BASE}/`)) { skipped++; continue; } // seed says it's on R2 → no BrickLink hit
+    // Already on R2 (from an earlier, possibly interrupted run) but maybe not yet recorded in seed.sql →
+    // record + skip with no BrickLink hit. Fast path = the listed Set; fallback = a per-object HEAD.
+    const path = boxPath(number, variant);
+    const onR2 = r2Keys ? r2Keys.has(path) : await r2Exists(path).catch(() => false);
+    if (onR2) { byId.set(s.setID, publicBoxUrl(number, variant)); skipped++; continue; }
     if (got >= maxNew) continue; // batch cap reached — leave the rest for the next run
 
     await sleep(delay + Math.floor(Math.random() * 1000)); // jittered throttle BEFORE every request
@@ -353,8 +450,8 @@ async function rehostBoxImages(sets, existingBySetId = new Map()) {
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length < 1000) { missing++; continue; } // a placeholder / error body, not a real image
     try {
-      const up = await r2Put(boxPath(number, variant), bytes, "image/png");
-      if (!up.ok) { console.warn(`  ${number}-${variant}: R2 upload HTTP ${up.status}: ${(await up.text()).slice(0, 140)}`); continue; }
+      const up = await r2PutRetry(boxPath(number, variant), bytes, "image/png", `${number}-${variant}`);
+      if (!up || !up.ok) { console.warn(`  ${number}-${variant}: R2 upload ${up ? `HTTP ${up.status}: ${(await up.text()).slice(0, 140)}` : "failed (network)"}`); continue; }
       byId.set(s.setID, publicBoxUrl(number, variant));
       if (++got % 20 === 0) console.log(`  ...${got} boxes uploaded`);
     } catch (e) { console.warn(`  ${number}-${variant}: ${e.message}`); }
