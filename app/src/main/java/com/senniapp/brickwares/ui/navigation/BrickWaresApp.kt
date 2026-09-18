@@ -27,10 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,23 +89,43 @@ fun BrickWaresApp(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
 ) {
-    var selectedTab by rememberSaveable { mutableStateOf(BwTab.Home) }
+    // The bottom-nav visit history, Home at the root. Switching tabs PUSHES onto this, so Back retraces
+    // the tabs the user actually visited (Home → Collection → Search … → Back → Collection → Home → exit)
+    // instead of exiting on the first Back. `selectedTab` is just the top. Saveable across config change /
+    // process death.
+    val tabStack = rememberSaveable(
+        saver = listSaver(
+            save = { it.map(BwTab::name) },
+            restore = { it.map { name -> BwTab.valueOf(name) }.toMutableStateList() },
+        ),
+    ) { mutableStateListOf(BwTab.Home) }
+    val selectedTab = tabStack.last()
     // Detail navigation back-stack shown over the current tab (nav bar stays). Each entry is a set
     // ("s:<setNumber>"), a minifig ("f:<figNum>"), the New Sets page ("n:") or a theme's result list
     // ("t:<theme>␟<subtheme>", opened from a Set Detail's theme link); the last entry is the visible
     // detail, so opening a set/fig pushes and Back pops — travelling set → fig → set … returns step by
-    // step, not straight to the tab. Empty = the tab's own content is shown. Saveable across config
-    // change / process death.
+    // step, not straight to the tab. Empty = the tab's own content is shown. Cleared on a tab switch.
+    // Saveable across config change / process death.
     val detailStack = rememberSaveable(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf<String>() }
     val openSet: (String) -> Unit = { detailStack.add("s:$it") }
     val openFig: (String) -> Unit = { detailStack.add("f:$it") }
     val popDetail: () -> Unit = { if (detailStack.isNotEmpty()) detailStack.removeAt(detailStack.lastIndex) }
+    // Switch tabs: record the destination in the visit history (a no-op re-tap of the current tab isn't
+    // pushed) and drop the current tab's transient detail stack so the destination opens at its root.
+    val goToTab: (BwTab) -> Unit = { tab ->
+        if (tab != tabStack.last()) tabStack.add(tab)
+        detailStack.clear()
+    }
     val current = detailStack.lastOrNull()
     val colors = BwTheme.colors
-    // Hardware / gesture Back pops the detail stack while a detail is open (mirrors the ← button).
-    BackHandler(enabled = current != null, onBack = popDetail)
+    // Unified Back: pop an open detail first, else step back through the tab history; at the Home root
+    // (nothing left to pop) it's disabled and the system exits the app. A tab's own full-screen sub-view
+    // (the Search theme browse) registers a deeper BackHandler, so that's handled before this fires.
+    BackHandler(enabled = current != null || tabStack.size > 1) {
+        if (detailStack.isNotEmpty()) popDetail() else if (tabStack.size > 1) tabStack.removeAt(tabStack.lastIndex)
+    }
     // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
     // its default browse view — a lingering search shouldn't persist across tab switches.
     val searchViewModel: SearchViewModel = viewModel()
@@ -119,8 +137,12 @@ fun BrickWaresApp(
     val requestedTab by NavRequests.tab.collectAsStateWithLifecycle()
     LaunchedEffect(requestedTab) {
         requestedTab?.let { tab ->
+            // A deep link (e.g. a retirement-alert tap → Wishlist) resets the history to Home → tab, so
+            // Back from the deep-linked tab returns to Home, then exits.
             detailStack.clear()
-            selectedTab = tab
+            tabStack.clear()
+            if (tab != BwTab.Home) tabStack.add(BwTab.Home)
+            tabStack.add(tab)
             NavRequests.consume()
         }
     }
@@ -130,7 +152,9 @@ fun BrickWaresApp(
         if (isLoggedIn && showLogin) {
             SignInController.dismiss()
             detailStack.clear()
-            selectedTab = BwTab.Collection
+            tabStack.clear()
+            tabStack.add(BwTab.Home)
+            tabStack.add(BwTab.Collection)
         }
     }
 
@@ -145,8 +169,7 @@ fun BrickWaresApp(
                     // start a fresh search from anywhere. (The detail's back arrow still restores the
                     // previous results, since that path doesn't reset.)
                     if (tab == BwTab.Search) searchViewModel.onEnterSearchTab()
-                    selectedTab = tab
-                    detailStack.clear()
+                    goToTab(tab)
                 },
             )
         },
@@ -168,8 +191,7 @@ fun BrickWaresApp(
                     showSearchFab = selectedTab == BwTab.Search,
                     // The mode-switch FAB exits the detail stack and lands on the Search set home.
                     onSwitchToSetSearch = {
-                        detailStack.clear()
-                        selectedTab = BwTab.Search
+                        goToTab(BwTab.Search)
                         searchViewModel.showSets()
                     },
                 )
@@ -207,8 +229,7 @@ fun BrickWaresApp(
                     showSearchFab = selectedTab == BwTab.Search,
                     // Switching to minifig search exits the detail stack and lands on the minifig home.
                     onSwitchToMinifigSearch = {
-                        detailStack.clear()
-                        selectedTab = BwTab.Search
+                        goToTab(BwTab.Search)
                         searchViewModel.showMinifigs()
                     },
                 )
@@ -226,9 +247,8 @@ fun BrickWaresApp(
                         // Match the Search nav tap: reset to the browse home, don't drop the user back
                         // into the Search tab's last theme/results view.
                         onNavigateToSearch = {
-                            detailStack.clear()
                             searchViewModel.onEnterSearchTab()
-                            selectedTab = BwTab.Search
+                            goToTab(BwTab.Search)
                         },
                         onOpenSetDetail = openSet,
                         onOpenMinifigDetail = openFig,

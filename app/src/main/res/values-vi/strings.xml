@@ -152,7 +152,7 @@
     <string name="set_password_body">Thêm mật khẩu để bạn có thể đăng nhập bằng email, không chỉ bằng Google.</string>
     <string name="settings_delete_account">Xóa tài khoản</string>
     <string name="settings_delete_confirm_title">Xóa tài khoản?</string>
-    <string name="settings_delete_confirm_body">Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu bộ sưu tập của bạn. Không thể hoàn tác.</string>
+    <string name="settings_delete_confirm_body">Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn — bộ sưu tập, danh sách mong muốn và lịch sử đã bán. Không thể hoàn tác và không thể khôi phục dữ liệu.</string>
     <string name="settings_sign_in">Đăng nhập</string>
     <string name="settings_language">Ngôn ngữ</string>
     <string name="settings_currency">Tiền tệ</string>
@@ -192,7 +192,7 @@
     <string name="settings_version">Phiên bản · v0.1.0 (bản xem trước)</string>
     <string name="settings_send_feedback">Gửi phản hồi</string>
     <string name="feedback_title">Gửi phản hồi</string>
-    <string name="feedback_body">Hãy cho chúng tôi biết điều gì chưa ổn, còn thiếu, hay bạn thích gì. Chúng tôi đọc mọi tin nhắn.</string>
+    <string name="feedback_body">Hãy cho chúng tôi biết điều gì chưa ổn, còn thiếu. Chúng tôi đọc mọi phản hồi.</string>
     <string name="feedback_placeholder">Phản hồi của bạn…</string>
     <string name="feedback_category_label">Loại phản hồi</string>
     <string name="feedback_category_bug">Báo lỗi</string>

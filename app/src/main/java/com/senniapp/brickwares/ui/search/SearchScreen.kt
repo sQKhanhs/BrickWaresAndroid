@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.ui.search
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -266,6 +267,12 @@ private fun SearchContent(
             browseListState.scrollToItem(0)
         }
     }
+    // Hardware/gesture Back inside the Search tab first steps out of a full-screen sub-view (a theme's or
+    // minifig-theme's result list) back to the browse home. These register deeper than the app shell's
+    // Back handler, so they win while a sub-view is open; once on the browse home they're disabled and the
+    // shell's Back (tab history) takes over.
+    BackHandler(enabled = state.showThemeDetail) { onThemeDetailBack() }
+    BackHandler(enabled = state.showMinifigThemeDetail) { onMinifigThemeBack() }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         // Catalog unavailable (no connection / error) → the error fallback replaces the whole tab.
         if (state.loadError) {

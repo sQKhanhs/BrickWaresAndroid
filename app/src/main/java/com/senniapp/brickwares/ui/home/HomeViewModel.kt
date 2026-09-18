@@ -104,7 +104,9 @@ class HomeViewModel(
     private fun loadNewSets() {
         viewModelScope.launch {
             try {
-                val newSets = NewSets.select(catalogRepo.newSetCandidates()).take(NEW_SETS_PREVIEW)
+                // A RANDOM 5 of the eligible new sets (reshuffled each load), not the first 5 — the full
+                // list is still available, sorted, behind "View more new sets".
+                val newSets = NewSets.select(catalogRepo.newSetCandidates()).shuffled().take(NEW_SETS_PREVIEW)
                 _uiState.update { it.copy(newSets = newSets, catalogReady = true) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
