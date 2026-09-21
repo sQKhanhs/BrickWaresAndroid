@@ -14,13 +14,22 @@ import java.text.Normalizer
  * from the raw Brickset number 404'd for those (numeric sets are unaffected). Verified 2026-09-03.
  */
 object CatalogImages {
-    /** BrickLink "original box" packaging photo. Some sets (polybags/promos) have none → 404. */
+    /**
+     * The image-CDN slug for a set number: lowercased, with a leading "isbn" stripped. Books-theme items
+     * (LEGO DK books + their exclusive minifig) carry a Brickset number like "ISBN9780241788080", but
+     * both CDNs host the cover under the **bare ISBN** ("9780241788080-1"), so the raw number 404s.
+     * Numeric / alphanumeric set numbers ("10196", "COMCON022") are unaffected. Verified 2026-09-20.
+     */
+    private fun imageSlug(setNumber: String): String =
+        setNumber.lowercase().removePrefix("isbn")
+
+    /** BrickLink "original box" packaging photo. Some sets (polybags/promos/books) have none → 404. */
     fun boxUrl(setNumber: String, variant: Int = 1): String =
-        "https://img.bricklink.com/ItemImage/ON/0/${setNumber.lowercase()}-$variant.png"
+        "https://img.bricklink.com/ItemImage/ON/0/${imageSlug(setNumber)}-$variant.png"
 
     /** Rebrickable studio render of the built set (full resolution — can be several MB). */
     fun renderUrl(setNumber: String, variant: Int = 1): String =
-        "https://cdn.rebrickable.com/media/sets/${setNumber.lowercase()}-$variant.jpg"
+        "https://cdn.rebrickable.com/media/sets/${imageSlug(setNumber)}-$variant.jpg"
 
     /**
      * Rebrickable's server-resized, square-padded thumbnail of the render — the small image for list
@@ -30,7 +39,7 @@ object CatalogImages {
      * [size] is the box edge in px; 320 is crisp for a 72–96 dp thumbnail on high-density screens.
      */
     fun thumbUrl(setNumber: String, variant: Int = 1, size: Int = 320): String =
-        "https://cdn.rebrickable.com/media/thumbs/sets/${setNumber.lowercase()}-$variant.jpg/${size}x${size}p.jpg"
+        "https://cdn.rebrickable.com/media/thumbs/sets/${imageSlug(setNumber)}-$variant.jpg/${size}x${size}p.jpg"
 
     /**
      * The full-resolution [renderUrl] for a stored [thumbUrl] — same set + **variant**. User rows

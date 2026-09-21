@@ -11,6 +11,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.PostgrestRequestBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +44,17 @@ class SupabaseCatalogRepository(
         /** Max keys per `in.(...)` batch query, so a large user collection can't blow the URL length. */
         const val IN_CHUNK = 200
 
+        /** Label for a set with no subtheme — Brickset leaves it null; the app buckets those as "General"
+         *  (kept in step across [SetRow.toCatalogSet] and [subthemeCounts] so chip filters match). */
+        const val SUBTHEME_NONE = "General"
+
+        /**
+         * Rows per page when reading a whole table/view. MUST stay <= PostgREST's `max_rows`
+         * (supabase/config.toml + prod = 1000): a single unpaged `select()` silently returns only the
+         * first `max_rows` (Content-Range 0-999/N), so reads that can exceed it page through in these.
+         */
+        const val PAGE_SIZE = 1000
+
         /**
          * Brickset's placeholder name for an unrevealed/announced-but-unnamed set. Such rows carry no
          * real data yet (no name, image, pieces, or price), so they're filtered out of the catalog —
@@ -67,6 +79,61 @@ class SupabaseCatalogRepository(
     private fun likePattern(q: String): String =
         "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
+    /**
+     * Read a whole table/view, paging past PostgREST's `max_rows` cap ([PAGE_SIZE]). A single unpaged
+     * `select()` silently returns only the first `max_rows` rows, so any read that can exceed 1000 rows
+     * (theme browse counts, all sets/minifigs in a large theme) MUST page or it loses rows off the end.
+     * Loops [PAGE_SIZE]-sized ranges until a short (or empty) page ends it. [block] MUST set a stable
+     * [order] on a unique-ish key — without one, PostgREST's row order between range requests isn't
+     * guaranteed, so pages could overlap or skip rows. Each page is bounded by [LOAD_TIMEOUT_MS].
+     */
+    private suspend inline fun <reified T : Any> fetchAllPaged(
+        table: String,
+        columns: Columns = Columns.ALL,
+        crossinline block: PostgrestRequestBuilder.() -> Unit,
+    ): List<T> {
+        val out = ArrayList<T>()
+        var from = 0L
+        while (true) {
+            val page = withTimeout(LOAD_TIMEOUT_MS) {
+                client.from(table).select(columns) {
+                    block()
+                    range(from, from + PAGE_SIZE - 1)
+                }.decodeList<T>()
+            }
+            out += page
+            if (page.size < PAGE_SIZE) break // a short page is the last one
+            from += PAGE_SIZE
+        }
+        return out
+    }
+
+    /**
+     * Collapse content-identical rows that share a set number but differ only by variant — a Brickset
+     * quirk for magazine gifts / re-releases (e.g. "212504 Superman" exists as two Brickset setIDs,
+     * variants 1 and 2, byte-identical), which would otherwise show as two identical cards. Keeps the
+     * LOWEST variant (the canonical one [fetchSet]/[setByNumber] resolve). Legitimate multi-variant
+     * numbers (CMF series, SDCC exclusives, old basic sets) differ in name/pieces/etc., so they're
+     * untouched. First pass is the LazyColumn crash guard (unique by id = number+variant); the eventual
+     * fix is ingest-side dedup, but this keeps every set list clean meanwhile. Original order preserved.
+     */
+    private fun dedupeDuplicateVariants(sets: List<CatalogSet>): List<CatalogSet> {
+        fun contentKey(s: CatalogSet) =
+            "${s.setNumber}${s.name}${s.releaseYear}${s.pieces}${s.minifigs}"
+        val byId = sets.distinctBy { it.id } // one row per number+variant (the list key) — never crash
+        val lowestVariant = HashMap<String, Int>()
+        byId.forEach { s ->
+            val k = contentKey(s)
+            val cur = lowestVariant[k]
+            if (cur == null || s.numberVariant < cur) lowestVariant[k] = s.numberVariant
+        }
+        val emitted = HashSet<String>()
+        return byId.filter { s ->
+            val k = contentKey(s)
+            s.numberVariant == lowestVariant[k] && emitted.add(k)
+        }
+    }
+
     override suspend fun searchSets(query: String, limit: Int): List<CatalogSet> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
@@ -86,31 +153,38 @@ class SupabaseCatalogRepository(
             }.decodeList<SetRow>()
                 .map { it.toCatalogSet() }
                 .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-                .distinctBy { it.id }
+                .let(::dedupeDuplicateVariants)
         }
     }
 
-    override suspend fun themeCounts(): List<ThemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
-        client.from("catalog_theme_counts").select().decodeList<ThemeCountRow>()
+    override suspend fun themeCounts(): List<ThemeCount> =
+        fetchAllPaged<ThemeCountRow>("catalog_theme_counts") { order("theme", Order.ASCENDING) }
             .map { ThemeCount(it.theme, it.setCount) }
-    }
 
-    override suspend fun subthemeCounts(): List<ThemeSubthemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
-        client.from("catalog_subtheme_counts").select().decodeList<SubthemeCountRow>()
-            .map { ThemeSubthemeCount(it.theme, it.subtheme, it.setCount) }
-    }
+    override suspend fun subthemeCounts(): List<ThemeSubthemeCount> =
+        fetchAllPaged<SubthemeCountRow>("catalog_subtheme_counts") {
+            order("theme", Order.ASCENDING)
+            order("subtheme", Order.ASCENDING)
+        }
+            // The view coalesces a null subtheme to "" but toCatalogSet (and so setsInTheme) labels those
+            // sets "General" — so an "" browse chip filtered against "General" sets and opened a blank
+            // page. Normalize "" -> "General" AND merge it with any explicit "General" row, so the chip's
+            // count and filter match the theme-detail list. (The minifig subtheme view already yields
+            // "General".) [SUBTHEME_NONE] must stay in step with toCatalogSet's `subtheme ?: "General"`.
+            .groupBy { it.theme to it.subtheme.ifBlank { SUBTHEME_NONE } }
+            .map { (key, rows) -> ThemeSubthemeCount(key.first, key.second, rows.sumOf { it.setCount }) }
 
-    override suspend fun setsInTheme(theme: String): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
-        client.from("sets").select(Columns.raw(SET_COLS)) {
+    override suspend fun setsInTheme(theme: String): List<CatalogSet> =
+        fetchAllPaged<SetRow>("sets", Columns.raw(SET_COLS)) {
             filter {
                 eq("theme", theme)
                 neq("name", UNREVEALED_NAME)
             }
-        }.decodeList<SetRow>()
+            order("set_id", Order.ASCENDING) // stable order so range paging can't skip/overlap sets
+        }
             .map { it.toCatalogSet() }
             .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-            .distinctBy { it.id }
-    }
+            .let(::dedupeDuplicateVariants)
 
     override suspend fun fetchSet(catalogKey: String): CatalogSet? = withTimeout(LOAD_TIMEOUT_MS) {
         // catalogKey is CatalogSet.id ("<number>-<variant>") or a bare number. Try the exact
@@ -196,7 +270,7 @@ class SupabaseCatalogRepository(
         }.decodeList<SetRow>()
             .map { it.toCatalogSet() }
             .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-            .distinctBy { it.id }
+            .let(::dedupeDuplicateVariants)
     }
 
     // ---- Minifig server-side queries (Decision 16) ----
@@ -213,25 +287,27 @@ class SupabaseCatalogRepository(
         }
     }
 
-    override suspend fun minifigThemeCounts(): List<ThemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
-        client.from("catalog_minifig_theme_counts").select().decodeList<MinifigThemeCountRow>()
+    override suspend fun minifigThemeCounts(): List<ThemeCount> =
+        fetchAllPaged<MinifigThemeCountRow>("catalog_minifig_theme_counts") { order("theme", Order.ASCENDING) }
             .map { ThemeCount(it.theme, it.minifigCount) }
-    }
 
-    override suspend fun minifigSubthemeCounts(): List<ThemeSubthemeCount> = withTimeout(LOAD_TIMEOUT_MS) {
-        client.from("catalog_minifig_subtheme_counts").select().decodeList<MinifigSubthemeCountRow>()
-            .map { ThemeSubthemeCount(it.theme, it.subtheme, it.minifigCount) }
-    }
+    override suspend fun minifigSubthemeCounts(): List<ThemeSubthemeCount> =
+        fetchAllPaged<MinifigSubthemeCountRow>("catalog_minifig_subtheme_counts") {
+            order("theme", Order.ASCENDING)
+            order("subtheme", Order.ASCENDING)
+        }.map { ThemeSubthemeCount(it.theme, it.subtheme, it.minifigCount) }
 
-    override suspend fun minifigsInTheme(theme: String): List<Minifig> = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun minifigsInTheme(theme: String): List<Minifig> =
         // !inner so only figs that appear in a set of this theme come back; the embedded sets are also
-        // filtered to this theme, which is what the in-theme browse wants.
-        client.from("minifigs").select(
+        // filtered to this theme, which is what the in-theme browse wants. Paged over the parent figs
+        // (one row per fig), ordered by fig_num so range paging is stable.
+        fetchAllPaged<MinifigRow>(
+            "minifigs",
             Columns.raw("fig_num,name,num_parts,image_url,set_minifigs!inner(set_id,sets!inner(theme,subtheme))"),
         ) {
             filter { eq("set_minifigs.sets.theme", theme) }
-        }.decodeList<MinifigRow>().map { it.toMinifig() }.distinctBy { it.figNum }
-    }
+            order("fig_num", Order.ASCENDING)
+        }.map { it.toMinifig() }.distinctBy { it.figNum }
 
     override suspend fun fetchMinifig(figNum: String): Minifig? = withTimeout(LOAD_TIMEOUT_MS) {
         client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
@@ -246,7 +322,7 @@ class SupabaseCatalogRepository(
         }.decodeList<SetWrapperRow>()
             .mapNotNull { it.sets?.toCatalogSet() }
             .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-            .distinctBy { it.id }
+            .let(::dedupeDuplicateVariants)
             .sortedByDescending { it.releaseYear }
     }
 
@@ -399,7 +475,7 @@ class SupabaseCatalogRepository(
             // Retirement date shown on the detail page — only when the exit date is actually in the past.
             retiredYear = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.year ?: 0,
             retiredMonth = retirementDate()?.takeIf { it.isBefore(LocalDate.now()) }?.monthValue ?: 0,
-            subtheme = subtheme ?: "General",
+            subtheme = subtheme ?: "General", // == companion SUBTHEME_NONE (nested class can't ref it by name)
             // Brickset's image host is Cloudflare-blocked for non-browser clients, so the render + thumb
             // come from Rebrickable's CDN (addressed by set number + variant). The box shot is the
             // re-hosted `box_image_url` (our Storage, reliable) — null until the ingest captures it, in
