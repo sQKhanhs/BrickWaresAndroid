@@ -8,8 +8,11 @@ import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
+import com.senniapp.brickwares.data.repository.MIN_PASSWORD_LENGTH
 import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.ui.navigation.SignInController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +21,13 @@ import kotlinx.coroutines.launch
 
 /** Whether the email form is signing into an existing account or creating a new one. */
 enum class LoginMode { SIGN_IN, SIGN_UP }
+
+/**
+ * Forgot-password steps (from the sign-in form's "Forgot password?" link): [EMAIL] ask for the address
+ * → [CODE] the emailed 6-digit recovery code → [NEW_PASSWORD] choose a new one. Verifying the code
+ * signs the user in, so the last step runs on a fresh session with the overlay held open.
+ */
+enum class ResetStep { NONE, EMAIL, CODE, NEW_PASSWORD }
 
 data class LoginUiState(
     val mode: LoginMode = LoginMode.SIGN_IN,
@@ -38,6 +48,9 @@ data class LoginUiState(
     /** Password typed in a sign-up awaiting confirmation; re-applied after OTP verify so the latest
      *  attempt's password wins (GoTrue keeps the first password when an unconfirmed email is re-signed-up). */
     val pendingPassword: String = "",
+    /** Forgot-password flow; [ResetStep.NONE] = the normal sign-in / sign-up form. Reuses [email],
+     *  [pendingEmail], [code], [password], [confirmPassword] and the resend cooldown. */
+    val reset: ResetStep = ResetStep.NONE,
 )
 
 /**
@@ -63,13 +76,32 @@ class LoginViewModel(
         // later reopen — e.g. after signing out in the same session — starts fresh instead of
         // resurrecting the pending OTP step. The modal only opens while logged out, so this never
         // wipes a code the user is mid-entry.
+        // Exception: the forgot-password flow — verifying its code signs the user in, and the
+        // "choose a new password" step still has to run (see [holdingForReset]).
         viewModelScope.launch {
-            authRepository.authState.collect { if (it is AuthState.SignedIn) reset() }
+            authRepository.authState.collect { if (it is AuthState.SignedIn && !holdingForReset) reset() }
         }
     }
 
-    /** Restores the pristine form (clears any pending OTP step and typed fields). */
-    fun reset() { _uiState.value = LoginUiState() }
+    /**
+     * True from just before the recovery code is verified until the reset finishes/fails. It keeps the
+     * sign-in observer above from wiping the form, and (via [SignInController.holdOpen]) keeps the app
+     * shell from closing the overlay the moment the verification signs the user in.
+     */
+    @Volatile
+    private var holdingForReset = false
+
+    private fun setResetHold(hold: Boolean) {
+        holdingForReset = hold
+        SignInController.holdOpen(hold)
+    }
+
+    /** Restores the pristine form (clears any pending OTP / reset step and typed fields). Also releases
+     *  the reset hold, so call it BEFORE dismissing the overlay. */
+    fun reset() {
+        setResetHold(false)
+        _uiState.value = LoginUiState()
+    }
 
     fun onEmailChange(value: String) = _uiState.update { it.copy(email = value, error = null) }
     fun onPasswordChange(value: String) = _uiState.update { it.copy(password = value, error = null) }
@@ -131,6 +163,12 @@ class LoginViewModel(
                     )
                     SignInResult.InvalidCredentials -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_invalid_credentials))
                     SignInResult.CaptchaFailed -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_captcha))
+                    // The server rule is stricter than MIN_PASSWORD_LENGTH (dashboard changed) — say so
+                    // rather than "something went wrong".
+                    SignInResult.WeakPassword -> it.copy(
+                        signingIn = false,
+                        error = UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD_LENGTH)),
+                    )
                     SignInResult.EmailAlreadyRegistered -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_email_exists))
                     SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
                     is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
@@ -199,6 +237,114 @@ class LoginViewModel(
         }
     }
 
+    // ---- Forgot password: email → 6-digit recovery code → new password ----
+
+    /** "Forgot password?" on the sign-in form. Carries the typed email over; clears everything else. */
+    fun onForgotPassword() = _uiState.update {
+        LoginUiState(mode = LoginMode.SIGN_IN, reset = ResetStep.EMAIL, email = it.email)
+    }
+
+    /** Step 1 (and Resend on step 2): request the recovery email. Captcha first — `/recover` is protected. */
+    fun onSendResetCode() {
+        val s = _uiState.value
+        if (s.signingIn) return
+        val resend = s.reset == ResetStep.CODE
+        if (resend && System.currentTimeMillis() < s.resendCooldownUntil) return
+        val email = (if (resend) s.pendingEmail else s.email).trim()
+        if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            _uiState.update { it.copy(error = UiText.Res(R.string.login_err_invalid_email)) }; return
+        }
+        _uiState.update { it.copy(signingIn = true, error = null, info = null) }
+        viewModelScope.launch {
+            val token = acquireCaptcha() ?: return@launch
+            val result = authRepository.sendPasswordResetCode(email, captchaToken = token.value)
+            _uiState.update {
+                when (result) {
+                    // "Accepted", not "account exists" — the server never reveals which (no enumeration),
+                    // so the code step opens either way and the wording stays conditional.
+                    SignInResult.Success -> it.copy(
+                        signingIn = false, reset = ResetStep.CODE, pendingEmail = email, code = "",
+                        info = if (resend) UiText.Res(R.string.login_code_resent) else null,
+                        resendCooldownUntil = System.currentTimeMillis() + RESEND_COOLDOWN_MS,
+                    )
+                    SignInResult.CaptchaFailed -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_captcha))
+                    SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                    else -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
+                }
+            }
+        }
+    }
+
+    /** Step 2: verify the recovery code. Success signs the user in — hold the overlay open for step 3. */
+    fun onVerifyResetCode() {
+        val s = _uiState.value
+        if (s.signingIn) return
+        if (s.code.length < CODE_LENGTH) {
+            _uiState.update { it.copy(error = UiText.Res(R.string.login_err_code_invalid)) }; return
+        }
+        _uiState.update { it.copy(signingIn = true, error = null, info = null) }
+        setResetHold(true) // BEFORE the call: the session flips to signed-in as soon as it returns
+        viewModelScope.launch {
+            val result = authRepository.verifyPasswordResetCode(s.pendingEmail, s.code)
+            if (result != SignInResult.Success) setResetHold(false)
+            _uiState.update {
+                when (result) {
+                    SignInResult.Success -> it.copy(
+                        signingIn = false, reset = ResetStep.NEW_PASSWORD,
+                        code = "", password = "", confirmPassword = "",
+                    )
+                    SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                    else -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_code_invalid))
+                }
+            }
+        }
+    }
+
+    /**
+     * Step 3: set the new password on the (fresh, just-verified) session, then close the overlay. If the
+     * user closes the modal here instead, they stay signed in with the old password — harmless; they
+     * proved the email is theirs and can run the flow again.
+     */
+    fun onSubmitNewPassword() {
+        val s = _uiState.value
+        if (s.signingIn) return
+        val err = when {
+            s.password.length < MIN_PASSWORD_LENGTH ->
+                UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD_LENGTH))
+            s.password != s.confirmPassword -> UiText.Res(R.string.login_err_password_mismatch)
+            else -> null
+        }
+        if (err != null) { _uiState.update { it.copy(error = err) }; return }
+        _uiState.update { it.copy(signingIn = true, error = null, info = null) }
+        viewModelScope.launch {
+            when (authRepository.setPassword(s.password)) {
+                // PasswordAlreadySet = they chose the password they already had — it IS set, so: done.
+                SignInResult.Success, SignInResult.PasswordAlreadySet -> {
+                    _uiState.update { it.copy(signingIn = false, info = UiText.Res(R.string.login_reset_done)) }
+                    delay(RESET_DONE_LINGER_MS) // let "Password updated" be read before the modal closes
+                    reset()                     // releases the hold…
+                    SignInController.dismiss()  // …so this actually closes the overlay
+                }
+                SignInResult.WeakPassword -> _uiState.update {
+                    it.copy(signingIn = false, error = UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD_LENGTH)))
+                }
+                SignInResult.TooManyRequests -> _uiState.update {
+                    it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                }
+                // Still on the fresh session, so they can simply tap Save again.
+                else -> _uiState.update { it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic)) }
+            }
+        }
+    }
+
+    /** Back within the reset flow: code → email → the sign-in form. (No Back from the new-password step.) */
+    fun onBackFromReset() = _uiState.update {
+        when (it.reset) {
+            ResetStep.CODE -> it.copy(reset = ResetStep.EMAIL, code = "", error = null, info = null)
+            else -> LoginUiState(mode = LoginMode.SIGN_IN, email = it.email)
+        }
+    }
+
     /**
      * Runs the Turnstile gate and returns the token holder to send — `value` is null when the gate is
      * disabled (no site key → no token, the server isn't enforcing). Returns null after showing the
@@ -227,14 +373,18 @@ class LoginViewModel(
     private fun validate(s: LoginUiState): UiText? = when {
         s.email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(s.email.trim()).matches() ->
             UiText.Res(R.string.login_err_invalid_email)
-        s.password.length < MIN_PASSWORD -> UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD))
+        // Length is a rule for NEW passwords only. On sign-in just require something — an account made
+        // under an older, shorter rule must still get in, and the server is the judge of correctness.
+        s.mode == LoginMode.SIGN_IN && s.password.isEmpty() -> UiText.Res(R.string.login_err_password_required)
+        s.mode == LoginMode.SIGN_UP && s.password.length < MIN_PASSWORD_LENGTH ->
+            UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD_LENGTH))
         s.mode == LoginMode.SIGN_UP && s.password != s.confirmPassword -> UiText.Res(R.string.login_err_password_mismatch)
         else -> null
     }
 
     private companion object {
-        const val MIN_PASSWORD = 6
         const val CODE_LENGTH = 6
         const val RESEND_COOLDOWN_MS = 60_000L
+        const val RESET_DONE_LINGER_MS = 1_200L
     }
 }

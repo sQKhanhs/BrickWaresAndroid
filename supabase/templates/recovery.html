@@ -1,0 +1,45 @@
+<!-- Password reset (OTP). Same layout as confirmation.html — the app's "Forgot password?" flow asks for
+     this 6-digit code, then lets the user choose a new password (mobile has no web page for the default
+     recovery LINK). Language = the {"lang":"vi"|"en"} stamped into user_metadata at sign-up, read as
+     {{ .Data.lang }}; `or .Data.lang "en"` defaults to English when the key is missing (Google-only or
+     legacy accounts), so the conditional never errors. Paste into the prod dashboard:
+     Authentication → Emails → "Reset password" (subject is in supabase/config.toml). -->
+{{ if eq (or .Data.lang "en") "vi" }}
+<!DOCTYPE html>
+<html lang="vi">
+  <body style="margin:0;padding:24px;background:#f6f6f4;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a">
+    <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px 28px">
+      <h1 style="margin:0;font-size:22px;font-weight:bold">Brick<span style="color:#f5c518">Wares</span></h1>
+      <h2 style="margin:20px 0 8px;font-size:18px">Đặt lại mật khẩu</h2>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#444">
+        Nhập mã 6 số này trong ứng dụng BrickWares để đặt lại mật khẩu của bạn.
+      </p>
+      <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;background:#f6f6f4;border-radius:12px;padding:16px 0;margin:0 0 16px">
+        {{ .Token }}
+      </div>
+      <p style="margin:0;font-size:12px;line-height:1.5;color:#888">
+        Mã hết hạn sau 10 phút. Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này — mật khẩu của bạn vẫn giữ nguyên.
+      </p>
+    </div>
+  </body>
+</html>
+{{ else }}
+<!DOCTYPE html>
+<html lang="en">
+  <body style="margin:0;padding:24px;background:#f6f6f4;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a">
+    <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px 28px">
+      <h1 style="margin:0;font-size:22px;font-weight:bold">Brick<span style="color:#f5c518">Wares</span></h1>
+      <h2 style="margin:20px 0 8px;font-size:18px">Reset your password</h2>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#444">
+        Enter this 6-digit code in the BrickWares app to reset your password.
+      </p>
+      <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;background:#f6f6f4;border-radius:12px;padding:16px 0;margin:0 0 16px">
+        {{ .Token }}
+      </div>
+      <p style="margin:0;font-size:12px;line-height:1.5;color:#888">
+        The code expires in 10 minutes. If you didn't ask to reset your password, you can ignore this email — your password stays the same.
+      </p>
+    </div>
+  </body>
+</html>
+{{ end }}

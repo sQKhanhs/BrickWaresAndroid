@@ -81,13 +81,15 @@
     <string name="toast_delete_account_failed">Couldn\'t delete your account. Please try again.</string>
     <string name="toast_password_set">Password set — you can now sign in with your email too.</string>
     <string name="toast_password_already_set">This account already has a password — you can sign in with your email.</string>
-    <string name="toast_password_failed">Couldn\'t set the password. Please try again.</string>
+    <string name="toast_password_reauth">For your security, sign out and sign in again, then set your password.</string>
+    <string name="toast_password_failed">Couldn\'t set the password. Check your connection and try again.</string>
 
     <!-- Sign-in messages -->
     <string name="login_err_no_google">No Google account available on this device</string>
     <string name="login_info_confirm_email">Check your email to confirm your account, then sign in.</string>
     <string name="login_info_needs_confirm">This account isn\'t confirmed yet. Enter the code from your email, or resend below.</string>
     <string name="login_err_invalid_email">Enter a valid email address</string>
+    <string name="login_err_password_required">Enter your password</string>
     <string name="login_err_password_short">Password must be at least %1$d characters</string>
     <string name="login_err_password_mismatch">Passwords don\'t match</string>
     <string name="login_err_code_invalid">That code isn\'t right or has expired. Check it, or resend a new one.</string>
@@ -150,7 +152,7 @@
     <string name="settings_offline">Offline</string>
     <string name="settings_set_password">Set password</string>
     <string name="set_password_title">Set a password</string>
-    <string name="set_password_body">Add a password so you can also sign in with your email — not just Google.</string>
+    <string name="set_password_body">Add a password so you can also sign in with your email — not just Google. Use at least %1$d characters.</string>
     <string name="settings_delete_account">Delete account</string>
     <string name="settings_delete_confirm_title">Delete account?</string>
     <string name="settings_delete_confirm_body">This permanently deletes your account and all of your data — your collection, wishlist, and sales history. This can\'t be undone and the data can\'t be recovered.</string>
@@ -189,8 +191,8 @@
     <string name="settings_usage_analytics">Usage analytics</string>
     <string name="settings_usage_analytics_desc">Share anonymous usage data to help improve the app.</string>
     <string name="settings_data_attribution">Data attribution</string>
-    <string name="settings_attribution_body">Catalog data from Brickset and Rebrickable. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</string>
-    <string name="settings_version">Version · v0.1.0 (preview)</string>
+    <string name="settings_attribution_body">Catalog data from Brickset and Rebrickable. Images from Rebrickable and BrickLink. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</string>
+    <string name="settings_version">Version %1$s</string>
     <string name="settings_send_feedback">Send feedback</string>
     <string name="feedback_title">Send feedback</string>
     <string name="feedback_body">Tell us what’s wrong, what’s missing, or what you love. We read every message.</string>
@@ -342,6 +344,18 @@
     <string name="login_or">OR</string>
     <string name="login_email">Email</string>
     <string name="login_password">Password</string>
+    <string name="login_password_new">Password (at least %1$d characters)</string>
+    <!-- Forgot password: email → 6-digit code → new password -->
+    <string name="login_forgot_password">Forgot password?</string>
+    <!-- %1$s = "Terms of Service", %2$s = "Privacy Policy" (both become links) -->
+    <string name="login_legal_acceptance">By continuing, you agree to the %1$s and %2$s.</string>
+    <string name="login_reset_title">Reset your password</string>
+    <string name="login_reset_body">Enter your account email and we\'ll send you a 6-digit code.</string>
+    <string name="login_reset_send">Send code</string>
+    <string name="login_reset_sent">If %1$s has a BrickWares account, a 6-digit code is on its way. Enter it below.</string>
+    <string name="login_reset_new_body">Code confirmed. Choose a new password.</string>
+    <string name="login_reset_save">Save new password</string>
+    <string name="login_reset_done">Password updated. You\'re signed in.</string>
     <string name="login_confirm_password">Confirm password</string>
     <string name="login_signup_action">Sign Up</string>
     <string name="login_have_account">Already have an account? </string>

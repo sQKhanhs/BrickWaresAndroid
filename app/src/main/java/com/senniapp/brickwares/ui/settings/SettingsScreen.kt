@@ -61,7 +61,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -81,9 +80,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.data.repository.FeedbackCategory
+import com.senniapp.brickwares.data.repository.MIN_PASSWORD_LENGTH
+import com.senniapp.brickwares.util.LegalLinks
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.rememberIsOnline
@@ -103,28 +105,8 @@ import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 
-// Public legal pages, hosted on the web (brickwares.app) rather than baked into the app, so the text
-// can be updated without an app release. Paths match the hosted files (privacy-policy.html /
-// terms-of-service.html). Google Play also requires the privacy URL in the store listing, and the
-// answers on the Play Data Safety form must match what the policy states.
-private const val PRIVACY_POLICY_URL = "https://brickwares.app/privacy-policy"
-private const val TERMS_OF_SERVICE_URL = "https://brickwares.app/terms-of-service"
-
-/**
- * Opens [url] in a Chrome Custom Tab — an in-app browser overlay, so the user returns to Settings with
- * one tap (the tab's close/back button) instead of task-switching to a separate browser app. Falls
- * back to the default browser if no Custom Tabs provider is available.
- */
-private fun openUrl(context: Context, url: String) {
-    val uri = Uri.parse(url)
-    runCatching {
-        CustomTabsIntent.Builder().build().launchUrl(context, uri)
-    }.onFailure {
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-}
+// The Privacy / Terms URLs and the Custom-Tab opener live in util/LegalLinks.kt (shared with the sign-in
+// modal's acceptance line).
 
 @Composable
 fun SettingsScreen(
@@ -423,9 +405,9 @@ private fun SettingsContent(
 
             // ---- Privacy ----
             Section(stringResource(R.string.settings_section_privacy)) {
-                NavRow(stringResource(R.string.settings_privacy_policy), onClick = { openUrl(context, PRIVACY_POLICY_URL) })
+                NavRow(stringResource(R.string.settings_privacy_policy), onClick = { LegalLinks.open(context, LegalLinks.PRIVACY_POLICY_URL) })
                 RowDivider()
-                NavRow(stringResource(R.string.settings_terms), onClick = { openUrl(context, TERMS_OF_SERVICE_URL) })
+                NavRow(stringResource(R.string.settings_terms), onClick = { LegalLinks.open(context, LegalLinks.TERMS_OF_SERVICE_URL) })
                 RowDivider()
                 ToggleRow(
                     stringResource(R.string.settings_usage_analytics),
@@ -554,12 +536,12 @@ private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(stringResource(R.string.set_password_title), style = BwType.cardTitle, color = colors.text)
                 Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.set_password_body), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+                Text(stringResource(R.string.set_password_body, MIN_PASSWORD_LENGTH), style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it; error = null },
-                    placeholder = { Text(stringResource(R.string.login_password)) },
+                    placeholder = { Text(stringResource(R.string.login_password_new, MIN_PASSWORD_LENGTH)) },
                     singleLine = true,
                     visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = eye,
@@ -583,7 +565,7 @@ private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit
                 )
                 error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(stringResource(it, 6), style = BwType.body.copy(fontSize = 12.sp), color = colors.error)
+                    Text(stringResource(it, MIN_PASSWORD_LENGTH), style = BwType.body.copy(fontSize = 12.sp), color = colors.error)
                 }
                 Spacer(Modifier.height(18.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -594,7 +576,7 @@ private fun SetPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit
                         modifier = Modifier.weight(1f),
                         onClick = {
                             when {
-                                password.length < 6 -> error = R.string.login_err_password_short
+                                password.length < MIN_PASSWORD_LENGTH -> error = R.string.login_err_password_short
                                 password != confirm -> error = R.string.login_err_password_mismatch
                                 else -> onConfirm(password)
                             }
@@ -950,7 +932,9 @@ private fun VersionHeader() {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            stringResource(R.string.settings_version),
+            // The real build version ("1.0", or "1.0-dev" on the dev flavor) — it used to be a hardcoded
+            // "v0.1.0 (preview)" that no longer matched what Play / Crashlytics report.
+            stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             color = colors.textMuted,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,

@@ -179,7 +179,7 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = 8
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
@@ -241,7 +241,7 @@ double_confirm_changes = true
 # Mailpit inbox (http://localhost:54324), not actually sent. (Prod is configured on the dashboard.)
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
-secure_password_change = false
+secure_password_change = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
@@ -277,9 +277,22 @@ sender_name = "BrickWares"
 # affect prod). NOTE: if the templated subject renders as literal "{{ ... }}" text in your test,
 # GoTrue isn't templating the subject on your version — fall back to a plain subject like
 # "Mã xác nhận BrickWares / BrickWares code". The body always renders correctly.
+# ⚠️ DASHBOARD COPY: the `subject` values below are TOML strings, so their inner quotes are escaped (\").
+# The prod dashboard (Authentication → Emails → <template> → Subject) needs the UNESCAPED form — plain
+# "en" / "vi", no backslashes. With the backslashes the Go template fails to parse and GoTrue silently sends
+# its DEFAULT email (stock subject AND body) instead — cost a debugging round on 2026-09-20 (recovery).
+# Tell: the stock subject ("Reset your password" / "Confirm your signup") arriving = a template parse error.
 [auth.email.template.confirmation]
 subject = "{{ if eq (or .Data.lang \"en\") \"vi\" }}Mã xác nhận BrickWares{{ else }}Your BrickWares code{{ end }}"
 content_path = "./supabase/templates/confirmation.html"
+
+# Forgot password (app: sign-in form → "Forgot password?"). Same OTP pattern as sign-up: the email
+# carries {{ .Token }} (6 digits, otp_expiry above), the app verifies it as type `recovery`, which signs
+# the user in, then sets the new password on that fresh session. PROD: paste recovery.html + this
+# subject into Authentication → Emails → "Reset password".
+[auth.email.template.recovery]
+subject = "{{ if eq (or .Data.lang \"en\") \"vi\" }}Mã đặt lại mật khẩu BrickWares{{ else }}Your BrickWares password reset code{{ end }}"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -307,6 +320,10 @@ max_frequency = "5s"
 # 4152127777 = "123456"
 
 # Configure logged in session timeouts.
+# DELIBERATELY UNSET (security audit 2026-09-16, reviewed 2026-09-20): on hosted Supabase both options are
+# PRO-plan features and brickwares-prod is on Free, so setting them here would only make local diverge from
+# prod. What protects a leaked refresh token today: rotation + reuse detection (enable_refresh_token_rotation
+# above) and the 1 h access-token life. Revisit with the Pro upgrade — for a mobile app think 720h, not 24h.
 # [auth.sessions]
 # Force log out after the specified duration.
 # timebox = "24h"

@@ -44,6 +44,14 @@ import java.security.MessageDigest
 import java.util.UUID
 import timber.log.Timber
 
+/**
+ * Minimum length for a NEW password (sign-up, set-password). Must match the server: supabase/config.toml
+ * `minimum_password_length` locally and the prod dashboard (Authentication → Sign In / Providers → Email).
+ * Deliberately NOT applied to sign-in — an account created under an older, shorter rule must still be
+ * able to log in. Length over composition rules (NIST 800-63B): no forced symbols/digits.
+ */
+const val MIN_PASSWORD_LENGTH = 8
+
 /** Signed-in user, as the app cares about it (derived from the Supabase session). */
 data class AuthUser(
     val id: String,
@@ -82,6 +90,16 @@ sealed interface SignInResult {
     /** GoTrue rejected (or required and didn't get) the Turnstile `captcha_token` — expired, reused, or
      *  the app has no site key while the project enforces captcha. Ask the user to try again. */
     data object CaptchaFailed : SignInResult
+
+    /** The server refused a new password as too weak/short (its rule is stricter than the app assumed). */
+    data object WeakPassword : SignInResult
+
+    /**
+     * Password change refused because the session is older than 24 h and the project has
+     * `secure_password_change` on (a stolen long-lived token must not be able to set a password).
+     * The user has to sign in again first; a nonce-by-email reauth flow is a possible follow-up.
+     */
+    data object ReauthenticationNeeded : SignInResult
 
     /** Sign-up failed: an account with this email already exists. */
     data object EmailAlreadyRegistered : SignInResult
@@ -273,6 +291,7 @@ object AuthRepository {
         when (e.errorCode) {
             AuthErrorCode.EmailExists, AuthErrorCode.UserAlreadyExists -> SignInResult.EmailAlreadyRegistered
             AuthErrorCode.CaptchaFailed -> SignInResult.CaptchaFailed
+            AuthErrorCode.WeakPassword -> SignInResult.WeakPassword
             AuthErrorCode.OverRequestRateLimit, AuthErrorCode.OverEmailSendRateLimit -> SignInResult.TooManyRequests
             else -> rejected("signUpWithEmail", e)
         }
@@ -310,6 +329,44 @@ object AuthRepository {
     }
 
     /**
+     * Forgot password, step 1: email a 6-digit recovery code to [email] (template
+     * `supabase/templates/recovery.html`). `/recover` is captcha-protected, hence [captchaToken]. GoTrue
+     * answers 200 whether or not the address has an account (no user enumeration), so [SignInResult.Success]
+     * means "request accepted", not "account exists" — the UI words it that way.
+     */
+    suspend fun sendPasswordResetCode(email: String, captchaToken: String? = null): SignInResult = try {
+        client.auth.resetPasswordForEmail(email.trim(), captchaToken = captchaToken)
+        SignInResult.Success
+    } catch (e: AuthRestException) {
+        when (e.errorCode) {
+            AuthErrorCode.CaptchaFailed -> SignInResult.CaptchaFailed
+            AuthErrorCode.OverEmailSendRateLimit, AuthErrorCode.OverRequestRateLimit -> SignInResult.TooManyRequests
+            else -> rejected("sendPasswordResetCode", e)
+        }
+    } catch (e: Exception) {
+        failed("sendPasswordResetCode", e, "Couldn't send the reset code")
+    }
+
+    /**
+     * Forgot password, step 2: verify the recovery code. Success **signs the user in** with a fresh
+     * session — which is exactly why the following [setPassword] passes `secure_password_change` (it
+     * only refuses sessions older than 24 h). The caller must keep the login overlay open across that
+     * sign-in (see `SignInController.holdOpen`).
+     */
+    suspend fun verifyPasswordResetCode(email: String, code: String): SignInResult = try {
+        client.auth.verifyEmailOtp(OtpType.Email.RECOVERY, email.trim(), code.trim())
+        SignInResult.Success
+    } catch (e: AuthRestException) {
+        when (e.errorCode) {
+            AuthErrorCode.OverRequestRateLimit -> SignInResult.TooManyRequests
+            // otp_expired / invalid → the UI's "code isn't right or has expired".
+            else -> SignInResult.Error(e.errorDescription)
+        }
+    } catch (e: Exception) {
+        failed("verifyPasswordResetCode", e, "Couldn't verify the code")
+    }
+
+    /**
      * Sets (or changes) the current user's password. For a Google-only account this adds an
      * email/password credential, so they can afterwards sign in with email + password too. Requires a
      * live session (the user is already authenticated, so no takeover risk — unlike signing up again).
@@ -328,6 +385,8 @@ object AuthRepository {
                 client.auth.currentUserOrNull()?.id?.let { markPasswordSet(it) }
                 SignInResult.PasswordAlreadySet
             }
+            AuthErrorCode.WeakPassword -> SignInResult.WeakPassword
+            AuthErrorCode.ReauthenticationNeeded -> SignInResult.ReauthenticationNeeded
             else -> {
                 Timber.tag(TAG).w(e, "setPassword rejected: %s", e.errorCode)
                 SignInResult.Error(e.errorDescription)

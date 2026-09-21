@@ -81,13 +81,15 @@
     <string name="toast_delete_account_failed">Không thể xóa tài khoản. Vui lòng thử lại.</string>
     <string name="toast_password_set">Đã đặt mật khẩu — giờ bạn có thể đăng nhập bằng email.</string>
     <string name="toast_password_already_set">Tài khoản này đã có mật khẩu — bạn có thể đăng nhập bằng email.</string>
-    <string name="toast_password_failed">Không thể đặt mật khẩu. Vui lòng thử lại.</string>
+    <string name="toast_password_reauth">Để bảo mật, hãy đăng xuất rồi đăng nhập lại, sau đó đặt mật khẩu.</string>
+    <string name="toast_password_failed">Không thể đặt mật khẩu. Kiểm tra kết nối và thử lại.</string>
 
     <!-- Sign-in messages -->
     <string name="login_err_no_google">Không có tài khoản Google trên thiết bị này</string>
     <string name="login_info_confirm_email">Kiểm tra email để xác nhận tài khoản, sau đó đăng nhập.</string>
     <string name="login_info_needs_confirm">Tài khoản này chưa được xác nhận. Nhập mã trong email của bạn, hoặc gửi lại bên dưới.</string>
     <string name="login_err_invalid_email">Nhập địa chỉ email hợp lệ</string>
+    <string name="login_err_password_required">Nhập mật khẩu của bạn</string>
     <string name="login_err_password_short">Mật khẩu phải có ít nhất %1$d ký tự</string>
     <string name="login_err_password_mismatch">Mật khẩu không khớp</string>
     <string name="login_err_code_invalid">Mã không đúng hoặc đã hết hạn. Kiểm tra lại hoặc gửi lại mã mới.</string>
@@ -149,7 +151,7 @@
     <string name="settings_offline">Ngoại tuyến</string>
     <string name="settings_set_password">Đặt mật khẩu</string>
     <string name="set_password_title">Đặt mật khẩu</string>
-    <string name="set_password_body">Thêm mật khẩu để bạn có thể đăng nhập bằng email, không chỉ bằng Google.</string>
+    <string name="set_password_body">Thêm mật khẩu để bạn có thể đăng nhập bằng email, không chỉ bằng Google. Dùng ít nhất %1$d ký tự.</string>
     <string name="settings_delete_account">Xóa tài khoản</string>
     <string name="settings_delete_confirm_title">Xóa tài khoản?</string>
     <string name="settings_delete_confirm_body">Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn — bộ sưu tập, danh sách mong muốn và lịch sử đã bán. Không thể hoàn tác và không thể khôi phục dữ liệu.</string>
@@ -188,8 +190,8 @@
     <string name="settings_usage_analytics">Phân tích sử dụng</string>
     <string name="settings_usage_analytics_desc">Chia sẻ dữ liệu sử dụng ẩn danh để giúp cải thiện ứng dụng.</string>
     <string name="settings_data_attribution">Nguồn dữ liệu</string>
-    <string name="settings_attribution_body">Dữ liệu danh mục từ Brickset và Rebrickable. LEGO® là thương hiệu của Tập đoàn LEGO, đơn vị không tài trợ hay xác nhận ứng dụng này.</string>
-    <string name="settings_version">Phiên bản · v0.1.0 (bản xem trước)</string>
+    <string name="settings_attribution_body">Dữ liệu danh mục từ Brickset và Rebrickable. Hình ảnh từ Rebrickable và BrickLink. LEGO® là thương hiệu của Tập đoàn LEGO, đơn vị không tài trợ hay xác nhận ứng dụng này.</string>
+    <string name="settings_version">Phiên bản %1$s</string>
     <string name="settings_send_feedback">Gửi phản hồi</string>
     <string name="feedback_title">Gửi phản hồi</string>
     <string name="feedback_body">Hãy cho chúng tôi biết điều gì chưa ổn, còn thiếu. Chúng tôi đọc mọi phản hồi.</string>
@@ -340,6 +342,18 @@
     <string name="login_or">HOẶC</string>
     <string name="login_email">Email</string>
     <string name="login_password">Mật khẩu</string>
+    <string name="login_password_new">Mật khẩu (ít nhất %1$d ký tự)</string>
+    <!-- Quên mật khẩu: email → mã 6 số → mật khẩu mới -->
+    <string name="login_forgot_password">Quên mật khẩu?</string>
+    <!-- %1$s = "Điều khoản dịch vụ", %2$s = "Chính sách bảo mật" (cả hai là liên kết) -->
+    <string name="login_legal_acceptance">Khi tiếp tục, bạn đồng ý với %1$s và %2$s.</string>
+    <string name="login_reset_title">Đặt lại mật khẩu</string>
+    <string name="login_reset_body">Nhập email tài khoản của bạn, chúng tôi sẽ gửi mã 6 số.</string>
+    <string name="login_reset_send">Gửi mã</string>
+    <string name="login_reset_sent">Nếu %1$s có tài khoản BrickWares, mã 6 số đang được gửi đến. Nhập mã bên dưới.</string>
+    <string name="login_reset_new_body">Mã hợp lệ. Hãy chọn mật khẩu mới.</string>
+    <string name="login_reset_save">Lưu mật khẩu mới</string>
+    <string name="login_reset_done">Đã cập nhật mật khẩu. Bạn đã đăng nhập.</string>
     <string name="login_confirm_password">Xác nhận mật khẩu</string>
     <string name="login_signup_action">Đăng ký</string>
     <string name="login_have_account">Đã có tài khoản? </string>

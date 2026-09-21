@@ -15,6 +15,7 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.CsvTooNewException
 import com.senniapp.brickwares.data.repository.FeedbackCategory
 import com.senniapp.brickwares.data.repository.FeedbackRepository
+import com.senniapp.brickwares.data.repository.MIN_PASSWORD_LENGTH
 import com.senniapp.brickwares.data.repository.SignInResult
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.util.AppCurrency
@@ -105,6 +106,9 @@ class SettingsViewModel(
             val toast = when (result) {
                 SignInResult.Success -> UiText.Res(R.string.toast_password_set)
                 SignInResult.PasswordAlreadySet -> UiText.Res(R.string.toast_password_already_set)
+                SignInResult.WeakPassword -> UiText.Res(R.string.login_err_password_short, listOf(MIN_PASSWORD_LENGTH))
+                // secure_password_change: the session is older than 24 h → sign in again first.
+                SignInResult.ReauthenticationNeeded -> UiText.Res(R.string.toast_password_reauth)
                 else -> UiText.Res(R.string.toast_password_failed)
             }
             // Either way the account now provably has a password → no longer "Google-only"; the

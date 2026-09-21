@@ -64,10 +64,14 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.repository.MIN_PASSWORD_LENGTH
 import com.senniapp.brickwares.ui.components.rememberIsOnline
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
+import com.senniapp.brickwares.util.LegalLinks
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
 
 /**
  * On-demand sign-in **modal** (a mini login page, not a full screen): "Continue with Google" plus an
@@ -92,7 +96,9 @@ fun LoginScreen(
     val signUp = state.mode == LoginMode.SIGN_UP
     // Closing the modal resets the retained VM, so reopening starts on a fresh form rather than a
     // leftover OTP step. (Success paths are handled inside the VM via the auth-state observer.)
-    val dismiss = { onDismiss(); viewModel.reset() }
+    // reset() FIRST: it releases the forgot-password hold on SignInController, without which the
+    // onDismiss below would be ignored while that flow is on its signed-in "new password" step.
+    val dismiss = { viewModel.reset(); onDismiss() }
     // Seconds left on the Resend cooldown; re-keys and ticks whenever the cooldown window changes.
     var resendSecondsLeft by remember { mutableStateOf(0) }
     LaunchedEffect(state.resendCooldownUntil) {
@@ -136,6 +142,7 @@ fun LoginScreen(
                     Text(
                         stringResource(
                             when {
+                                state.reset != ResetStep.NONE -> R.string.login_reset_title
                                 state.awaitingCode -> R.string.login_confirm_title
                                 signUp -> R.string.login_create_account
                                 else -> R.string.login_welcome_back
@@ -160,7 +167,18 @@ fun LoginScreen(
                         disabledContentColor = colors.textMuted,
                     )
 
-                    if (state.awaitingCode) {
+                    if (state.reset != ResetStep.NONE) {
+                        // ---- Forgot password: email → 6-digit code → new password ----
+                        ResetPasswordSection(
+                            state = state,
+                            viewModel = viewModel,
+                            enabled = enabled,
+                            busy = busy,
+                            resendSecondsLeft = resendSecondsLeft,
+                            fieldColors = fieldColors,
+                            yellowButton = yellowButton,
+                        )
+                    } else if (state.awaitingCode) {
                         // ---- OTP confirmation: type the 6-digit code from the email ----
                         Text(
                             stringResource(R.string.login_confirm_sent, state.pendingEmail),
@@ -258,7 +276,14 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = state.password,
                             onValueChange = viewModel::onPasswordChange,
-                            placeholder = { Text(stringResource(R.string.login_password)) },
+                            // Creating a password → state the rule upfront; signing in → just "Password"
+                            // (an older, shorter password is still valid there).
+                            placeholder = {
+                                Text(
+                                    if (signUp) stringResource(R.string.login_password_new, MIN_PASSWORD_LENGTH)
+                                    else stringResource(R.string.login_password),
+                                )
+                            },
                             singleLine = true,
                             enabled = !busy,
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -331,6 +356,25 @@ fun LoginScreen(
                                 modifier = Modifier.clickable { viewModel.onSwitchMode() },
                             )
                         }
+                        if (!signUp) {
+                            // Sign-in only, centered under the "Sign up" row: the way back in for someone
+                            // who forgot their password (email → 6-digit code → new password).
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                stringResource(R.string.login_forgot_password),
+                                style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                                color = colors.brandYellow,
+                                modifier = Modifier.clickable(enabled = !busy) { viewModel.onForgotPassword() },
+                            )
+                        }
+                        // The acceptance moment: the Terms say that creating an account means agreeing
+                        // to them, so say it where accounts are made —
+                        // Google and email alike, sign-in and sign-up (a first Google sign-in IS a sign-up).
+                        Spacer(Modifier.height(16.dp))
+                        LegalAcceptanceLine(
+                            onTerms = { LegalLinks.open(context, LegalLinks.TERMS_OF_SERVICE_URL) },
+                            onPrivacy = { LegalLinks.open(context, LegalLinks.PRIVACY_POLICY_URL) },
+                        )
                     }
 
                     state.error?.let {
@@ -367,6 +411,36 @@ fun LoginScreen(
 }
 
 /**
+ * "By continuing, you agree to the Terms of Service and Privacy Policy." — the two document names are
+ * tappable links (Custom Tab). The
+ * sentence is ONE localized template with the names substituted, so each language keeps its own word
+ * order; the link ranges are found by locating the substituted names.
+ */
+@Composable
+private fun LegalAcceptanceLine(onTerms: () -> Unit, onPrivacy: () -> Unit) {
+    val colors = BwTheme.colors
+    val terms = stringResource(R.string.settings_terms)
+    val privacy = stringResource(R.string.settings_privacy_policy)
+    val sentence = stringResource(R.string.login_legal_acceptance, terms, privacy)
+    val linkStyle = TextLinkStyles(SpanStyle(color = colors.brandYellow, fontWeight = FontWeight.SemiBold))
+    val text = buildAnnotatedString {
+        append(sentence)
+        listOf(terms to onTerms, privacy to onPrivacy).forEach { (label, onClick) ->
+            val start = sentence.indexOf(label)
+            if (start >= 0) {
+                addLink(LinkAnnotation.Clickable(label, linkStyle) { onClick() }, start, start + label.length)
+            }
+        }
+    }
+    Text(
+        text = text,
+        style = BwType.body.copy(fontSize = 11.sp, lineHeight = 15.sp),
+        color = colors.textMuted,
+        textAlign = TextAlign.Center,
+    )
+}
+
+/**
  * A 6-box segmented input for the email OTP. Backed by a single hidden [BasicTextField] (so backspace,
  * paste and numeric-keyboard autofill all just work), with the visible boxes drawn in its
  * decorationBox — one square per digit, the next-to-type box highlighted. The field auto-focuses so the
@@ -374,7 +448,7 @@ fun LoginScreen(
  * the length, so this composable only mirrors [code] into the boxes.
  */
 @Composable
-private fun OtpCodeField(
+internal fun OtpCodeField(
     code: String,
     onCodeChange: (String) -> Unit,
     enabled: Boolean,
