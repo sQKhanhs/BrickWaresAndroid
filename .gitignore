@@ -24,3 +24,8 @@ local.properties
 *.p12
 *.pem
 keystore.properties
+
+# Database dumps taken before a prod `supabase db push` (free plan has no PITR). They contain REAL user
+# data (auth.users emails, collections) — never commit them. Keep them outside the repo when you can.
+backup-*.sql
+*.dump

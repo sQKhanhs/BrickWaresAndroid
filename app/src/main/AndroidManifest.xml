@@ -9,6 +9,16 @@
     <!-- Retirement alerts (Settings → Notifications): runtime-granted on Android 13+. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- NO advertising identifier. BrickWares shows no ads, but firebase-analytics merges these three
+         permissions into the build by default; with them present the Play Data Safety form has to
+         declare ad-ID access and the privacy policy's "no advertising identifier" would be false.
+         Removed here; ad-ID collection is also switched off in the <application> meta-data below, so
+         opting into usage analytics never involves the ad ID. Check after a Firebase bump:
+         app/build/intermediates/merged_manifest/<variant>/…/AndroidManifest.xml must not list them. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+
     <application
         android:name=".BrickWaresApplication"
         android:allowBackup="true"
@@ -48,6 +58,9 @@
              Observability.applyConsent() enables it only after the user agrees. Crashlytics is ALWAYS on
              (crash diagnostics) — no meta-data here, so it defaults to enabled. -->
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <!-- Even when the user opts in: never the advertising ID, never ad-personalization signals. -->
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
     </application>
 
 </manifest>

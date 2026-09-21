@@ -19,3 +19,4 @@ retired_test.sql
 # Studio scratch queries (local only)
 snippets/
 seed.sql.bak*
+seed.sql.*-bak
