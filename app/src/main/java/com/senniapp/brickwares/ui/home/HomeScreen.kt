@@ -496,9 +496,10 @@ private fun NewSetsCard(
                 Text(
                     text = buildAnnotatedString {
                         append(stringResource(R.string.home_new_sets_view_more))
-                        withStyle(SpanStyle(fontSize = 19.sp)) { append("  →") }
+                        withStyle(SpanStyle(fontSize = 18.sp)) { append("  →") }
                     },
-                    style = BwType.body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                    // Match the "New LEGO Sets" card title (cardTitle: 15sp ExtraBold); arrow stays a touch larger.
+                    style = BwType.cardTitle,
                     color = colors.text,
                 )
             }
