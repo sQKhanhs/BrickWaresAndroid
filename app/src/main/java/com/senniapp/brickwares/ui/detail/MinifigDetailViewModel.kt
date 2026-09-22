@@ -52,6 +52,10 @@ class MinifigDetailViewModel(
     private var resolvedFig: Minifig? = null
     private var appearsInSets: List<CatalogSet> = emptyList()
     private var resolveFailed = false
+    // Whether the fetchMinifig attempt for the current [figNum] has completed (see SetDetailViewModel):
+    // until it has, [rebuild] must not mark the page loaded, or a flow emission mid-fetch flashes the
+    // empty "not found" page over the spinner.
+    private var resolved = false
 
     init {
         viewModelScope.launch { repository.getCollectionItems().collect { collectionItems = it; rebuild() } }
@@ -70,6 +74,7 @@ class MinifigDetailViewModel(
         viewedFig = null
         resolvedFig = null
         resolveFailed = false
+        resolved = false
         appearsInSets = emptyList()
         // Clear the previous page immediately (loaded=false) so navigating detail→detail shows a loading
         // state, not the last fig's content, until the new fig resolves — fetchMinifig is a network query.
@@ -96,6 +101,7 @@ class MinifigDetailViewModel(
             if (figNum != fn) return@launch
             resolveFailed = failed
             resolvedFig = fig
+            resolved = true
             appearsInSets = if (fig == null) emptyList() else {
                 runCatching { catalogRepo.fetchSetsForMinifig(fn) }.getOrDefault(emptyList())
             }
@@ -106,6 +112,9 @@ class MinifigDetailViewModel(
 
     private fun rebuild() {
         val fn = figNum ?: return
+        // Don't render (or mark loaded) until the fetch has resolved — a flow emission mid-fetch must not
+        // flash the empty "not found" page over the loading spinner.
+        if (!resolved) return
         val fig = resolvedFig
         // Report the view once the fig resolves; once per page open.
         if (fig != null && viewedFig != fig.figNum) {

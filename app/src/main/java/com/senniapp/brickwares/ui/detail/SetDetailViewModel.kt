@@ -62,6 +62,11 @@ class SetDetailViewModel(
     private var resolvedSet: CatalogSet? = null
     private var minifigGrid: List<Minifig> = emptyList()
     private var resolveFailed = false
+    // Whether the fetchSet attempt for the current [catalogKey] has completed (success or failure). Until
+    // it has, [rebuild] — also driven by collection/wishlist/sales flow emissions — must NOT mark the page
+    // loaded: otherwise a flow emission mid-fetch (e.g. the catalog overlay loading on first app open)
+    // flips loaded=true with a null set, flashing "Set not found" over the spinner before the fetch ends.
+    private var resolved = false
 
     init {
         // Collection/wishlist/sales changes re-run the (network-free) overlay rebuild over the cached set.
@@ -91,6 +96,7 @@ class SetDetailViewModel(
         valueKey = null
         resolvedSet = null
         resolveFailed = false
+        resolved = false
         minifigGrid = emptyList()
         relatedSnapshot = emptyList()
         // Clear the previous page immediately (loaded=false) so navigating detail→detail shows a loading
@@ -122,6 +128,7 @@ class SetDetailViewModel(
             if (catalogKey != key) return@launch
             resolveFailed = failed
             resolvedSet = set
+            resolved = true
             if (set != null) {
                 // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — once per open.
                 if (relatedKey != set.id) {
@@ -150,6 +157,9 @@ class SetDetailViewModel(
 
     private fun rebuild() {
         val key = catalogKey ?: return
+        // Don't render (or mark the page loaded) until the fetch has resolved — a collection/wishlist/sales
+        // flow emission mid-fetch must not flash the empty "Set not found" page over the loading spinner.
+        if (!resolved) return
         val set = resolvedSet
         // The resolved hero's exact-variant identity (CMF/SDCC variants share a set_number, so owned/
         // wishlisted/sold marking must key on this, not the number). Null while unresolved (offline).
