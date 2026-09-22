@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -255,8 +256,10 @@ fun MetaLine(label: String, value: String) {
             value,
             style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
             color = colors.textSecondary,
-            softWrap = false,
-            maxLines = 1,
+            // Wrap a long value (e.g. a theme like "DC Comics Super Heroes") onto a second line rather
+            // than clipping it mid-word; the FlowRow keeps the label with it.
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
