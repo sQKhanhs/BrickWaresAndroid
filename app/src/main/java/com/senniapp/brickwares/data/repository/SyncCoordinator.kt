@@ -113,14 +113,18 @@ class SyncCoordinator(
             syncState.clearPullCursors()
             ThemeFavoritesPrefs.clear()
         }
-        sync(user.id) // sets last_account_id
+        // Record local ownership NOW, before syncing: past this point local Room holds this account's data
+        // (freshly cleared for a switch, or this account's already), so a later sign-in compares against the
+        // right id even if this first sync fails — closing the window where a failed sync left the previous
+        // account's id recorded while local already belonged to the new one.
+        syncState.setLastAccountId(user.id)
+        sync(user.id)
     }
 
     private suspend fun sync(uid: String): Boolean = mutex.withLock {
         runCatching {
             push(uid)
             pull() // reconstructs each pulled row's display fields via a batch catalog query (Decision 16)
-            syncState.setLastAccountId(uid)
             // Refresh the community value cache so a just-contributed paid price shows on the cards.
             ValueRepositoryProvider.instance.warm()
         }.onFailure { Timber.tag(TAG).e(it, "sync failed") }.isSuccess
@@ -212,14 +216,14 @@ class SyncCoordinator(
         val sales = fetchTable<RemoteSale>("sales")
         // Rebuild each pulled row's denormalized display fields from the catalog. Resolve every referenced
         // set/fig for all three tables in ONE batch per kind (Decision 16 — the client no longer holds the
-        // whole catalog); best-effort, so a catalog blip leaves rows keyed by their identity rather than
-        // aborting the pull. Cursors advance only AFTER a table's rows apply, so a failure re-pulls them.
+        // whole catalog). Let a fetch failure THROW so the pull ABORTS here, before any apply/cursor-advance:
+        // otherwise the rows whose name/theme couldn't be reconstructed get skipped by apply* AND the cursor
+        // advances past them, permanently losing that batch. Aborting means the next sync retries it.
         val setIds = (copies.mapNotNull { it.setId } + wishes.mapNotNull { it.setId } + sales.mapNotNull { it.setId }).toSet()
         val figNums = (copies.mapNotNull { it.figNum } + wishes.mapNotNull { it.figNum } + sales.mapNotNull { it.figNum }).toSet()
-        val sets = runCatching { catalog.fetchSetsByIds(setIds) }.getOrDefault(emptyList())
-            .mapNotNull { s -> s.setId?.let { it to s } }.toMap()
-        val figs = runCatching { catalog.fetchMinifigsByNums(figNums) }.getOrDefault(emptyList())
-            .associateBy { it.figNum }
+        val sets = catalog.fetchSetsByIds(setIds).mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        val figs = catalog.fetchMinifigsByNums(figNums).associateBy { it.figNum }
+        // Cursors advance only AFTER a table's rows apply, so an apply failure still re-pulls the batch.
         copies.forEach { applyCopy(it, sets, figs) }; advanceCursor("collection_copies", copies)
         wishes.forEach { applyWish(it, sets, figs) }; advanceCursor("wishlist_items", wishes)
         sales.forEach { applySale(it, sets, figs) }; advanceCursor("sales", sales)
