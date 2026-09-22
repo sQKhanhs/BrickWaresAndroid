@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -138,29 +139,49 @@ fun MinifigDetailScreen(
                 return@Column
             }
 
-            // Hero: image + name + actions.
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Hero card: centered image + name + actions (mirrors the Set detail hero / iOS).
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.card)
+                    .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
                 // Tap the image → full-screen gallery (SetThumb opens it when galleryImages is set).
-                SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 96.dp, iconSize = 40.dp, corner = 12.dp, galleryImages = listOfNotNull(fig.imageUrl))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(fig.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
-                    if (state.isOwned || state.isSold) {
+                SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 200.dp, iconSize = 64.dp, corner = 14.dp, galleryImages = listOfNotNull(fig.imageUrl))
+                Text(
+                    fig.name,
+                    style = BwType.cardTitle.copy(fontSize = 19.sp),
+                    color = colors.text,
+                    textAlign = TextAlign.Center,
+                )
+                if (state.isOwned || state.isSold) {
+                    MinifigActionButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        iconRes = R.drawable.ic_bw_check,
+                        label = stringResource(R.string.action_see_detail),
+                        filled = true,
+                        fillColor = colors.track,
+                        contentColor = colors.text,
+                        onClick = viewModel::onSeeCopies,
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         MinifigActionButton(
-                            iconRes = R.drawable.ic_bw_check,
-                            label = stringResource(R.string.action_see_detail),
-                            filled = true,
-                            fillColor = colors.track,
-                            contentColor = colors.text,
-                            onClick = viewModel::onSeeCopies,
-                        )
-                    } else {
-                        MinifigActionButton(
+                            modifier = Modifier.weight(1f),
                             iconRes = R.drawable.ic_bw_pieces,
-                            label = stringResource(R.string.action_add_to_collection),
+                            label = stringResource(R.string.action_add),
                             filled = true,
                             onClick = { if (isLoggedIn) viewModel.onAddClick() else SignInController.request() },
                         )
                         MinifigActionButton(
+                            modifier = Modifier.weight(1f),
                             iconRes = R.drawable.ic_bw_heart,
                             label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
                             filled = false,
@@ -311,6 +332,7 @@ private fun MinifigActionButton(
     iconRes: Int,
     label: String,
     filled: Boolean,
+    modifier: Modifier = Modifier,
     iconTint: Color? = null,
     fillColor: Color? = null,
     contentColor: Color? = null,
@@ -318,7 +340,7 @@ private fun MinifigActionButton(
 ) {
     val colors = BwTheme.colors
     val onFill = contentColor ?: colors.onYellow
-    val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
+    val base = modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
     val styled = if (filled) base.background(fillColor ?: colors.brandYellow) else base.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
     val clickable = if (onClick != null) styled.clickable(onClick = onClick) else styled
     Row(modifier = clickable.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {

@@ -262,16 +262,25 @@ private fun SetDetailContent(
                 return@Column
             }
 
-            // Hero: image + title + actions. The Rebrickable render (thumb) by default, the re-hosted box
-            // shot only as a fallback — both reliable CDNs, no BrickLink hit on open.
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Hero card: centered image + title + actions (mirrors the iOS detail hero). The Rebrickable
+            // render (thumb) by default, the re-hosted box shot only as a fallback — both reliable CDNs.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.card)
+                    .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
                 SetThumb(
                     imageUrl = rebrickableThumb,
                     fallbackUrl = set.boxImageUrl,
                     itemType = set.itemType,
-                    size = 96.dp,
-                    iconSize = 40.dp,
-                    corner = 12.dp,
+                    size = 200.dp,
+                    iconSize = 64.dp,
+                    corner = 14.dp,
                     // Tap the image to open the full-screen gallery (render first, then the box shot) —
                     // only once an image has actually loaded; the placeholder is not tappable.
                     modifier = if (heroLoaded && galleryImages.isNotEmpty()) {
@@ -281,30 +290,40 @@ private fun SetDetailContent(
                     },
                     onResolvedUrl = { url -> heroLoaded = url != null },
                 )
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(set.name, style = BwType.cardTitle.copy(fontSize = 17.sp), color = colors.text)
-                    if (state.isOwned || state.isSold) {
-                        // Owned and/or sold → a single gray "See Detail" opening the merged copies/sales
-                        // modal (matches the gray See Detail pill on the item cards).
+                Text(
+                    set.name,
+                    style = BwType.cardTitle.copy(fontSize = 19.sp),
+                    color = colors.text,
+                    textAlign = TextAlign.Center,
+                )
+                if (state.isOwned || state.isSold) {
+                    // Owned and/or sold → a single gray "See Detail" opening the merged copies/sales
+                    // modal (matches the gray See Detail pill on the item cards).
+                    ActionButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        iconRes = R.drawable.ic_bw_check,
+                        label = stringResource(R.string.action_see_detail),
+                        filled = true,
+                        fillColor = colors.track,
+                        contentColor = colors.text,
+                        onClick = onSeeCopies,
+                    )
+                } else {
+                    // Add + Wishlist, side by side (iOS-style).
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         ActionButton(
-                            iconRes = R.drawable.ic_bw_check,
-                            label = stringResource(R.string.action_see_detail),
-                            filled = true,
-                            fillColor = colors.track,
-                            contentColor = colors.text,
-                            onClick = onSeeCopies,
-                        )
-                    } else {
-                        // Add to Collection.
-                        ActionButton(
+                            modifier = Modifier.weight(1f),
                             iconRes = R.drawable.ic_bw_pieces,
-                            label = stringResource(R.string.action_add_to_collection),
+                            label = stringResource(R.string.action_add),
                             filled = true,
                             // Adding needs an account; logged out → prompt sign-in instead.
                             onClick = { if (isLoggedIn) onAddCollectionClick() else SignInController.request() },
                         )
-                        // Wishlist / Wishlisted.
                         ActionButton(
+                            modifier = Modifier.weight(1f),
                             iconRes = R.drawable.ic_bw_heart,
                             label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
                             filled = false,
@@ -500,6 +519,7 @@ private fun ActionButton(
     iconRes: Int,
     label: String,
     filled: Boolean,
+    modifier: Modifier = Modifier,
     iconTint: Color? = null,
     /** Override the filled background (defaults to brand yellow) — e.g. the gray "See Detail". */
     fillColor: Color? = null,
@@ -509,7 +529,7 @@ private fun ActionButton(
 ) {
     val colors = BwTheme.colors
     val onFill = contentColor ?: colors.onYellow
-    val base = Modifier
+    val base = modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(999.dp))
     val styled = if (filled) {
