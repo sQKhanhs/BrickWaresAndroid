@@ -141,15 +141,16 @@ fun ShareCollectionSheet(state: HomeUiState, onDismiss: () -> Unit) {
     // While true the card omits empty slots (+ any placeholders) so the shared image is clean.
     var captureMode by remember { mutableStateOf(false) }
     var editingSlot by remember { mutableStateOf<Int?>(null) }
-    // The three chosen slots, by set number (null = empty).
+    // The three chosen slots, by variantKey (null = empty) — keyed per-variant so a shared-number
+    // CMF/SDCC collection can't collide two variants onto one slot identity.
     val slots = remember { mutableStateListOf<String?>(null, null, null) }
     val graphicsLayer = rememberGraphicsLayer()
     val chooserTitle = stringResource(R.string.share_chooser_title)
 
     var saving by remember { mutableStateOf(false) }
 
-    // Resolve slots to live collection entries (drops any set no longer owned).
-    val selected: List<FeaturedSet?> = slots.map { sn -> state.collectionSets.firstOrNull { it.setNumber == sn } }
+    // Resolve slots to live collection entries by variantKey (drops any set no longer owned).
+    val selected: List<FeaturedSet?> = slots.map { vk -> state.collectionSets.firstOrNull { it.variantKey == vk } }
 
     // Render the card into the graphics layer with the empty-slot placeholders hidden, then snapshot it.
     val captureCard: suspend () -> android.graphics.Bitmap = {
@@ -199,7 +200,7 @@ fun ShareCollectionSheet(state: HomeUiState, onDismiss: () -> Unit) {
                 currency = state.currency,
                 disabled = taken,
                 onBack = { editingSlot = null },
-                onPick = { sn -> slots[editing] = sn; editingSlot = null },
+                onPick = { vk -> slots[editing] = vk; editingSlot = null },
             )
         } else {
             ShareSheetContent(
@@ -553,14 +554,14 @@ private fun SetPickerContent(sets: List<FeaturedSet>, currency: AppCurrency, dis
             Text(stringResource(R.string.share_choose_set), style = BwType.cardTitle.copy(fontSize = 16.sp), color = colors.text)
         }
         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 4.dp)) {
-            items(sets, key = { it.setNumber }) { s ->
-                val isTaken = s.setNumber in disabled
+            items(sets, key = { it.variantKey }) { s ->
+                val isTaken = s.variantKey in disabled
                 Row(
                     // Sets already in another slot are greyed + unpickable (no duplicates on the card).
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .then(if (isTaken) Modifier else Modifier.clickable { onPick(s.setNumber) })
+                        .then(if (isTaken) Modifier else Modifier.clickable { onPick(s.variantKey) })
                         .alpha(if (isTaken) 0.4f else 1f)
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,

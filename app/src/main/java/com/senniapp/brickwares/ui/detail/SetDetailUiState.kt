@@ -22,10 +22,12 @@ data class SetDetailUiState(
      *  gives the "Total paid" shown, exact in a single currency. */
     val ownedItem: CollectionItem? = null,
     /**
-     * The set whose See-Details (copies) dialog is open — the hero set OR a recommended owned set —
-     * with [copiesItem] the live collection item resolved from it. Null = the dialog is closed.
+     * The [com.senniapp.brickwares.data.model.CollectionItem.variantKey] of the set whose See-Details
+     * (copies) dialog is open — the hero set OR a recommended owned set — with [copiesItem] the live
+     * collection item resolved from it. Keyed on the exact variant (not a bare number) so a shared-number
+     * CMF/SDCC dialog shows only that variant's copies/sales. Null = the dialog is closed.
      */
-    val copiesSetNumber: String? = null,
+    val copiesVariantKey: String? = null,
     val copiesItem: CollectionItem? = null,
     /** When non-null, the Add sheet is in edit mode for this copy. */
     val editingCopy: Copy? = null,

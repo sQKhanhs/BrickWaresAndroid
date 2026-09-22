@@ -4,6 +4,16 @@ package com.senniapp.brickwares.data.model
 enum class Condition { NEW, USED }
 
 /**
+ * Prefix marking a Set-Detail navigation key that carries an exact catalog `set_id` (e.g. "sid:51452").
+ * A bare set_number resolves a shared-number CMF/SDCC series to its LOWEST variant, so Collection /
+ * Wishlist / Sales cards — which store the picked variant only as a set_id, not a number_variant — must
+ * navigate with this form to open the exact variant the user owns/wants/sold. Resolved in
+ * [com.senniapp.brickwares.data.repository.CatalogRepository.fetchSet]. Colon-delimited so it can never
+ * collide with a real set_number.
+ */
+const val SID_PREFIX = "sid:"
+
+/**
  * Catalog (reference) data for a set, returned by set-number search in the Add sheet.
  * In production this comes from Brickset; here it's mock data. It carries everything
  * needed to build a [CollectionItem] except the user-supplied fields (paid, condition…).
@@ -55,6 +65,13 @@ data class CatalogSet(
      * for list keys and detail navigation, never [setNumber] on its own.
      */
     val id: String get() = "$setNumber-$numberVariant"
+
+    /**
+     * Ownership identity — matches [CollectionItem.variantKey]/[WishlistItem.variantKey]: the catalog
+     * `set_id` for a cataloged set (so shared-number CMF/SDCC variants mark owned/wishlisted per-variant,
+     * not all-or-nothing by number), else the number. Used by the card owned/wishlisted/sold marking.
+     */
+    val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
 
     /**
      * Pre-lowercased "number name theme" key for substring search, computed once at construction.

@@ -81,8 +81,8 @@ fun NewSetsScreen(
                     items(sets, key = { it.id }) { set ->
                         SetResultCard(
                             set = set,
-                            wishlisted = set.setNumber in state.wishlistedNumbers,
-                            owned = set.setNumber in state.ownedNumbers || set.setNumber in state.soldNumbers,
+                            wishlisted = set.variantKey in state.wishlistedNumbers,
+                            owned = set.variantKey in state.ownedNumbers || set.variantKey in state.soldNumbers,
                             onOpenDetail = { onOpenSetDetail(set.id) },
                             onAddCollection = { viewModel.onAddToCollectionClick(set) },
                             onAddWishlist = { viewModel.onAddToWishlist(set) },

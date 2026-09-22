@@ -208,8 +208,8 @@ fun MinifigDetailScreen(
                 state.appearsIn.forEach { set ->
                     SetResultCard(
                         set = set,
-                        wishlisted = set.setNumber in state.wishlistedNumbers,
-                        owned = set.setNumber in state.ownedNumbers,
+                        wishlisted = set.variantKey in state.wishlistedNumbers,
+                        owned = set.variantKey in state.ownedNumbers,
                         onOpenDetail = { onOpenSetDetail(set.id) },
                         onAddCollection = { viewModel.onSetAddCollection(set) },
                         onAddWishlist = { viewModel.onSetAddWishlist(set) },

@@ -141,8 +141,8 @@ class MinifigDetailViewModel(
                 sales = figSales,
                 appearsIn = appearsIn,
                 retired = retired,
-                ownedNumbers = collectionItems.mapTo(HashSet()) { c -> c.setNumber },
-                wishlistedNumbers = wishlist.mapTo(HashSet()) { w -> w.setNumber },
+                ownedNumbers = collectionItems.mapTo(HashSet()) { c -> c.variantKey },
+                wishlistedNumbers = wishlist.mapTo(HashSet()) { w -> w.variantKey },
             )
         }
         if (fig != null && valueKey != fn) {

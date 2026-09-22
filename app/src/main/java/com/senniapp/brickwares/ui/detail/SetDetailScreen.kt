@@ -380,8 +380,8 @@ private fun SetDetailContent(
                 state.related.forEach { rel ->
                     SetResultCard(
                         set = rel,
-                        wishlisted = rel.setNumber in state.wishlistedNumbers,
-                        owned = rel.setNumber in state.ownedNumbers,
+                        wishlisted = rel.variantKey in state.wishlistedNumbers,
+                        owned = rel.variantKey in state.ownedNumbers,
                         onOpenDetail = { onOpenSetDetail(rel.id) },
                         onAddCollection = { onRecommendAddCollection(rel) },
                         onAddWishlist = { onRecommendAddWishlist(rel) },

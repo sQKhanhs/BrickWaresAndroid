@@ -21,6 +21,10 @@ data class Minifig(
     /** Distinct themes this fig belongs to. */
     val themes: List<String> get() = themeSubthemes.map { it.first }.distinct()
 
+    /** Ownership identity for the card owned/wishlisted marking — a minifig has no set_id, so it keys on
+     *  its fig_num, matching a minifig CollectionItem/WishlistItem's `variantKey` ("n<fig_num>"). */
+    val variantKey: String get() = "n$figNum"
+
     /** Pre-lowercased "fig_num name" key for substring search (see [CatalogSet.searchKey]). */
     val searchKey: String = "$figNum $name".lowercase()
 }

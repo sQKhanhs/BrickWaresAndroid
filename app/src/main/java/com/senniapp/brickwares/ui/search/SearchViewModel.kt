@@ -73,20 +73,20 @@ class SearchViewModel(
         // Observe the wishlist so result cards can show a "Wishlisted" state.
         viewModelScope.launch {
             repository.getWishlistItems().collect { items ->
-                _uiState.update { it.copy(wishlistedNumbers = items.map { w -> w.setNumber }.toSet()) }
+                _uiState.update { it.copy(wishlistedNumbers = items.map { w -> w.variantKey }.toSet()) }
             }
         }
         // Observe the collection so result cards for owned sets show "See Detail" instead of add/wishlist.
         viewModelScope.launch {
             repository.getCollectionItems().collect { items ->
-                _uiState.update { it.copy(ownedNumbers = items.map { c -> c.setNumber }.toSet()) }
+                _uiState.update { it.copy(ownedNumbers = items.map { c -> c.variantKey }.toSet()) }
             }
         }
         // Observe sales too, so a set the user has sold also shows "See Detail" (opens the detail page,
         // which surfaces the sale in the merged modal).
         viewModelScope.launch {
             repository.getSoldItems().collect { items ->
-                _uiState.update { it.copy(soldNumbers = items.map { s -> s.setNumber }.toSet()) }
+                _uiState.update { it.copy(soldNumbers = items.map { s -> s.variantKey }.toSet()) }
             }
         }
     }

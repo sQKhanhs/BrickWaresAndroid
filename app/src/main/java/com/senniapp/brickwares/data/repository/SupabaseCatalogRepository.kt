@@ -3,6 +3,7 @@ package com.senniapp.brickwares.data.repository
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.ItemType
+import com.senniapp.brickwares.data.model.SID_PREFIX
 import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.senniapp.brickwares.util.CatalogImages
@@ -187,6 +188,19 @@ class SupabaseCatalogRepository(
             .let(::dedupeDuplicateVariants)
 
     override suspend fun fetchSet(catalogKey: String): CatalogSet? = withTimeout(LOAD_TIMEOUT_MS) {
+        // A "sid:<set_id>" key (from a Collection/Wishlist/Sales card, which stores the picked variant
+        // only as a set_id) resolves the EXACT variant — checked first, before the "<number>-<variant>"
+        // / bare-number parsing, since it has no dash and would otherwise hit the lowest-variant fallback.
+        if (catalogKey.startsWith(SID_PREFIX)) {
+            val id = catalogKey.removePrefix(SID_PREFIX).toLongOrNull()
+            val row = id?.let {
+                client.from("sets").select(Columns.raw(SET_COLS)) {
+                    filter { eq("set_id", it) }
+                    limit(1)
+                }.decodeList<SetRow>().firstOrNull()
+            }
+            return@withTimeout row?.toCatalogSet()?.takeIf { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+        }
         // catalogKey is CatalogSet.id ("<number>-<variant>") or a bare number. Try the exact
         // number+variant first, then fall back to the number (lowest variant).
         val dash = catalogKey.lastIndexOf('-')

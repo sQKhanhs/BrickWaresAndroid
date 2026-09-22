@@ -125,10 +125,18 @@ class SetDetailViewModel(
             if (set != null) {
                 // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — once per open.
                 if (relatedKey != set.id) {
-                    val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
-                    val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
+                    val ownedNumbers = collectionItems.mapTo(HashSet()) { it.variantKey }
+                    val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.variantKey }
+                    // Legacy set_id-less rows key on "n<number>"; also exclude a recommended set the user
+                    // owns/wants only through such a row (bare number matches) so it isn't offered as "Add".
+                    val ownedLegacyNums = collectionItems.filter { it.setId == null }.mapTo(HashSet()) { it.setNumber }
+                    val wishlistedLegacyNums = wishlist.filter { it.setId == null }.mapTo(HashSet()) { it.setNumber }
                     relatedSnapshot = runCatching { catalogRepo.setsInTheme(set.theme) }.getOrDefault(emptyList())
-                        .filter { it.id != set.id && it.setNumber !in ownedNumbers && it.setNumber !in wishlistedNumbers }
+                        .filter {
+                            it.id != set.id &&
+                                it.variantKey !in ownedNumbers && it.variantKey !in wishlistedNumbers &&
+                                it.setNumber !in ownedLegacyNums && it.setNumber !in wishlistedLegacyNums
+                        }
                         .shuffled()
                         .take(3)
                     relatedKey = set.id
@@ -143,23 +151,36 @@ class SetDetailViewModel(
     private fun rebuild() {
         val key = catalogKey ?: return
         val set = resolvedSet
-        val sn = set?.setNumber ?: key
+        // The resolved hero's exact-variant identity (CMF/SDCC variants share a set_number, so owned/
+        // wishlisted/sold marking must key on this, not the number). Null while unresolved (offline).
+        val heroKey = set?.variantKey
+        val heroNum = set?.setNumber
+        // A user-data row belongs to this hero when its variant matches — or, for a LEGACY row saved
+        // before set_id was tracked (variantKey "n<number>"), when the bare number matches. The legacy
+        // clause fires only for set_id-less rows, so set_id-backed CMF/SDCC variants stay strictly
+        // per-variant; a legacy row stays ambiguous across a shared number until it is re-added.
+        fun matchesHero(vk: String, sid: Long?, num: String): Boolean =
+            heroKey != null && (vk == heroKey || (sid == null && num == heroNum))
         // Report the view once the set resolves; rebuilds from collection/wishlist changes don't re-report.
         if (set != null && viewedId != set.id) {
             viewedId = set.id
             Observability.logItemViewed(kind = "set", id = set.id, name = set.name, theme = set.theme)
         }
-        val owned = collectionItems.find { it.setNumber == sn }
+        // Prefer the exact-variant row; only fall back to a legacy set_id-less row when there's no exact
+        // one (so a re-added row wins over a stale legacy one for the same number).
+        val owned = heroKey?.let { hk -> collectionItems.find { it.variantKey == hk } }
+            ?: collectionItems.find { it.setId == null && it.setNumber == heroNum }
         // Keep the open copies dialog live (hero OR a recommended set), so edits/deletes/sells reflect.
-        // If its item is no longer owned (last copy deleted), close it — clearing copiesSetNumber too,
-        // so it doesn't silently re-open when that set is added again later.
-        val openCs = _uiState.value.copiesSetNumber
-        val copiesItem = openCs?.let { cs -> collectionItems.find { it.setNumber == cs } }
-        val copiesSales = openCs?.let { cs -> soldItems.filter { s -> s.setNumber == cs } } ?: emptyList()
+        // Resolved by the exact variantKey held in copiesVariantKey, so a shared-number dialog never
+        // pulls in a sibling variant's copies/sales. If its item is no longer owned (last copy deleted)
+        // and it has no sales, close it — clearing copiesVariantKey so it doesn't silently re-open later.
+        val openCs = _uiState.value.copiesVariantKey
+        val copiesItem = openCs?.let { cs -> collectionItems.find { it.variantKey == cs } }
+        val copiesSales = openCs?.let { cs -> soldItems.filter { s -> s.variantKey == cs } } ?: emptyList()
         // Keep the modal open while the set still has copies OR sales; close it when both are gone.
         val copiesSn = openCs?.takeIf { copiesItem != null || copiesSales.isNotEmpty() }
-        val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
-        val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.setNumber }
+        val ownedNumbers = collectionItems.mapTo(HashSet()) { it.variantKey }
+        val wishlistedNumbers = wishlist.mapTo(HashSet()) { it.variantKey }
         _uiState.update {
             it.copy(
                 loaded = true,
@@ -169,14 +190,14 @@ class SetDetailViewModel(
                 isOwned = owned != null,
                 ownedCount = owned?.totalQty ?: 0,
                 ownedItem = owned,
-                isWishlisted = wishlist.any { w -> w.setNumber == sn },
-                isSold = soldItems.any { s -> s.setNumber == sn },
+                isWishlisted = wishlist.any { w -> matchesHero(w.variantKey, w.setId, w.setNumber) },
+                isSold = soldItems.any { s -> matchesHero(s.variantKey, s.setId, s.setNumber) },
                 copiesSales = copiesSales,
                 minifigs = if (set == null) emptyList() else minifigGrid,
                 related = if (set == null) emptyList() else relatedSnapshot,
                 ownedNumbers = ownedNumbers,
                 wishlistedNumbers = wishlistedNumbers,
-                copiesSetNumber = copiesSn,
+                copiesVariantKey = copiesSn,
                 copiesItem = copiesItem,
             )
         }
@@ -238,11 +259,12 @@ class SetDetailViewModel(
 
     /** From a recommendation card's "See Detail" (owned) button — opens its copies dialog in place. */
     fun onRecommendSeeCopies(set: CatalogSet) {
+        val vk = set.variantKey
         _uiState.update {
             it.copy(
-                copiesSetNumber = set.setNumber,
-                copiesItem = collectionItems.find { c -> c.setNumber == set.setNumber },
-                copiesSales = soldItems.filter { s -> s.setNumber == set.setNumber },
+                copiesVariantKey = vk,
+                copiesItem = collectionItems.find { c -> c.variantKey == vk },
+                copiesSales = soldItems.filter { s -> s.variantKey == vk },
             )
         }
     }
@@ -297,14 +319,16 @@ class SetDetailViewModel(
     fun onConfirmSell(quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String) {
         val state = _uiState.value
         val copy = state.sellCopy
-        val sn = state.copiesSetNumber ?: state.set?.setNumber
+        // sellCopy resolves the copy by its id (the set number is only a label), so the exact owned
+        // variant is targeted regardless; use the dialog item's own number for a correct toast/label.
+        val sn = state.copiesItem?.setNumber ?: state.set?.setNumber
         val name = state.copiesItem?.name ?: state.set?.name
         if (copy != null && sn != null) {
             repository.sellCopy(sn, copy.id, quantity, salePrice, currency, soldOn)
         }
         _uiState.update {
             it.copy(
-                sellCopy = null, copiesSetNumber = null, copiesItem = null,
+                sellCopy = null, copiesVariantKey = null, copiesItem = null,
                 toastMessage = name?.let { n -> UiText.Res(R.string.toast_sold, listOf(n)) } ?: it.toastMessage,
             )
         }
@@ -313,13 +337,21 @@ class SetDetailViewModel(
     // ---- Owned-item copies (the See-Details dialog — hero set or a recommended owned set) ----
 
     fun onSeeCopies() = _uiState.update {
-        val sn = it.set?.setNumber
+        val set = it.set
+        val owned = it.ownedItem
+        // Key the dialog on the actual owned/sold row's OWN variant key — a legacy (set_id-less) row uses
+        // "n<number>", not the hero's "s<id>" — so rebuild's exact-key re-resolution keeps it populated.
+        val soldMatch = set?.let { s ->
+            soldItems.firstOrNull { x -> x.variantKey == s.variantKey }
+                ?: soldItems.firstOrNull { x -> x.setId == null && x.setNumber == s.setNumber }
+        }
+        val vk = owned?.variantKey ?: soldMatch?.variantKey ?: set?.variantKey
         it.copy(
-            copiesSetNumber = sn, copiesItem = it.ownedItem,
-            copiesSales = sn?.let { s -> soldItems.filter { x -> x.setNumber == s } } ?: emptyList(),
+            copiesVariantKey = vk, copiesItem = owned,
+            copiesSales = vk?.let { k -> soldItems.filter { x -> x.variantKey == k } } ?: emptyList(),
         )
     }
-    fun onDismissCopies() = _uiState.update { it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList()) }
+    fun onDismissCopies() = _uiState.update { it.copy(copiesVariantKey = null, copiesItem = null, copiesSales = emptyList()) }
 
     /** Delete a sale shown in the merged See Details modal (view-only edit lives on the Collection tab). */
     fun onDeleteSale(saleId: String) = repository.removeSale(saleId)
@@ -328,25 +360,25 @@ class SetDetailViewModel(
 
     /** Add another copy of the copies dialog's set (opens the Add sheet in Collection mode). */
     fun onAddCopyForSet() = _uiState.update {
-        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = false, addTarget = it.copiesTargetSet())
+        it.copy(copiesVariantKey = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = false, addTarget = it.copiesTargetSet())
     }
 
     /** Add a sale of the copies dialog's set (opens the Add sheet in Sales mode). */
     fun onAddSaleForSet() = _uiState.update {
-        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = true, addTarget = it.copiesTargetSet())
+        it.copy(copiesVariantKey = null, copiesItem = null, copiesSales = emptyList(), editingCopy = null, addSalesMode = true, addTarget = it.copiesTargetSet())
     }
 
     /** Edit an existing copy of the copies dialog's set (opens the Add sheet in edit mode). */
     fun onEditCopy(copy: Copy) = _uiState.update {
-        it.copy(copiesSetNumber = null, copiesItem = null, copiesSales = emptyList(), editingCopy = copy, addSalesMode = false, addTarget = it.copiesTargetSet())
+        it.copy(copiesVariantKey = null, copiesItem = null, copiesSales = emptyList(), editingCopy = copy, addSalesMode = false, addTarget = it.copiesTargetSet())
     }
 
     /** The exact [CatalogSet] the copies dialog is for — the hero or a recommended set (right variant). */
     private fun SetDetailUiState.copiesTargetSet(): CatalogSet? {
-        val sn = copiesSetNumber ?: return null
+        val vk = copiesVariantKey ?: return null
         // The copies dialog only ever opens for the hero or a recommendation card, so those cover it.
-        return set?.takeIf { it.setNumber == sn }
-            ?: related.firstOrNull { it.setNumber == sn }
+        return set?.takeIf { it.variantKey == vk }
+            ?: related.firstOrNull { it.variantKey == vk }
     }
 
     // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.

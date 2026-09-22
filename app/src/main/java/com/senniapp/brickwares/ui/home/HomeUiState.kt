@@ -58,4 +58,11 @@ data class FeaturedSet(
     val theme: String,
     val value: Long,
     val imageUrl: String? = null,
+    /**
+     * The owning item's [com.senniapp.brickwares.data.model.CollectionItem.variantKey] — unique per
+     * owned variant. Used as the picker/slot identity so a collection holding several shared-number
+     * CMF/SDCC variants (all one set_number) doesn't collide on duplicate LazyColumn keys (crash) or
+     * grey out / mis-render a sibling variant.
+     */
+    val variantKey: String,
 )

@@ -79,6 +79,7 @@ class HomeViewModel(
                             theme = item.theme,
                             value = item.worthPerUnitIn(currency) * item.totalQty,
                             imageUrl = item.imageUrl,
+                            variantKey = item.variantKey,
                         )
                     }
                     .sortedByDescending { it.value }

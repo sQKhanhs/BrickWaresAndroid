@@ -274,7 +274,7 @@ private fun CollectionContent(
                                 onDetail = { onItemDetail(item) },
                                 onOpenDetail = {
                                     if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
-                                    else onOpenSetDetail(item.setNumber)
+                                    else onOpenSetDetail(item.detailNavKey)
                                 },
                             )
                         }
@@ -319,7 +319,7 @@ private fun CollectionContent(
                                 onDetail = { onSaleDetail(sold) },
                                 onOpenDetail = {
                                     if (sold.itemType == ItemType.MINIFIG) onOpenMinifigDetail(sold.setNumber)
-                                    else onOpenSetDetail(sold.setNumber)
+                                    else onOpenSetDetail(sold.detailNavKey)
                                 },
                             )
                         }

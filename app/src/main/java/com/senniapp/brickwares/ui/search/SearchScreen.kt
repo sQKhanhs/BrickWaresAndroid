@@ -399,8 +399,8 @@ private fun SearchContent(
                         items(state.results, key = { it.id }) { set ->
                             SetResultCard(
                                 set = set,
-                                wishlisted = set.setNumber in state.wishlistedNumbers,
-                                owned = set.setNumber in state.ownedNumbers || set.setNumber in state.soldNumbers,
+                                wishlisted = set.variantKey in state.wishlistedNumbers,
+                                owned = set.variantKey in state.ownedNumbers || set.variantKey in state.soldNumbers,
                                 onOpenDetail = { onOpenSetDetail(set.id) },
                                 onAddCollection = { onAddToCollectionClick(set) },
                                 onAddWishlist = { onAddToWishlist(set) },
@@ -417,8 +417,8 @@ private fun SearchContent(
                         items(state.minifigPageItems, key = { it.figNum }) { fig ->
                             MinifigCard(
                                 fig = fig,
-                                owned = fig.figNum in state.ownedNumbers,
-                                wishlisted = fig.figNum in state.wishlistedNumbers,
+                                owned = fig.variantKey in state.ownedNumbers,
+                                wishlisted = fig.variantKey in state.wishlistedNumbers,
                                 onOpen = { onOpenMinifig(fig.figNum) },
                                 onAdd = { onAddMinifig(fig) },
                                 onWishlist = { onWishlistMinifig(fig) },
@@ -820,8 +820,8 @@ private fun ThemeDetailView(
         items(results, key = { it.id }) { set ->
             SetResultCard(
                 set = set,
-                wishlisted = set.setNumber in wishlistedNumbers,
-                owned = set.setNumber in ownedNumbers || set.setNumber in soldNumbers,
+                wishlisted = set.variantKey in wishlistedNumbers,
+                owned = set.variantKey in ownedNumbers || set.variantKey in soldNumbers,
                 onOpenDetail = { onOpenSetDetail(set.id) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },
@@ -929,8 +929,8 @@ private fun MinifigThemeDetailView(
             items(results, key = { it.figNum }) { fig ->
                 MinifigCard(
                     fig = fig,
-                    owned = fig.figNum in ownedNumbers,
-                    wishlisted = fig.figNum in wishlistedNumbers,
+                    owned = fig.variantKey in ownedNumbers,
+                    wishlisted = fig.variantKey in wishlistedNumbers,
                     onOpen = { onOpen(fig.figNum) },
                     onAdd = { onAdd(fig) },
                     onWishlist = { onWishlist(fig) },

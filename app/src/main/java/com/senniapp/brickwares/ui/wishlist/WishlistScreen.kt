@@ -200,7 +200,7 @@ private fun WishlistContent(
                         onRemove = { onRemove(item) },
                         onOpenDetail = {
                             if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
-                            else onOpenSetDetail(item.setNumber)
+                            else onOpenSetDetail(item.detailNavKey)
                         },
                     )
                 }

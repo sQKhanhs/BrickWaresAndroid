@@ -65,6 +65,10 @@ data class CollectionItem(
      *  stored in [setNumber]). Kept in step with the repository's row-level grouping key. */
     val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
 
+    /** Set-Detail navigation key: the exact variant via its `set_id` when known (so a shared-number
+     *  CMF/SDCC set opens the owned variant, not the lowest), else the bare number. See [SID_PREFIX]. */
+    val detailNavKey: String get() = setId?.let { "$SID_PREFIX$it" } ?: setNumber
+
     /** Total paid across all copies, in **USD cents** (copies may carry different currencies, so each
      *  is normalized before summing). For cross-item math (collection/sales stats); for a single item's
      *  on-screen "Paid" use [totalPaidIn] so a same-currency item shows exactly, without a USD round-trip. */

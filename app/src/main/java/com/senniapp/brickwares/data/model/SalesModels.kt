@@ -40,6 +40,9 @@ data class SoldItem(
     /** Grouping/targeting identity — see [CollectionItem.variantKey]. */
     val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
 
+    /** Set-Detail navigation key — see [CollectionItem.detailNavKey]. */
+    val detailNavKey: String get() = setId?.let { "$SID_PREFIX$it" } ?: setNumber
+
     /** Profit in [currency]'s unit (sale and paid were entered together, so same currency). */
     val profit: Long get() = saleValue - pricePaid
     val profitPercent: Double

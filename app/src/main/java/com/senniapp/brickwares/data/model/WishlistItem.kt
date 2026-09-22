@@ -31,4 +31,10 @@ data class WishlistItem(
     /** When the item was added to the wishlist (epoch millis; the row's updatedAt — wishlist rows aren't
      *  edited after adding, so this is effectively the "date added"). Drives the "Date added" sort. */
     val addedAt: Long = 0L,
-)
+) {
+    /** Ownership identity — see [CollectionItem.variantKey]. */
+    val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
+
+    /** Set-Detail navigation key — see [CollectionItem.detailNavKey]. */
+    val detailNavKey: String get() = setId?.let { "$SID_PREFIX$it" } ?: setNumber
+}
