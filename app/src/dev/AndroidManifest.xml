@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Dev-flavor overlay: the dev build talks to local Supabase over http://10.0.2.2:54321,
-  so cleartext traffic must be allowed. This overlay applies to dev builds ONLY — prod
-  uses https and is unaffected.
+  Dev-flavor overlay. It used to set android:usesCleartextTraffic="true" (a blanket allowance) so the
+  dev build could reach the local Supabase stack over http://10.0.2.2:54321. That is now handled by
+  the per-variant network security config generated in app/build.gradle.kts
+  (GenerateNetworkSecurityConfig): cleartext stays OFF everywhere except an explicit allow-list of the
+  local-stack hosts (emulator alias, loopback, and the LAN IP from BRICKWARES_DEV_SUPABASE_URL).
+  Nothing dev-specific remains in the manifest itself; the file is kept as the place for future
+  dev-only manifest overrides.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <application
-        android:usesCleartextTraffic="true"
-        tools:targetApi="28" />
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application />
 </manifest>

@@ -96,7 +96,8 @@ object RatePrompt {
      */
     fun openStore(context: Context) {
         RatePrefs.done = true // been to the store → the prompt has done its job
-        val pkg = BuildConfig.APPLICATION_ID.removeSuffix(".dev")
+        // The Play listing is the prod package; debug/dev variants carry a suffix (".debug" / ".dev").
+        val pkg = BuildConfig.APPLICATION_ID.removeSuffix(".debug").removeSuffix(".dev")
         val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(market) }.onFailure {
             val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
