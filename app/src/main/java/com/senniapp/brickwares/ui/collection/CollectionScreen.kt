@@ -267,7 +267,7 @@ private fun CollectionContent(
                 if (state.visibleItems.isEmpty()) {
                     item { EmptyStateArt(stringResource(R.string.collection_empty)) }
                 } else {
-                    items(state.pageItems, key = { it.setNumber }) { item ->
+                    items(state.pageItems, key = { it.setId?.toString() ?: it.setNumber }) { item ->
                         SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
                             ItemCard(
                                 item = item,
@@ -406,7 +406,7 @@ private fun CollectionContent(
                 onDismiss = onDismissDetail,
                 onDeleteCopy = onDeleteCopy,
                 onEditCopy = { copy -> state.detailItem?.let { onEditCopy(it, copy) } },
-                onSellCopy = { copy -> state.detailItem?.let { onSellCopyRequest(it.setNumber, copy) } },
+                onSellCopy = { copy -> state.detailItem?.let { onSellCopyRequest(it.variantKey, copy) } },
                 onEditSale = onEditSale,
                 onDeleteSale = onDeleteSale,
                 onAddCollection = onDetailAddCollection,

@@ -49,8 +49,12 @@ interface CollectionRepository {
     /** Removes a single copy; if it was the set's last copy, the set is removed too. */
     fun removeCopy(setNumber: String, copyId: String)
 
-    /** Removes an entire item (all copies of the set) from the collection. */
-    fun removeItem(setNumber: String)
+    /**
+     * Removes an entire item (all copies) from the collection. [setId] identifies the EXACT set so a
+     * shared-number variant (CMF/SDCC) is removed on its own; null (minifigs / legacy rows) falls back
+     * to the set number.
+     */
+    fun removeItem(setNumber: String, setId: Long?)
 
     /** Replaces an existing copy (matched by id) with an edited version. */
     fun updateCopy(setNumber: String, copy: Copy)
@@ -108,6 +112,9 @@ interface CollectionRepository {
     /** Adds a set to the wishlist. No-op if the set is already wishlisted. */
     fun addToWishlist(item: WishlistItem)
 
-    /** Removes a set from the wishlist (e.g. after moving it into the collection). */
-    fun removeFromWishlist(setNumber: String)
+    /**
+     * Removes a set from the wishlist (e.g. after moving it into the collection). [setId] identifies the
+     * EXACT set for a shared-number variant; null (minifigs / legacy rows) falls back to the set number.
+     */
+    fun removeFromWishlist(setNumber: String, setId: Long?)
 }

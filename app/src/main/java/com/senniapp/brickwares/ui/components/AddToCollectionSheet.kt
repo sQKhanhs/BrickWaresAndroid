@@ -340,6 +340,7 @@ fun AddToCollectionSheet(
                         setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                         theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
                         pieces = set.pieces, minifigs = set.minifigs,
+                        setId = set.setId, // the exact selected variant (CMF/SDCC share a number)
                         retailPrice = set.retailPrice ?: 0L,
                         currentValue = null, growthPercent = null, status = set.status,
                         imageUrl = set.imageUrl,

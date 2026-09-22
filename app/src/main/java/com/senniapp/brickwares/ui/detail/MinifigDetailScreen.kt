@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,6 +91,14 @@ fun MinifigDetailScreen(
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (state.offline) {
             ErrorScreen(message = stringResource(R.string.error_connection), onRetry = viewModel::retry)
+            return@Box
+        }
+        // Resolving the fig (fetchMinifig in flight after opening / navigating) → a spinner, never the
+        // previous fig's content. Hardware/gesture Back still works via the app back stack.
+        if (!state.loaded) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.brandYellow)
+            }
             return@Box
         }
         val fig = state.fig

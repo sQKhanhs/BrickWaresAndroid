@@ -84,11 +84,18 @@ class SetDetailViewModel(
 
     fun load(catalogId: String) {
         this.catalogKey = catalogId
-        // Force a fresh set + recommendation fetch for this open (even when returning to a set seen before).
+        // Force a fresh set + recommendation + value fetch for this open (even when returning to a set
+        // seen before).
         relatedKey = null
         viewedId = null
+        valueKey = null
         resolvedSet = null
-        _uiState.update { it.copy(addTarget = null, toastMessage = null) }
+        resolveFailed = false
+        minifigGrid = emptyList()
+        relatedSnapshot = emptyList()
+        // Clear the previous page immediately (loaded=false) so navigating detail→detail shows a loading
+        // state, not the last set's content, until the new set resolves — fetchSet is a network round-trip.
+        _uiState.value = SetDetailUiState()
         resolveAndRebuild()
     }
 
@@ -100,18 +107,22 @@ class SetDetailViewModel(
     private fun resolveAndRebuild() {
         val key = catalogKey ?: return
         viewModelScope.launch {
+            var failed = false
             val set = try {
                 catalogRepo.fetchSet(key)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Timber.tag("SetDetailVM").w(e, "fetchSet failed for %s", key)
-                resolveFailed = true
+                failed = true
                 null
             }
+            // A newer load() (fast detail→detail nav) changed the target — drop this stale result so it
+            // can't overwrite the current page (the shared VM would otherwise flash the previous set).
+            if (catalogKey != key) return@launch
+            resolveFailed = failed
             resolvedSet = set
             if (set != null) {
-                resolveFailed = false
                 // Recommend 3 RANDOM same-theme sets the user neither owns nor wishlists — once per open.
                 if (relatedKey != set.id) {
                     val ownedNumbers = collectionItems.mapTo(HashSet()) { it.setNumber }
@@ -123,6 +134,7 @@ class SetDetailViewModel(
                     relatedKey = set.id
                 }
                 minifigGrid = set.setId?.let { runCatching { catalogRepo.fetchMinifigsForSet(it) }.getOrDefault(emptyList()) } ?: emptyList()
+                if (catalogKey != key) return@launch // superseded during the recommendation / grid fetches
             }
             rebuild()
         }
@@ -220,7 +232,7 @@ class SetDetailViewModel(
 
     /** From a recommendation card's "Wishlisted" button — removes it from the wishlist. */
     fun onRemoveRecommendFromWishlist(set: CatalogSet) {
-        repository.removeFromWishlist(set.setNumber)
+        repository.removeFromWishlist(set.setNumber, set.setId)
         _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(set.name))) }
     }
 
@@ -240,7 +252,7 @@ class SetDetailViewModel(
             WishlistItem(
                 setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                pieces = set.pieces, minifigs = set.minifigs,
+                pieces = set.pieces, minifigs = set.minifigs, setId = set.setId,
                 retailPrice = set.retailPrice ?: 0L, status = set.status,
                 imageUrl = set.imageUrl ?: set.thumbnailUrl,
             ),

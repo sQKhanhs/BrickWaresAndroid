@@ -42,6 +42,10 @@ data class CollectionItem(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
+    /** Catalog primary key (`sets.set_id`) of the SELECTED variant — kept so a shared-number set (CMF /
+     *  SDCC, where variants are distinct items sharing one number) resolves to the exact set the user
+     *  picked, not the lowest variant. Null for minifig items and rows added before this was carried. */
+    val setId: Long? = null,
     /** For a minifig item: how many catalog sets it appears in (the card's "in N sets"). */
     val minifigSetCount: Int = 0,
     val retailPrice: Long,
@@ -56,6 +60,11 @@ data class CollectionItem(
     val boxImageUrl: String? = null,
     val copies: List<Copy> = emptyList(),
 ) {
+    /** Identity for grouping / See-Details / delete / sell targeting: the catalog `set_id` for a set (so
+     *  shared-number CMF/SDCC variants are distinct), else the number (minifigs are unique by fig_num,
+     *  stored in [setNumber]). Kept in step with the repository's row-level grouping key. */
+    val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
+
     /** Total paid across all copies, in **USD cents** (copies may carry different currencies, so each
      *  is normalized before summing). For cross-item math (collection/sales stats); for a single item's
      *  on-screen "Paid" use [totalPaidIn] so a same-currency item shows exactly, without a USD round-trip. */

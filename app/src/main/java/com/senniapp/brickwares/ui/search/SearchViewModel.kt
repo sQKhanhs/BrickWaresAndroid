@@ -545,7 +545,7 @@ class SearchViewModel(
             WishlistItem(
                 setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                pieces = set.pieces, minifigs = set.minifigs,
+                pieces = set.pieces, minifigs = set.minifigs, setId = set.setId,
                 retailPrice = set.retailPrice ?: 0L, status = set.status,
                 imageUrl = set.thumbnailUrl ?: set.imageUrl,
             ),

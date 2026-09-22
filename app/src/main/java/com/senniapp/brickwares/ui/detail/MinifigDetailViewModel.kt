@@ -69,7 +69,11 @@ class MinifigDetailViewModel(
         valueKey = null
         viewedFig = null
         resolvedFig = null
-        _uiState.update { it.copy(addTarget = null, toastMessage = null, showCopies = false) }
+        resolveFailed = false
+        appearsInSets = emptyList()
+        // Clear the previous page immediately (loaded=false) so navigating detail→detail shows a loading
+        // state, not the last fig's content, until the new fig resolves — fetchMinifig is a network query.
+        _uiState.value = MinifigDetailUiState()
         resolveAndRebuild()
     }
 
@@ -77,20 +81,25 @@ class MinifigDetailViewModel(
     private fun resolveAndRebuild() {
         val fn = figNum ?: return
         viewModelScope.launch {
+            var failed = false
             val fig = try {
                 catalogRepo.fetchMinifig(fn)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Timber.tag("MinifigDetailVM").w(e, "fetchMinifig failed for %s", fn)
-                resolveFailed = true
+                failed = true
                 null
             }
+            // A newer load() (fast detail→detail nav) changed the target — drop this stale result so it
+            // can't overwrite the current page (the shared VM would otherwise flash the previous fig).
+            if (figNum != fn) return@launch
+            resolveFailed = failed
             resolvedFig = fig
             appearsInSets = if (fig == null) emptyList() else {
-                resolveFailed = false
                 runCatching { catalogRepo.fetchSetsForMinifig(fn) }.getOrDefault(emptyList())
             }
+            if (figNum != fn) return@launch // superseded during the "appears in" fetch
             rebuild()
         }
     }
@@ -177,7 +186,7 @@ class MinifigDetailViewModel(
 
     fun onRemoveFromWishlist() {
         val fig = _uiState.value.fig ?: return
-        repository.removeFromWishlist(fig.figNum)
+        repository.removeFromWishlist(fig.figNum, null) // a minifig has no set_id — keyed by fig_num
         _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(fig.name))) }
     }
 
@@ -186,7 +195,7 @@ class MinifigDetailViewModel(
     fun onSetAddCollection(set: CatalogSet) = _uiState.update { it.copy(addTarget = set, addSalesMode = false) }
     fun onSetAddWishlist(set: CatalogSet) = wishlist(set)
     fun onSetRemoveWishlist(set: CatalogSet) {
-        repository.removeFromWishlist(set.setNumber)
+        repository.removeFromWishlist(set.setNumber, set.setId)
         _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(set.name))) }
     }
 
@@ -195,7 +204,7 @@ class MinifigDetailViewModel(
             WishlistItem(
                 setNumber = set.setNumber, name = set.name, itemType = set.itemType,
                 theme = set.theme, releaseYear = set.releaseYear, releaseMonth = set.releaseMonth,
-                pieces = set.pieces, minifigs = set.minifigs,
+                pieces = set.pieces, minifigs = set.minifigs, setId = set.setId,
                 retailPrice = set.retailPrice ?: 0L, status = set.status,
                 imageUrl = set.imageUrl ?: set.thumbnailUrl,
             ),

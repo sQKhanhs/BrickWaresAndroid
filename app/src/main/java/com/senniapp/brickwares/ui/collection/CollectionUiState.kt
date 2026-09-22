@@ -67,9 +67,9 @@ data class CollectionUiState(
     /** The first Collection frame needs the summary *and* the items, so gate on both. */
     val isLoading: Boolean get() = summary == null || !itemsLoaded
 
-    /** The item awaiting delete confirmation, resolved from the live list. */
+    /** The item awaiting delete confirmation, resolved from the live list by variant key. */
     val pendingDeleteItem: CollectionItem?
-        get() = pendingDeleteSetNumber?.let { sn -> items.find { it.setNumber == sn } }
+        get() = pendingDeleteSetNumber?.let { key -> items.find { it.variantKey == key } }
 
     /** The sale record awaiting delete confirmation, resolved from the live sales list. */
     val pendingDeleteSale: SoldItem?
@@ -96,13 +96,13 @@ data class CollectionUiState(
     val salesPageItems: List<SoldItem>
         get() = soldItems.applySalesSort(salesSort).drop((salesCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
-    /** The set whose See Details modal is open, resolved from the live list (null closes it). */
+    /** The set whose See Details modal is open, resolved from the live list by variant key (null closes it). */
     val detailItem: CollectionItem?
-        get() = detailSetNumber?.let { sn -> items.find { it.setNumber == sn } }
+        get() = detailSetNumber?.let { key -> items.find { it.variantKey == key } }
 
-    /** The open set/fig's sale records (all of them), resolved from the live sales list. */
+    /** The open set/fig's sale records (all of them), resolved from the live sales list by variant key. */
     val detailSales: List<SoldItem>
-        get() = detailSetNumber?.let { sn -> soldItems.filter { it.setNumber == sn } } ?: emptyList()
+        get() = detailSetNumber?.let { key -> soldItems.filter { it.variantKey == key } } ?: emptyList()
 
     /**
      * The (item, copy) the Sell dialog targets, resolved from the live list — so the dialog closes
@@ -110,7 +110,7 @@ data class CollectionUiState(
      */
     val sellTarget: Pair<CollectionItem, Copy>?
         get() {
-            val item = sellSetNumber?.let { sn -> items.find { it.setNumber == sn } } ?: return null
+            val item = sellSetNumber?.let { key -> items.find { it.variantKey == key } } ?: return null
             val copy = sellCopyId?.let { cid -> item.copies.find { it.id == cid } } ?: return null
             return item to copy
         }

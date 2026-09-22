@@ -122,7 +122,7 @@ private fun WishlistContent(
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
     onMoveSubmit: (CollectionItem) -> Unit,
-    onRemove: (String) -> Unit,
+    onRemove: (WishlistItem) -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -192,12 +192,12 @@ private fun WishlistContent(
             if (!state.isLoading && state.visibleItems.isEmpty()) {
                 item { EmptyStateArt(stringResource(R.string.wishlist_empty)) }
             }
-            items(state.pageItems, key = { it.setNumber }) { item ->
-                SwipeToDelete(onSwiped = { onRemove(item.setNumber) }, autoDismiss = true) {
+            items(state.pageItems, key = { it.setId?.toString() ?: it.setNumber }) { item ->
+                SwipeToDelete(onSwiped = { onRemove(item) }, autoDismiss = true) {
                     WishlistCard(
                         item = item,
                         onMove = { onMoveClick(item) },
-                        onRemove = { onRemove(item.setNumber) },
+                        onRemove = { onRemove(item) },
                         onOpenDetail = {
                             if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
                             else onOpenSetDetail(item.setNumber)

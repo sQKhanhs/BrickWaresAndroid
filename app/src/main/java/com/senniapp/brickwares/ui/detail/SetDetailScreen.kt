@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -201,6 +202,14 @@ private fun SetDetailContent(
         // Catalog unavailable (no connection / error) → the error fallback replaces the page.
         if (state.offline) {
             ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+            return@Box
+        }
+        // Resolving the set (fetchSet in flight after opening / navigating to another detail) → a spinner,
+        // never the previous set's content. Hardware/gesture Back still works via the app back stack.
+        if (!state.loaded) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.brandYellow)
+            }
             return@Box
         }
         val set = state.set

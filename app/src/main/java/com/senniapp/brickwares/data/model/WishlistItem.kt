@@ -15,6 +15,9 @@ data class WishlistItem(
     val releaseMonth: Int,
     val pieces: Int,
     val minifigs: Int,
+    /** Catalog primary key (`sets.set_id`) of the SELECTED variant — see [CollectionItem.setId]. Null for
+     *  minifig items and rows added before this was carried. */
+    val setId: Long? = null,
     val retailPrice: Long,
     val currentValue: Long? = null,
     /** Full community-value detail (freshness/count) for the card's "!" info bubble (Decision 17). */

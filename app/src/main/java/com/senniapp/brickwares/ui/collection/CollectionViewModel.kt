@@ -104,9 +104,9 @@ class CollectionViewModel(
 
     /** The catalog record for the open detail set/fig — built from the user's own (already-overlaid) row. */
     private fun detailCatalog(): CatalogSet? {
-        val sn = _uiState.value.detailSetNumber ?: return null
-        _uiState.value.items.find { it.setNumber == sn }?.let { return catalogFrom(it) }
-        _uiState.value.soldItems.find { it.setNumber == sn }?.let { return catalogFrom(it) }
+        val key = _uiState.value.detailSetNumber ?: return null // holds the item's variantKey
+        _uiState.value.items.find { it.variantKey == key }?.let { return catalogFrom(it) }
+        _uiState.value.soldItems.find { it.variantKey == key }?.let { return catalogFrom(it) }
         return null
     }
 
@@ -170,7 +170,7 @@ class CollectionViewModel(
     // ---- Sold-item See Details (view / edit / delete a sale) ----
 
     fun onSaleDetail(sold: SoldItem) {
-        _uiState.update { it.copy(detailSetNumber = sold.setNumber, detailInitialTab = ItemDetailsTab.SALES) }
+        _uiState.update { it.copy(detailSetNumber = sold.variantKey, detailInitialTab = ItemDetailsTab.SALES) }
     }
 
     fun onDeleteSale(saleId: String) {
@@ -237,8 +237,8 @@ class CollectionViewModel(
     // ---- Sell an owned copy → Sales ----
 
     /** From See Details' per-copy Sell button: open the Sell dialog for this copy. */
-    fun onSellCopyRequest(setNumber: String, copy: Copy) {
-        _uiState.update { it.copy(detailSetNumber = null, sellSetNumber = setNumber, sellCopyId = copy.id) }
+    fun onSellCopyRequest(variantKey: String, copy: Copy) {
+        _uiState.update { it.copy(detailSetNumber = null, sellSetNumber = variantKey, sellCopyId = copy.id) }
     }
 
     fun onDismissSell() {
@@ -264,7 +264,7 @@ class CollectionViewModel(
     // ---- See Details ----
 
     fun onItemDetail(item: CollectionItem) {
-        _uiState.update { it.copy(detailSetNumber = item.setNumber, detailInitialTab = ItemDetailsTab.COLLECTION) }
+        _uiState.update { it.copy(detailSetNumber = item.variantKey, detailInitialTab = ItemDetailsTab.COLLECTION) }
     }
 
     fun onDismissDetail() {
@@ -278,7 +278,7 @@ class CollectionViewModel(
     // ---- Swipe-to-delete (whole item, with confirmation) ----
 
     fun onRequestDeleteItem(item: CollectionItem) {
-        _uiState.update { it.copy(pendingDeleteSetNumber = item.setNumber) }
+        _uiState.update { it.copy(pendingDeleteSetNumber = item.variantKey) }
     }
 
     fun onCancelDeleteItem() {
@@ -287,7 +287,7 @@ class CollectionViewModel(
 
     fun onConfirmDeleteItem() {
         val item = _uiState.value.pendingDeleteItem ?: return
-        repository.removeItem(item.setNumber)
+        repository.removeItem(item.setNumber, item.setId)
         _uiState.update {
             it.copy(pendingDeleteSetNumber = null, toastMessage = UiText.Res(R.string.toast_removed_collection, listOf(item.name)))
         }
@@ -302,7 +302,7 @@ class CollectionViewModel(
         _uiState.update {
             it.copy(
                 detailSetNumber = null, showAddSheet = true, addSheetPreselect = catalogFrom(item),
-                addSheetSalesMode = false, editingCopy = copy, editingSetNumber = item.setNumber,
+                addSheetSalesMode = false, editingCopy = copy, editingSetNumber = item.variantKey,
             )
         }
     }
@@ -312,6 +312,7 @@ class CollectionViewModel(
         theme = item.theme, releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
         pieces = item.pieces, minifigs = item.minifigs,
         retailPrice = item.retailPrice, status = item.status,
+        setId = item.setId, // preserve the exact variant when re-adding from the See-Details modal
     )
 
     /** The catalog record for a sale's edit sheet, built from the (already catalog-overlaid) sale row. */
@@ -321,5 +322,6 @@ class CollectionViewModel(
             theme = sold.theme, releaseYear = sold.releaseYear, releaseMonth = sold.releaseMonth,
             pieces = sold.pieces, minifigs = sold.minifigs,
             retailPrice = sold.retailPrice.takeIf { it > 0L }, status = sold.status,
+            setId = sold.setId,
         )
 }

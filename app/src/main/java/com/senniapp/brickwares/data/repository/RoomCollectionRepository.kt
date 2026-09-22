@@ -87,38 +87,46 @@ class RoomCollectionRepository(
             salesDao.observeActive(),
         ) { copies, wishes, sales ->
             referencedKeys(copies, wishes, sales)
-        }.distinctUntilChanged().collect { (setNumbers, figNums) ->
-            refreshCatalogCache(setNumbers, figNums)
+        }.distinctUntilChanged().collect { keys ->
+            refreshCatalogCache(keys)
         }
     }
 
-    /** The distinct catalog keys (set numbers, fig numbers) the user's rows reference. */
+    private data class ReferencedKeys(val setNumbers: Set<String>, val figNums: Set<String>, val setIds: Set<Long>)
+
+    /**
+     * The distinct catalog keys the user's rows reference: set numbers + fig numbers (for the byNumber /
+     * fig caches) AND the exact `set_id`s — so a shared-number variant (CMF/SDCC) resolves to the precise
+     * set the row stores, not the number's lowest variant.
+     */
     private fun referencedKeys(
         copies: List<CollectionCopyEntity>,
         wishes: List<WishlistEntity>,
         sales: List<SalesEntity>,
-    ): Pair<Set<String>, Set<String>> {
+    ): ReferencedKeys {
         val setNumbers = HashSet<String>()
         val figNums = HashSet<String>()
-        fun add(kind: String, setNumber: String, figNum: String?) {
+        val setIds = HashSet<Long>()
+        fun add(kind: String, setNumber: String, figNum: String?, setId: Long?) {
             if (kind == "minifig") {
                 // A minifig row's fig key is its fig_num, or (legacy rows) the set_number field.
                 figNum?.let(figNums::add)
                 figNums.add(setNumber)
             } else {
                 setNumbers.add(setNumber)
+                setId?.let(setIds::add)
             }
         }
-        copies.forEach { add(it.itemKind, it.setNumber, it.figNum) }
-        wishes.forEach { add(it.itemKind, it.setNumber, it.figNum) }
-        sales.forEach { add(it.itemKind, it.setNumber, it.figNum) }
-        return setNumbers to figNums
+        copies.forEach { add(it.itemKind, it.setNumber, it.figNum, it.setId) }
+        wishes.forEach { add(it.itemKind, it.setNumber, it.figNum, it.setId) }
+        sales.forEach { add(it.itemKind, it.setNumber, it.figNum, it.setId) }
+        return ReferencedKeys(setNumbers, figNums, setIds)
     }
 
     /** One batch refresh of the user-scoped catalog maps; keeps the last-known cache on network failure. */
-    private suspend fun refreshCatalogCache(setNumbers: Set<String>, figNums: Set<String>) {
+    private suspend fun refreshCatalogCache(keys: ReferencedKeys) {
         try {
-            fetchAndStoreCatalog(setNumbers, figNums)
+            fetchAndStoreCatalog(keys)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -130,23 +138,22 @@ class RoomCollectionRepository(
     }
 
     /** Fetch + store the user-scoped catalog maps and bump the revision; throws on a network failure. */
-    private suspend fun fetchAndStoreCatalog(setNumbers: Set<String>, figNums: Set<String>) {
-        val sets = catalog.fetchSetsByNumbers(setNumbers)
-        setsByNumber = sets.associateBy { it.setNumber }
-        setsById = sets.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
-        val figs = catalog.fetchMinifigsByNums(figNums)
+    private suspend fun fetchAndStoreCatalog(keys: ReferencedKeys) {
+        val byNumber = catalog.fetchSetsByNumbers(keys.setNumbers)
+        val byId = if (keys.setIds.isEmpty()) emptyList() else catalog.fetchSetsByIds(keys.setIds)
+        setsByNumber = byNumber.associateBy { it.setNumber }
+        // Exact-variant rows (byId) win in setsById; the lowest-variant byNumber sets fill any others, so
+        // catalogFor(setId) resolves the precise CMF/SDCC variant the row stores, not the number's lowest.
+        setsById = (byNumber + byId).mapNotNull { s -> s.setId?.let { it to s } }.toMap()
+        val figs = catalog.fetchMinifigsByNums(keys.figNums)
         figsByNum = figs.associateBy { it.figNum }
         _catalogOverlayReady.value = true // authoritative overlay is loaded (set before the revision bump)
         catalogCacheRevision.value += 1
     }
 
     override suspend fun refreshReferencedCatalog() {
-        val (setNumbers, figNums) = referencedKeys(
-            collectionDao.getActive(),
-            wishlistDao.getActive(),
-            salesDao.getActive(),
-        )
-        fetchAndStoreCatalog(setNumbers, figNums) // throws on failure so the caller (retirement worker) retries
+        // throws on failure so the caller (retirement worker) retries
+        fetchAndStoreCatalog(referencedKeys(collectionDao.getActive(), wishlistDao.getActive(), salesDao.getActive()))
     }
 
     // ---- Reads (Room is the source of truth) ----
@@ -160,7 +167,9 @@ class RoomCollectionRepository(
 
     override fun getCollectionItems(): Flow<List<CollectionItem>> =
         combine(collectionDao.observeActive(), catalogCacheRevision, values.revision) { rows, _, _ ->
-            rows.groupBy { it.setNumber }.map { (_, group) -> group.toCollectionItem() }
+            // Group by the EXACT item, not the bare number — a shared-number set (CMF/SDCC) resolves by
+            // set_id so its variants are separate cards, while minifigs / legacy rows fall back to number.
+            rows.groupBy { it.variantKey() }.map { (_, group) -> group.toCollectionItem() }
         }.flowOn(Dispatchers.Default)
 
     override fun getWishlistItems(): Flow<List<WishlistItem>> =
@@ -324,7 +333,7 @@ class RoomCollectionRepository(
                 val value = if (entity.figNum != null) values.valueForFig(entity.figNum) else values.valueFor(entity.setId)
                 SoldItem(
                     id = entity.id,
-                    setNumber = entity.setNumber, name = entity.name,
+                    setNumber = entity.setNumber, setId = entity.setId, name = entity.name,
                     itemType = entity.itemKind.toItemType(), theme = entity.theme,
                     releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: entity.releaseYear,
                     releaseMonth = cat?.releaseMonth ?: entity.releaseMonth,
@@ -356,7 +365,7 @@ class RoomCollectionRepository(
         val now = System.currentTimeMillis()
         // Existing copies of this item — a newly-added copy identical in condition, paid price, date and
         // note merges into one (bumps its quantity) instead of adding a duplicate row.
-        val existingCopies = collectionDao.activeForItem(item.setNumber, kind)
+        val existingCopies = activeCopiesOf(item.setId, item.setNumber, kind)
         item.copies.forEach { copy ->
             val cond = copy.condition.dbName()
             val date = copy.dateAdded.ifBlank { null }
@@ -381,13 +390,16 @@ class RoomCollectionRepository(
                 collectionDao.upsert(
                     CollectionCopyEntity(
                         id = UUID.randomUUID().toString(),
-                        setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                        // Prefer the item's own (SELECTED variant) fields; `set` is the number-resolved
+                        // LOWEST variant, kept only as a fallback for legacy items with no setId/image/retail
+                        // — for CMF/SDCC shared numbers the two differ, and the item's are the right ones.
+                        setId = item.setId ?: set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                         setNumber = item.setNumber, name = item.name, theme = item.theme,
                         subtheme = set?.subtheme ?: "General",
                         releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                         pieces = item.pieces, minifigs = item.minifigs,
-                        retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                        status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
+                        retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
+                        status = item.status.name, imageUrl = item.imageUrl ?: set?.imageUrl,
                         quantity = copy.qty, condition = cond,
                         pricePaid = copy.pricePaid, currency = copy.currency.name, acquiredOn = date,
                         notes = copy.note, deleted = false, updatedAt = now, dirty = true,
@@ -398,20 +410,25 @@ class RoomCollectionRepository(
         // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
         // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
         item.copies.lastOrNull()?.let { copy ->
-            contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
+            contributeLocalValue(if (isFig) null else (item.setId ?: set?.setId), if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
         }
         // Owning an item removes it from the wishlist (want → have) — applies to EVERY add path (search,
         // detail, collection, or the wishlist "Move"). No-op when it wasn't wishlisted; marks the row
-        // deleted+dirty so the removal syncs. Keyed by setNumber (a minifig's fig_num is stored there).
-        wishlistDao.markDeletedBySetNumber(item.setNumber, now)
+        // deleted+dirty so the removal syncs. Keyed by set_id for a cataloged set (so owning 71050-2
+        // only clears 71050-2 from the wishlist), else by set number (a minifig's fig_num is stored there).
+        if (item.setId != null) wishlistDao.markDeletedBySetId(item.setId, now)
+        else wishlistDao.markDeletedBySetNumber(item.setNumber, now)
     }
 
     override fun removeCopy(setNumber: String, copyId: String) = write {
         collectionDao.markDeleted(copyId, System.currentTimeMillis())
     }
 
-    override fun removeItem(setNumber: String) = write {
-        collectionDao.markDeletedBySetNumber(setNumber, System.currentTimeMillis())
+    override fun removeItem(setNumber: String, setId: Long?) = write {
+        val now = System.currentTimeMillis()
+        // By set_id for a cataloged set (removes just this shared-number variant), else by set number.
+        if (setId != null) collectionDao.markDeletedBySetId(setId, now)
+        else collectionDao.markDeletedBySetNumber(setNumber, now)
     }
 
     override fun updateCopy(setNumber: String, copy: Copy) = write {
@@ -444,7 +461,7 @@ class RoomCollectionRepository(
         val note = copy?.note
         // An identical sale (condition, currency, per-unit paid, per-unit sale price, date, note) merges
         // into one row — bumps quantity and sums the paid/sale totals — instead of adding a duplicate.
-        val match = salesDao.activeForItem(item.setNumber, kind).firstOrNull {
+        val match = activeSalesOf(item.setId, item.setNumber, kind).firstOrNull {
             it.condition == cond && it.soldOn == soldOn && it.notes.orEmpty() == note.orEmpty() &&
                 it.currency == currency.name &&
                 it.pricePaid * qty == paid * it.quantity &&
@@ -463,11 +480,13 @@ class RoomCollectionRepository(
             salesDao.upsert(
                 SalesEntity(
                     id = UUID.randomUUID().toString(),
-                    setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                    // Prefer the item's own (SELECTED variant) fields over the number-resolved lowest
+                    // variant `set` (they differ for CMF/SDCC shared numbers) — see addItem.
+                    setId = item.setId ?: set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                     setNumber = item.setNumber, name = item.name, theme = item.theme,
                     releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
-                    imageUrl = set?.imageUrl ?: item.imageUrl,
-                    retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
+                    imageUrl = item.imageUrl ?: set?.imageUrl,
+                    retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
                     quantity = qty, condition = cond,
                     pricePaid = paid, salePrice = salePrice, currency = currency.name,
                     soldOn = soldOn, notes = note, deleted = false,
@@ -476,7 +495,7 @@ class RoomCollectionRepository(
             )
         }
         // A sale price is a community value point too (Decision 17) — reflect it locally at once.
-        contributeLocalValue(if (isFig) null else set?.setId, if (isFig) item.setNumber else null, item.setNumber, salePrice, currency, isSale = true)
+        contributeLocalValue(if (isFig) null else (item.setId ?: set?.setId), if (isFig) item.setNumber else null, item.setNumber, salePrice, currency, isSale = true)
     }
 
     override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String?) = write {
@@ -494,7 +513,7 @@ class RoomCollectionRepository(
         val soldOnNorm = soldOn?.ifBlank { null }
         // Selling identical copies one at a time (same condition, currency, per-unit paid, per-unit sale,
         // date, note) merges into one sales row instead of piling up duplicate rows — mirrors addSale.
-        val match = salesDao.activeForItem(copy.setNumber, copy.itemKind).firstOrNull {
+        val match = activeSalesOf(copy.setId, copy.setNumber, copy.itemKind).firstOrNull {
             it.condition == copy.condition && it.soldOn == soldOnNorm &&
                 it.notes.orEmpty() == copy.notes.orEmpty() && it.currency == currency.name &&
                 it.pricePaid * sellQty == soldPaid * it.quantity &&
@@ -567,27 +586,36 @@ class RoomCollectionRepository(
     }
 
     override fun addToWishlist(item: WishlistItem) = write {
-        if (wishlistDao.findActiveBySetNumber(item.setNumber) != null) return@write
+        // Already wishlisted? Dedup by the exact set (set_id) for a cataloged set, so a shared-number
+        // variant doesn't block another; else by set number (minifig / legacy).
+        val already = if (item.setId != null) wishlistDao.findActiveBySetId(item.setId)
+        else wishlistDao.findActiveBySetNumber(item.setNumber)
+        if (already != null) return@write
         val kind = item.itemType.dbKind()
         val isFig = kind == "minifig"
         val set = if (isFig) null else resolveCatalog(item.setNumber)
         wishlistDao.upsert(
             WishlistEntity(
                 id = UUID.randomUUID().toString(),
-                setId = set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                // Prefer the item's own (SELECTED variant) fields over the number-resolved lowest variant
+                // `set` (they differ for CMF/SDCC shared numbers) — see addItem.
+                setId = item.setId ?: set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                 setNumber = item.setNumber, name = item.name, theme = item.theme,
                 subtheme = set?.subtheme ?: "General",
                 releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                 pieces = item.pieces, minifigs = item.minifigs,
-                retailPrice = set?.retailPrice ?: item.retailPrice.takeIf { it > 0L },
-                status = item.status.name, imageUrl = set?.imageUrl ?: item.imageUrl,
+                retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
+                status = item.status.name, imageUrl = item.imageUrl ?: set?.imageUrl,
                 deleted = false, updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
     }
 
-    override fun removeFromWishlist(setNumber: String) = write {
-        wishlistDao.markDeletedBySetNumber(setNumber, System.currentTimeMillis())
+    override fun removeFromWishlist(setNumber: String, setId: Long?) = write {
+        val now = System.currentTimeMillis()
+        // By set_id for a cataloged set (removes just this shared-number variant), else by set number.
+        if (setId != null) wishlistDao.markDeletedBySetId(setId, now)
+        else wishlistDao.markDeletedBySetNumber(setNumber, now)
     }
 
     // ---- helpers ----
@@ -612,6 +640,22 @@ class RoomCollectionRepository(
 
     private fun ItemType.dbKind() = if (this == ItemType.MINIFIG) "minifig" else "set"
     private fun String.toItemType() = if (this == "minifig") ItemType.MINIFIG else ItemType.SET
+
+    /**
+     * The identity used to GROUP copies into one card and to match/remove an item. A cataloged set keys
+     * on its `set_id` so shared-number variants (CMF/SDCC: 71050-2 vs 71050-4) stay distinct; a minifig
+     * or a legacy set with no set_id falls back to its fig_num / set number.
+     */
+    private fun CollectionCopyEntity.variantKey(): String =
+        setId?.let { "s$it" } ?: "n${figNum ?: setNumber}"
+
+    /** Active copies of the EXACT item — by set_id for a cataloged set, else by set number (minifig/legacy). */
+    private suspend fun activeCopiesOf(setId: Long?, setNumber: String, kind: String): List<CollectionCopyEntity> =
+        if (setId != null) collectionDao.activeForSetId(setId) else collectionDao.activeForItem(setNumber, kind)
+
+    /** Active sales of the EXACT item — by set_id for a cataloged set, else by set number (minifig/legacy). */
+    private suspend fun activeSalesOf(setId: Long?, setNumber: String, kind: String): List<SalesEntity> =
+        if (setId != null) salesDao.activeForSetId(setId) else salesDao.activeForItem(setNumber, kind)
     private fun Condition.dbName() = if (this == Condition.USED) "used" else "new"
     private fun String.toCurrency() = runCatching { AppCurrency.valueOf(this) }.getOrDefault(AppCurrency.USD)
 
@@ -671,7 +715,7 @@ class RoomCollectionRepository(
         val growth = growthRef?.takeIf { unitPaid > 0 }?.let { ((it - unitPaid) / unitPaid) * 100.0 }
         return CollectionItem(
             setNumber = head.setNumber, name = head.name, itemType = head.itemKind.toItemType(),
-            theme = head.theme,
+            theme = head.theme, setId = head.setId,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: head.releaseYear,
             releaseMonth = cat?.releaseMonth ?: head.releaseMonth,
             pieces = head.pieces, minifigs = head.minifigs, minifigSetCount = fig?.setCount ?: 0,
@@ -697,7 +741,7 @@ class RoomCollectionRepository(
         val cat = catalogFor(setId, setNumber)
         val value = if (figNum != null) values.valueForFig(figNum) else values.valueFor(setId)
         return WishlistItem(
-            setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme,
+            setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme, setId = setId,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
             releaseMonth = cat?.releaseMonth ?: releaseMonth,
             pieces = pieces, minifigs = minifigs,

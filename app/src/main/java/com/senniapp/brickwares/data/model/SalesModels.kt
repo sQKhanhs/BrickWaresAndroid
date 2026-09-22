@@ -10,6 +10,8 @@ import com.senniapp.brickwares.util.AppCurrency
 data class SoldItem(
     val id: String,
     val setNumber: String,
+    /** Catalog `set_id` of the exact variant (null for minifigs / legacy) — see [CollectionItem.setId]. */
+    val setId: Long? = null,
     val name: String,
     val itemType: ItemType,
     val theme: String,
@@ -35,6 +37,9 @@ data class SoldItem(
     /** Community current value for the item, when shown (retired / promo / magazine sets). */
     val currentValueInfo: CurrentValue? = null,
 ) {
+    /** Grouping/targeting identity — see [CollectionItem.variantKey]. */
+    val variantKey: String get() = setId?.let { "s$it" } ?: "n$setNumber"
+
     /** Profit in [currency]'s unit (sale and paid were entered together, so same currency). */
     val profit: Long get() = saleValue - pricePaid
     val profitPercent: Double

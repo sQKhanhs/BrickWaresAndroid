@@ -54,12 +54,9 @@ class WishlistViewModel(
     // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.
     suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
-    fun onRemove(setNumber: String) {
-        val item = _uiState.value.items.find { it.setNumber == setNumber }
-        repository.removeFromWishlist(setNumber)
-        if (item != null) {
-            _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(item.name))) }
-        }
+    fun onRemove(item: WishlistItem) {
+        repository.removeFromWishlist(item.setNumber, item.setId)
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(item.name))) }
     }
 
     fun onToastShown() {
@@ -80,7 +77,7 @@ class WishlistViewModel(
     /** Add-sheet submit: add to the collection, then drop it from the wishlist. */
     fun onMoveSubmit(item: CollectionItem) {
         repository.addItem(item)
-        repository.removeFromWishlist(item.setNumber)
+        repository.removeFromWishlist(item.setNumber, item.setId)
         _uiState.update { it.copy(moveTarget = null) }
     }
 
@@ -89,5 +86,6 @@ class WishlistViewModel(
         theme = item.theme, releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
         pieces = item.pieces, minifigs = item.minifigs,
         retailPrice = item.retailPrice, status = item.status,
+        setId = item.setId, // keep the exact variant when moving a shared-number set into the collection
     )
 }
