@@ -279,14 +279,22 @@ object AuthRepository {
         languageTag: String,
         captchaToken: String? = null,
     ): SignInResult = try {
-        client.auth.signUpWith(Email) {
+        val user = client.auth.signUpWith(Email) {
             this.email = email.trim()
             this.password = password
             this.captchaToken = captchaToken
             data = buildJsonObject { put("lang", languageTag) }
         }
-        if (client.auth.currentUserOrNull() != null) SignInResult.Success
-        else SignInResult.EmailConfirmationRequired
+        when {
+            client.auth.currentUserOrNull() != null -> SignInResult.Success
+            // GoTrue answers a sign-up for an address that is ALREADY registered and confirmed with a
+            // fake success — no email is sent (anti-enumeration) and the only tell is an EMPTY
+            // identities list. Without this check the UI parks on the code screen waiting for an
+            // email that never comes. (An existing but unconfirmed address gets a fresh code and a
+            // real user object with its identity, so that path still lands on the code screen.)
+            user?.identities?.isEmpty() == true -> SignInResult.EmailAlreadyRegistered
+            else -> SignInResult.EmailConfirmationRequired
+        }
     } catch (e: AuthRestException) {
         when (e.errorCode) {
             AuthErrorCode.EmailExists, AuthErrorCode.UserAlreadyExists -> SignInResult.EmailAlreadyRegistered
