@@ -18,6 +18,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -140,11 +145,21 @@ fun HeroImageGallery(
     fullResOf: (String) -> String = { it },
 ) {
     val colors = BwTheme.colors
+    val platformContext = LocalPlatformContext.current
     var showFullscreen by remember { mutableStateOf(false) }
-    // Images that failed to load — dropped from the pager and the thumbnail strip.
-    val failed = remember(candidates) { mutableStateListOf<String>() }
-    val images = candidates.filterNot { it in failed }
-    val onImageError: (String) -> Unit = { url -> if (url !in failed) failed.add(url) }
+    // Probe the candidates before drawing the strip: keep only the urls that actually load, so a set whose
+    // box shot 404s (e.g. a promo with no box) never flashes a 2nd thumbnail that then vanishes. Coil
+    // caches the probe, so the on-screen load is a cache hit. Null while still probing.
+    var resolved by remember(candidates) { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(candidates) {
+        val loader = SingletonImageLoader.get(platformContext)
+        resolved = candidates.filter { url ->
+            loader.execute(ImageRequest.Builder(platformContext).data(url).build()) is SuccessResult
+        }
+    }
+    // While probing, show just the first candidate as the single main image (no strip yet) so the page
+    // isn't blank; once probed, show the confirmed images — and the strip only when 2+ actually loaded.
+    val images = resolved ?: candidates.take(1)
     val pagerState = rememberPagerState(pageCount = { images.size })
     val scope = rememberCoroutineScope()
     Column(
@@ -173,14 +188,13 @@ fun HeroImageGallery(
                             contentDescription = null,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize(),
-                            onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
                         )
                     }
                 }
             }
-            // Thumbnail strip — only meaningful with more than one image. Renders all images so a 404 is
-            // detected and dropped even if the user never swipes to it.
-            if (images.size > 1) {
+            // Thumbnail strip — only once probing has SETTLED (so it never appears then collapses) and
+            // there are 2+ real images to switch between.
+            if (resolved != null && images.size > 1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     images.forEachIndexed { i, url ->
                         val selected = i == pagerState.currentPage
@@ -201,7 +215,6 @@ fun HeroImageGallery(
                                 contentDescription = null,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize().padding(4.dp),
-                                onState = { if (it is AsyncImagePainter.State.Error) onImageError(url) },
                             )
                         }
                     }
