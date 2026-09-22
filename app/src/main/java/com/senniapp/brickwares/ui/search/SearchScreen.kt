@@ -185,6 +185,7 @@ fun ThemeResultsScreen(
             totalCount = state.themeDetailResults.size,
             currentPage = state.themeDetailCurrentPage,
             pageCount = state.themeDetailPageCount,
+            loading = state.themeDetailLoading,
             onPageChange = viewModel::onThemeDetailPageChange,
             onBack = onBack,
             onSubChange = viewModel::onThemeDetailSubChange,
@@ -292,6 +293,7 @@ private fun SearchContent(
                 totalCount = state.themeDetailResults.size,
                 currentPage = state.themeDetailCurrentPage,
                 pageCount = state.themeDetailPageCount,
+                loading = state.themeDetailLoading,
                 onPageChange = onThemeDetailPageChange,
                 onBack = onThemeDetailBack,
                 onSubChange = onThemeDetailSubChange,
@@ -309,6 +311,7 @@ private fun SearchContent(
                 sub = state.minifigThemeDetailSub,
                 subOptions = state.minifigThemeDetailSubOptions,
                 sort = state.minifigThemeDetailSort,
+                loading = state.minifigThemeDetailLoading,
                 ownedNumbers = state.ownedNumbers,
                 wishlistedNumbers = state.wishlistedNumbers,
                 totalCount = state.minifigItems.size,
@@ -743,6 +746,7 @@ private fun ThemeDetailView(
     sub: String,
     subOptions: List<SubthemeCount>,
     sort: ThemeDetailSort,
+    loading: Boolean,
     wishlistedNumbers: Set<String>,
     ownedNumbers: Set<String>,
     soldNumbers: Set<String>,
@@ -783,6 +787,12 @@ private fun ThemeDetailView(
             )
             ThemeFavoriteStar(isFavorite = isFavorite, onToggle = onToggleFavorite)
         }
+        if (loading) {
+            // Fetching the theme's sets (Decision 16) — a spinner, never a flash of the empty "0 sets" page.
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.brandYellow)
+            }
+        } else {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -836,6 +846,7 @@ private fun ThemeDetailView(
             )
         }
     }
+        }
     }
 }
 
@@ -851,6 +862,7 @@ private fun MinifigThemeDetailView(
     sub: String,
     subOptions: List<SubthemeCount>,
     sort: MinifigSort,
+    loading: Boolean,
     ownedNumbers: Set<String>,
     wishlistedNumbers: Set<String>,
     totalCount: Int,
@@ -889,6 +901,12 @@ private fun MinifigThemeDetailView(
             )
             ThemeFavoriteStar(isFavorite = isFavorite, onToggle = onToggleFavorite)
         }
+        if (loading) {
+            // Fetching the theme's figs — a spinner, never a flash of the empty "Minifig (0)" page.
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.brandYellow)
+            }
+        } else {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -946,6 +964,7 @@ private fun MinifigThemeDetailView(
             }
         }
     }
+        }
     }
 }
 

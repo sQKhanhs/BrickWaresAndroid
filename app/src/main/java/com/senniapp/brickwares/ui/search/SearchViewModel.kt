@@ -250,6 +250,7 @@ class SearchViewModel(
                 minifigThemeDetailSub = sub,
                 minifigThemeDetailSort = MinifigSort.NAME,
                 minifigThemeDetailSubOptions = emptyList(),
+                minifigThemeDetailLoading = true,
                 minifigItems = emptyList(),
                 minifigPage = 1,
             )
@@ -264,6 +265,7 @@ class SearchViewModel(
             _uiState.update {
                 if (it.minifigThemeDetail != theme) return@update it
                 it.copy(
+                    minifigThemeDetailLoading = false,
                     minifigThemeDetailSubOptions = minifigSubthemesFromItems(fetched, theme),
                     minifigItems = minifigThemeResults(theme, it.minifigThemeDetailSub, it.minifigThemeDetailSort),
                 )

@@ -118,6 +118,9 @@ data class SearchUiState(
     val orderedMinifigThemes: List<ThemeGroup> = emptyList(),
     /** Open minifig theme (its figs are in [minifigItems]); null = the theme browse. */
     val minifigThemeDetail: String? = null,
+    /** The open minifig theme's figs are fetched on demand; true while that query is in flight
+     *  (mirrors [themeDetailLoading]) — gates the "Minifig (0) / empty" flash before the fetch lands. */
+    val minifigThemeDetailLoading: Boolean = false,
     /** Selected subtheme filter inside the minifig theme-detail (ALL_SUBTHEMES = no filter). */
     val minifigThemeDetailSub: String = ALL_SUBTHEMES,
     /** Sort applied inside the minifig theme-detail. */
