@@ -71,7 +71,7 @@ import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ErrorScreen
-import com.senniapp.brickwares.ui.components.ImageGalleryDialog
+import com.senniapp.brickwares.ui.components.HeroImageGallery
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
 import com.senniapp.brickwares.ui.navigation.SignInController
 import com.senniapp.brickwares.ui.components.SearchModal
@@ -192,12 +192,6 @@ private fun SetDetailContent(
     val colors = BwTheme.colors
     var showSearchModal by remember { mutableStateOf(false) }
     val isLoggedIn = rememberIsLoggedIn()
-    // Tapping the hero opens a full-screen image gallery (box shot + set render, swipeable).
-    var showGallery by remember { mutableStateOf(false) }
-    // Whether the hero actually loaded an image (SetThumb's terminal onResolvedUrl). Gates the gallery
-    // tap: a "No image" placeholder — every candidate 404'd — must be inert, because the viewer drops
-    // dead URLs and would otherwise open on an empty black page. Reset per set.
-    var heroLoaded by remember(state.set?.id) { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         // Catalog unavailable (no connection / error) → the error fallback replaces the page.
         if (state.offline) {
@@ -213,15 +207,12 @@ private fun SetDetailContent(
             return@Box
         }
         val set = state.set
-        // The hero shows the light Rebrickable render (thumb) by default, falling back to the re-hosted
-        // box shot only when the render is missing — no BrickLink request on open either way.
-        val rebrickableThumb = set?.let { it.thumbnailUrl ?: CatalogImages.thumbUrl(it.setNumber, it.numberVariant) }
-        val rebrickableRender = set?.let { CatalogImages.renderUrl(it.setNumber, it.numberVariant) }
-        // Gallery (opened on an explicit tap): the Rebrickable render first, then the Storage box shot if
-        // captured; a set with no captured box falls back to the BrickLink box as a tap-only stand-in. The
-        // viewer drops any that 404/403, so a set still opens on a working render instead of a dead page.
+        // The hero gallery images. The render's small server-resized thumbnail leads (the full render is
+        // 1-5 MB — too heavy to fetch on every open); then the box shot (Storage, or the BrickLink box as a
+        // stand-in when none was captured). HeroImageGallery drops any that 404/403 and, on tap, swaps the
+        // render thumbnail for the full-resolution render (renderFromThumb) so the fullscreen zoom is crisp.
         val galleryImages = listOfNotNull(
-            rebrickableRender,
+            set?.let { it.thumbnailUrl ?: CatalogImages.thumbUrl(it.setNumber, it.numberVariant, size = 640) },
             set?.boxImageUrl,
             if (set?.boxImageUrl == null) set?.let { CatalogImages.boxUrl(it.setNumber, it.numberVariant) } else null,
         ).distinct()
@@ -274,21 +265,12 @@ private fun SetDetailContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                SetThumb(
-                    imageUrl = rebrickableThumb,
-                    fallbackUrl = set.boxImageUrl,
+                // Swipeable image with a thumbnail strip below (render + box shot); tap opens the
+                // full-screen gallery at the current image (full-res render for crisp zoom).
+                HeroImageGallery(
+                    candidates = galleryImages,
                     itemType = set.itemType,
-                    size = 200.dp,
-                    iconSize = 64.dp,
-                    corner = 14.dp,
-                    // Tap the image to open the full-screen gallery (render first, then the box shot) —
-                    // only once an image has actually loaded; the placeholder is not tappable.
-                    modifier = if (heroLoaded && galleryImages.isNotEmpty()) {
-                        Modifier.clickable { showGallery = true }
-                    } else {
-                        Modifier
-                    },
-                    onResolvedUrl = { url -> heroLoaded = url != null },
+                    fullResOf = { CatalogImages.renderFromThumb(it) ?: it },
                 )
                 Text(
                     set.name,
@@ -452,12 +434,6 @@ private fun SetDetailContent(
                     initialTab = if (copiesItem != null) ItemDetailsTab.COLLECTION else ItemDetailsTab.SALES,
                 )
             }
-        }
-
-        // Full-screen image gallery: swipe between the images that actually loaded, tap a thumbnail
-        // to jump, tap the backdrop or back to dismiss.
-        if (showGallery && galleryImages.isNotEmpty()) {
-            ImageGalleryDialog(candidates = galleryImages, onDismiss = { showGallery = false })
         }
 
         // Search FABs — only when this detail is viewed from the Search tab, so the user can start a

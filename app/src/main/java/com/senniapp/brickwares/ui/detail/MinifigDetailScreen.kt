@@ -51,7 +51,7 @@ import com.senniapp.brickwares.ui.components.ItemDetailsDialog
 import com.senniapp.brickwares.ui.components.ItemDetailsTab
 import com.senniapp.brickwares.ui.components.SearchModal
 import com.senniapp.brickwares.ui.components.SetResultCard
-import com.senniapp.brickwares.ui.components.SetThumb
+import com.senniapp.brickwares.ui.components.HeroImageGallery
 import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.rememberIsLoggedIn
@@ -150,8 +150,8 @@ fun MinifigDetailScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                // Tap the image → full-screen gallery (SetThumb opens it when galleryImages is set).
-                SetThumb(imageUrl = fig.imageUrl, fallbackUrl = null, itemType = ItemType.MINIFIG, size = 200.dp, iconSize = 64.dp, corner = 14.dp, galleryImages = listOfNotNull(fig.imageUrl))
+                // Swipeable image (usually just the one render for a minifig); tap opens the full-screen gallery.
+                HeroImageGallery(candidates = listOfNotNull(fig.imageUrl), itemType = ItemType.MINIFIG)
                 Text(
                     fig.name,
                     style = BwType.cardTitle.copy(fontSize = 19.sp),
