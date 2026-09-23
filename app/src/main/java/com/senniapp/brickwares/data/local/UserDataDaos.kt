@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * DAOs for the offline-first user-data tables. Reads expose live [Flow]s (Room emits on every write,
- * so the UI is reactive). [getDirty]/[clearDirty] and [upsertAll] serve the sync engine's push/pull;
+ * so the UI is reactive). [getDirty]/[clearDirtyIfUnchanged] and [upsertAll] serve the sync engine's push/pull;
  * [clearAll] is the "discard local" branch of the account-switch guard.
  */
 @Dao
@@ -64,8 +64,10 @@ interface CollectionDao {
     @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setId = :setId AND deleted = 0")
     suspend fun markDeletedBySetId(setId: Long, ts: Long)
 
-    @Query("UPDATE collection_copies SET dirty = 0 WHERE id IN (:ids)")
-    suspend fun clearDirty(ids: List<String>)
+    /** Clear dirty ONLY if the row hasn't been rewritten since the push snapshot (its updatedAt still
+     *  matches) — so an edit made DURING the push keeps its dirty flag and syncs on the next round. */
+    @Query("UPDATE collection_copies SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun clearDirtyIfUnchanged(id: String, updatedAt: Long)
 
     @Query("DELETE FROM collection_copies")
     suspend fun clearAll()
@@ -118,8 +120,9 @@ interface WishlistDao {
     @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setId = :setId AND deleted = 0")
     suspend fun markDeletedBySetId(setId: Long, ts: Long)
 
-    @Query("UPDATE wishlist_items SET dirty = 0 WHERE id IN (:ids)")
-    suspend fun clearDirty(ids: List<String>)
+    /** See [CollectionDao.clearDirtyIfUnchanged] — clears only when the row is unchanged since the snapshot. */
+    @Query("UPDATE wishlist_items SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun clearDirtyIfUnchanged(id: String, updatedAt: Long)
 
     @Query("DELETE FROM wishlist_items")
     suspend fun clearAll()
@@ -168,8 +171,9 @@ interface SalesDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<SalesEntity>)
 
-    @Query("UPDATE sales SET dirty = 0 WHERE id IN (:ids)")
-    suspend fun clearDirty(ids: List<String>)
+    /** See [CollectionDao.clearDirtyIfUnchanged] — clears only when the row is unchanged since the snapshot. */
+    @Query("UPDATE sales SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun clearDirtyIfUnchanged(id: String, updatedAt: Long)
 
     @Query("DELETE FROM sales")
     suspend fun clearAll()

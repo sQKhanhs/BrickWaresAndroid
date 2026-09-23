@@ -147,20 +147,25 @@ class SyncCoordinator(
     // ---- push (dirty local → Supabase upsert) ----
 
     private suspend fun push(uid: String) {
+        // Clear dirty CONDITIONALLY, per row, on the snapshot's updatedAt: a repository write can re-dirty
+        // a row (a new updatedAt) DURING the network upsert (writes run on their own scope, no lock), and
+        // an unconditional clear-by-id would wipe that flag → the new edit never reaches the server.
+        // clearDirtyIfUnchanged clears only when updatedAt still matches the pushed snapshot, so an edit
+        // made mid-push keeps its dirty flag and syncs on the next round.
         // Never send an empty batch (a row with neither set_id nor fig_num can't be mapped to a remote row).
         collectionDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("collection_copies").upsert(it) }
-            collectionDao.clearDirty(dirty.map { it.id })
+            dirty.forEach { collectionDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
             contributeValues(dirty) // publish paid prices as community value points (Decision 17)
         }
         wishlistDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("wishlist_items").upsert(it) }
-            wishlistDao.clearDirty(dirty.map { it.id })
+            dirty.forEach { wishlistDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
         }
         salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
             // Includes minifig sales (fig_num, no set_id) — they used to be dropped here yet marked clean.
             dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("sales").upsert(it) }
-            salesDao.clearDirty(dirty.map { it.id })
+            dirty.forEach { salesDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
             contributeSaleValues(dirty) // a realized sale price is a community value point too (Decision 17)
         }
     }
