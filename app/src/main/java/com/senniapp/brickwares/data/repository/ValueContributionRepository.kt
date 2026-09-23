@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -59,7 +60,7 @@ class ValueContributionRepository(
         val rows = runCatching {
             withTimeout(TIMEOUT_MS) { client.from(TABLE).select().decodeList<Row>() }
         }.getOrElse {
-            if (it is CancellationException) throw it
+            if (it.isRealCancellation()) throw it
             Timber.tag(TAG).w(it, "value warm failed")
             return
         }
@@ -69,7 +70,7 @@ class ValueContributionRepository(
         // Resolve the retail/status anchor for the contributed sets in ONE batch query (Decision 16 — the
         // client no longer holds the whole catalog); an unresolved set falls back to the no-anchor band.
         val catSets = runCatching { catalog.fetchSetsByIds(bySet.keys) }.getOrElse {
-            if (it is CancellationException) throw it
+            if (it.isRealCancellation()) throw it
             Timber.tag(TAG).w(it, "value warm catalog resolve failed")
             emptyList()
         }.mapNotNull { s -> s.setId?.let { it to s } }.toMap()
@@ -161,7 +162,7 @@ class ValueContributionRepository(
                 client.from(TABLE).select { filter { isIn("set_id", setIds) } }.decodeList<Row>()
             }
         }.getOrElse {
-            if (it is CancellationException) throw it
+            if (it.isRealCancellation()) throw it
             Timber.tag(TAG).w(it, "bulk value fetch failed")
             return emptyMap()
         }
@@ -173,12 +174,21 @@ class ValueContributionRepository(
 
     private suspend fun aggregate(retailUsdCents: Long?, tier: ValueGuardTier, fetch: suspend () -> List<Row>): CurrentValue {
         val rows = runCatching { withTimeout(TIMEOUT_MS) { fetch() } }.getOrElse {
-            if (it is CancellationException) throw it
+            if (it.isRealCancellation()) throw it
             Timber.tag(TAG).w(it, "value fetch failed")
             return CurrentValue.NONE
         }
         return ValueAggregator.aggregate(rows.toPoints(), retailUsdCents, tier)
     }
+
+    /**
+     * A caller's cancellation must propagate, but a [TimeoutCancellationException] from our own
+     * [withTimeout] is a FAILURE, not a cancellation: it's a CancellationException subtype, so rethrowing
+     * it lets the launching coroutine end "cancelled" — silently — and the caller's loading flag never
+     * clears (the detail value row stuck on "…" for the life of the screen). Treat it as an error here.
+     */
+    private fun Throwable.isRealCancellation(): Boolean =
+        this is CancellationException && this !is TimeoutCancellationException
 
     // Each contribution is recorded in its own currency (USD cents or whole ₫); normalize every point
     // to USD cents so the median/guard compare like with like against the USD-cents retail anchor.

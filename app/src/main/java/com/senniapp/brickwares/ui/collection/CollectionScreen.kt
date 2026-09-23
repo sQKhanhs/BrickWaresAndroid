@@ -267,7 +267,9 @@ private fun CollectionContent(
                 if (state.visibleItems.isEmpty()) {
                     item { EmptyStateArt(stringResource(R.string.collection_empty)) }
                 } else {
-                    items(state.pageItems, key = { it.setId?.toString() ?: it.setNumber }) { item ->
+                    // variantKey is prefixed ("s<set_id>" / "n<number>"), so a legacy row's number can never
+                    // collide with another item's set_id — a bare mix of the two crashed the list.
+                    items(state.pageItems, key = { it.variantKey }) { item ->
                         SwipeToDelete(onSwiped = { onRequestDeleteItem(item) }, autoDismiss = false) {
                             ItemCard(
                                 item = item,

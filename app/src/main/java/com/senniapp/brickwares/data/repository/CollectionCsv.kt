@@ -122,7 +122,9 @@ object CollectionCsv {
 
     /** Parse CSV text into its header + header-keyed rows (first non-blank record is the header). */
     fun parse(text: String): Parsed {
-        val records = parseRecords(text)
+        // Excel's "CSV UTF-8" prepends a byte-order mark that Kotlin's trim() does not strip; left in,
+        // the first header key reads as "﻿format_version" and the version gate silently defaults.
+        val records = parseRecords(text.removePrefix("﻿"))
         if (records.isEmpty()) return Parsed(emptyList(), emptyList())
         val header = records.first().map { it.trim() }
         val rows = records.drop(1)

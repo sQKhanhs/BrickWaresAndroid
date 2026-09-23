@@ -254,13 +254,15 @@ class CollectionViewModel(
         val sn = state.sellSetNumber
         val cid = state.sellCopyId
         val name = state.sellTarget?.first?.name
-        if (sn != null && cid != null) {
+        // Only a copy with units can be sold; the repository no-ops on an empty one, so don't claim "Sold".
+        val sellable = (state.sellTarget?.second?.qty ?: 0) > 0
+        if (sn != null && cid != null && sellable) {
             repository.sellCopy(sn, cid, quantity, salePrice, currency, soldOn)
         }
         _uiState.update {
             it.copy(
                 sellSetNumber = null, sellCopyId = null,
-                toastMessage = name?.let { n -> UiText.Res(R.string.toast_sold, listOf(n)) } ?: it.toastMessage,
+                toastMessage = if (sellable) name?.let { n -> UiText.Res(R.string.toast_sold, listOf(n)) } ?: it.toastMessage else it.toastMessage,
             )
         }
     }

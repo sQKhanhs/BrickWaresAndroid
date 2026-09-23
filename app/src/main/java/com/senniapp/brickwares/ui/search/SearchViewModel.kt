@@ -142,6 +142,9 @@ class SearchViewModel(
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query, submittedQuery = null) }
+        // Editing the query retires the submitted search — cancel its fetch so a late response can't
+        // land on whatever view is open by then (a theme page, the browse).
+        searchJob?.cancel()
         // Set suggestions are a DB query now (Decision 16), so debounce per keystroke; minifig
         // suggestions still come from the in-memory minifig cache.
         suggestJob?.cancel()
@@ -165,8 +168,10 @@ class SearchViewModel(
     fun onSubmit() {
         val q = _uiState.value.query.trim()
         if (q.isBlank()) return
-        // Cancel any in-flight search so a slow earlier one can't land after — and overwrite — this one.
+        // Cancel any in-flight search so a slow earlier one can't land after — and overwrite — this one;
+        // a pending suggestion fetch is moot once a search is submitted.
         searchJob?.cancel()
+        suggestJob?.cancel()
         // Clear the previous results and show a spinner up front, so the stale "too many" / "no results"
         // text can't linger during the round-trip; searchError is reset for this fresh attempt.
         _uiState.update {
@@ -181,7 +186,13 @@ class SearchViewModel(
             try {
                 val sets = catalogRepo.searchSets(q, limit = SEARCH_LIMIT)
                 val figs = catalogRepo.fetchMinifigsMatching(q, limit = SEARCH_LIMIT)
-                _uiState.update { it.copy(results = sets, minifigItems = figs, searchLoading = false, searchError = false) }
+                _uiState.update {
+                    // Belt and braces with the cancels above: never adopt a response for a query that is
+                    // no longer the submitted one (cleared, reset, or replaced meanwhile) — it would
+                    // overwrite an open theme's list with the search's minifigs.
+                    if (it.submittedQuery != q) it
+                    else it.copy(results = sets, minifigItems = figs, searchLoading = false, searchError = false)
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // superseded by a newer submit — unwind without touching state
             } catch (e: Exception) {
@@ -522,10 +533,15 @@ class SearchViewModel(
             .sortedBy { it.name }
 
     fun onClearSearch() {
+        // Retire both in-flight fetches: a late search response must not land on the next view, and a
+        // late suggestion fetch would show stale rows under the next query.
+        searchJob?.cancel()
+        suggestJob?.cancel()
         _uiState.update {
             it.copy(
                 query = "", submittedQuery = null, results = emptyList(),
                 suggestions = emptyList(), minifigSuggestions = emptyList(), minifigItems = emptyList(),
+                searchLoading = false, searchError = false,
             )
         }
     }
@@ -536,11 +552,15 @@ class SearchViewModel(
      * Keeps loaded catalog data (themes, favorites, wishlist state).
      */
     fun resetToDefault() {
+        searchJob?.cancel()
+        suggestJob?.cancel()
         _uiState.update {
             it.copy(
                 query = "",
                 submittedQuery = null,
                 results = emptyList(),
+                searchLoading = false,
+                searchError = false,
                 suggestions = emptyList(),
                 minifigSuggestions = emptyList(),
                 themeDetail = null,

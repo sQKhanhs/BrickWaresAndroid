@@ -458,7 +458,8 @@ private fun SharePreviewCard(
                                 Text(tm.theme, style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = sc.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                 Spacer(Modifier.width(8.dp))
                                 Row {
-                                    Text(pluralStringResource(R.plurals.home_theme_set_count, tm.setCount, tm.setCount) + " · ", style = BwType.body.copy(fontSize = 11.sp), color = sc.muted)
+                                    // Items, not "sets": a theme's count includes standalone minifigs (same fix as the Home card).
+                                    Text(pluralStringResource(R.plurals.home_theme_item_count, tm.setCount, tm.setCount) + " · ", style = BwType.body.copy(fontSize = 11.sp), color = sc.muted)
                                     Text(if (showValue) formatIn(tm.totalValue, currency) else HIDDEN, style = BwType.body.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold), color = ShareAccent)
                                 }
                             }

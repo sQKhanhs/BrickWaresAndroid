@@ -218,7 +218,16 @@ class SettingsViewModel(
                     // "wt" = write + TRUNCATE. Plain "w" doesn't truncate on Drive and some SAF
                     // providers, so re-exporting a shorter file over a longer one leaves the old
                     // trailing bytes — stale rows past the new content. "wt" clears the file first.
-                    resolver.openOutputStream(uri, "wt")?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    // Not every DocumentsProvider accepts the "t" flag, though (some only implement
+                    // "w"/"rw" and throw on anything else) — fall back to plain "w" for those rather than
+                    // failing an export that used to work; they are also the providers that truncate.
+                    val stream = try {
+                        resolver.openOutputStream(uri, "wt")
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        resolver.openOutputStream(uri, "w")
+                    }
+                    stream?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
                         ?: error("Couldn't open the export file")
                 }
             }.fold(

@@ -25,11 +25,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.senniapp.brickwares.R
+import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.ErrorScreen
+import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.resolve
+import com.senniapp.brickwares.ui.search.SearchUiState
 import com.senniapp.brickwares.ui.search.SearchViewModel
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
@@ -65,8 +69,47 @@ fun NewSetsScreen(
                 BackCircleButton(onBack = onBack)
                 Text(stringResource(R.string.new_sets_title), style = BwType.wordmark.copy(fontSize = 20.sp), color = colors.text)
             }
+            // The list is loaded by the SearchViewModel's browse load, which can have failed (opened
+            // offline) while Home's own New Sets card has since recovered on reconnect. Don't render an
+            // empty "0 new sets" for that: offer the error+retry, or the spinner while it loads.
+            when {
+                groups.isEmpty() && state.loadError ->
+                    ErrorScreen(message = stringResource(R.string.error_connection), onRetry = viewModel::retry, modifier = Modifier.weight(1f))
+                groups.isEmpty() && state.isLoading ->
+                    LoadingScreen(modifier = Modifier.fillMaxWidth().weight(1f))
+                else -> NewSetsList(state = state, groups = groups, total = total, viewModel = viewModel, onOpenSetDetail = onOpenSetDetail, modifier = Modifier.fillMaxWidth().weight(1f))
+            }
+        }
+
+        // Shared Add-to-Collection sheet (same one the Search tab uses).
+        state.addTarget?.let { target ->
+            AddToCollectionSheet(
+                initialSet = target,
+                initialCopy = null,
+                onDismiss = viewModel::onDismissAdd,
+                onSearch = viewModel::searchCatalog,
+                onAdd = viewModel::onAddToCollectionSubmit,
+                allowSalesMode = true,
+                onAddSale = viewModel::onAddToSalesSubmit,
+            )
+        }
+
+        BwToast(message = state.toastMessage?.resolve(), onDismiss = viewModel::onToastShown)
+    }
+}
+
+@Composable
+private fun NewSetsList(
+    state: SearchUiState,
+    groups: List<Pair<String, List<CatalogSet>>>,
+    total: Int,
+    viewModel: SearchViewModel,
+    onOpenSetDetail: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = BwTheme.colors
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = modifier,
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 104.dp),
             ) {
                 item {
@@ -91,23 +134,6 @@ fun NewSetsScreen(
                     }
                 }
             }
-        }
-
-        // Shared Add-to-Collection sheet (same one the Search tab uses).
-        state.addTarget?.let { target ->
-            AddToCollectionSheet(
-                initialSet = target,
-                initialCopy = null,
-                onDismiss = viewModel::onDismissAdd,
-                onSearch = viewModel::searchCatalog,
-                onAdd = viewModel::onAddToCollectionSubmit,
-                allowSalesMode = true,
-                onAddSale = viewModel::onAddToSalesSubmit,
-            )
-        }
-
-        BwToast(message = state.toastMessage?.resolve(), onDismiss = viewModel::onToastShown)
-    }
 }
 
 /** A theme section header inside the New Sets list: the theme name over a divider (like the web layout). */

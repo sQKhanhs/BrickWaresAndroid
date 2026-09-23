@@ -111,6 +111,17 @@ interface WishlistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<WishlistEntity>)
 
+    /** Every active wishlist row for one item — by set_id when given, else by fig_num. Feeds the sync's
+     *  cross-device duplicate cleanup ([SyncRules.wishlistDuplicates]): the server keeps ONE live row per item. */
+    @Query(
+        "SELECT * FROM wishlist_items WHERE deleted = 0 AND " +
+            "((:setId IS NOT NULL AND setId = :setId) OR (:figNum IS NOT NULL AND figNum = :figNum))",
+    )
+    suspend fun activeMatching(setId: Long?, figNum: String?): List<WishlistEntity>
+
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
+    suspend fun markDeleted(id: String, ts: Long)
+
     /** Tombstone the LEGACY wishlist row for a number (set_id-less rows only). `setId IS NULL` prevents
      *  a legacy removal from also wiping every cataloged shared-number variant sharing this set_number. */
     @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")

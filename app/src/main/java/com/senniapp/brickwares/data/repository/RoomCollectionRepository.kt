@@ -293,7 +293,7 @@ class RoomCollectionRepository(
             imageUrl = s("image_url"),
             quantity = capQty(s("quantity")?.toIntOrNull() ?: 1),
             condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
-            pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
+            pricePaid = capPrice(s("price_paid")?.toLongOrNull() ?: 0L),
             currency = currency,
             acquiredOn = s("acquired_on"),
             notes = capNote(s("notes")),
@@ -322,8 +322,8 @@ class RoomCollectionRepository(
             retailPrice = s("retail_price")?.toLongOrNull(),
             quantity = capQty(s("quantity")?.toIntOrNull() ?: 1),
             condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
-            pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
-            salePrice = s("sale_price")?.toLongOrNull() ?: 0L,
+            pricePaid = capPrice(s("price_paid")?.toLongOrNull() ?: 0L),
+            salePrice = capPrice(s("sale_price")?.toLongOrNull() ?: 0L),
             currency = currency,
             soldOn = s("sold_on"),
             notes = capNote(s("notes")),
@@ -393,26 +393,33 @@ class RoomCollectionRepository(
         val isFig = kind == "minifig"
         val set = if (isFig) null else resolveCatalog(item.setNumber)
         val now = System.currentTimeMillis()
+        // The row identity, resolved ONCE and used for the merge lookup, the insert AND the wishlist
+        // tombstone alike. Prefer the item's own (SELECTED variant) set_id; `set` is the number-resolved
+        // LOWEST variant, a fallback for legacy items with no set_id. Looking up by one key and inserting
+        // under another split a legacy card into a second card on every add.
+        val rowSetId = if (isFig) null else (item.setId ?: set?.setId)
         // Existing copies of this item — a newly-added copy identical in condition, paid price, date and
         // note merges into one (bumps its quantity) instead of adding a duplicate row.
-        val existingCopies = activeCopiesOf(item.setId, item.setNumber, kind)
+        val existingCopies = activeCopiesOf(rowSetId, item.setNumber, kind)
         item.copies.forEach { copy ->
             val cond = copy.condition.dbName()
             val date = copy.dateAdded.ifBlank { null }
             // Match on per-unit paid (cross-multiply avoids integer-division rounding, and keeps
             // matching as the merged row's total grows) so a repeated identical add bumps quantity.
-            // Same currency required — amounts in different units aren't comparable/mergeable.
+            // Same currency required — amounts in different units aren't comparable/mergeable. A merge
+            // that would push the row past the quantity cap is refused (fresh row instead of clamping).
             val match = existingCopies.firstOrNull {
                 it.condition == cond && it.acquiredOn == date &&
                     it.notes.orEmpty() == copy.note.orEmpty() && it.currency == copy.currency.name &&
-                    it.pricePaid * copy.qty == copy.pricePaid * it.quantity
+                    it.pricePaid * copy.qty == copy.pricePaid * it.quantity &&
+                    UserDataLimits.canMergeQty(it.quantity, copy.qty)
             }
             if (match != null) {
                 // pricePaid is the total for a copy's qty, so sum it alongside the quantity.
                 collectionDao.upsert(
                     match.copy(
                         quantity = capQty(match.quantity + copy.qty),
-                        pricePaid = match.pricePaid + copy.pricePaid,
+                        pricePaid = capPrice(match.pricePaid + copy.pricePaid),
                         updatedAt = now, dirty = true,
                     ),
                 )
@@ -420,10 +427,7 @@ class RoomCollectionRepository(
                 collectionDao.upsert(
                     CollectionCopyEntity(
                         id = UUID.randomUUID().toString(),
-                        // Prefer the item's own (SELECTED variant) fields; `set` is the number-resolved
-                        // LOWEST variant, kept only as a fallback for legacy items with no setId/image/retail
-                        // — for CMF/SDCC shared numbers the two differ, and the item's are the right ones.
-                        setId = item.setId ?: set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                        setId = rowSetId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                         setNumber = item.setNumber, name = item.name, theme = item.theme,
                         subtheme = set?.subtheme ?: "General",
                         releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
@@ -431,7 +435,7 @@ class RoomCollectionRepository(
                         retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
                         status = item.status.name, imageUrl = item.imageUrl ?: set?.imageUrl,
                         quantity = capQty(copy.qty), condition = cond,
-                        pricePaid = copy.pricePaid, currency = copy.currency.name, acquiredOn = date,
+                        pricePaid = capPrice(copy.pricePaid), currency = copy.currency.name, acquiredOn = date,
                         notes = capNote(copy.note), deleted = false, updatedAt = now, dirty = true,
                     ),
                 )
@@ -440,13 +444,13 @@ class RoomCollectionRepository(
         // Reflect the paid price in the community value cache now (Decision 17) — one point per user,
         // so the last copy's paid represents this set/fig (mirrors the sync's upsert-per-item).
         item.copies.lastOrNull()?.let { copy ->
-            contributeLocalValue(if (isFig) null else (item.setId ?: set?.setId), if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
+            contributeLocalValue(rowSetId, if (isFig) item.setNumber else null, item.setNumber, copy.pricePaid, copy.currency, isSale = false)
         }
         // Owning an item removes it from the wishlist (want → have) — applies to EVERY add path (search,
         // detail, collection, or the wishlist "Move"). No-op when it wasn't wishlisted; marks the row
-        // deleted+dirty so the removal syncs. Keyed by set_id for a cataloged set (so owning 71050-2
-        // only clears 71050-2 from the wishlist), else by set number (a minifig's fig_num is stored there).
-        if (item.setId != null) wishlistDao.markDeletedBySetId(item.setId, now)
+        // deleted+dirty so the removal syncs. Keyed by the same row identity as the copy (so owning
+        // 71050-2 only clears 71050-2 from the wishlist), else by set number (a minifig's fig_num is stored there).
+        if (rowSetId != null) wishlistDao.markDeletedBySetId(rowSetId, now)
         else wishlistDao.markDeletedBySetNumber(item.setNumber, now)
     }
 
@@ -466,7 +470,7 @@ class RoomCollectionRepository(
         collectionDao.upsert(
             existing.copy(
                 quantity = capQty(copy.qty), condition = copy.condition.dbName(),
-                pricePaid = copy.pricePaid, currency = copy.currency.name,
+                pricePaid = capPrice(copy.pricePaid), currency = copy.currency.name,
                 acquiredOn = copy.dateAdded.ifBlank { null },
                 notes = capNote(copy.note), updatedAt = System.currentTimeMillis(), dirty = true,
             ),
@@ -489,20 +493,24 @@ class RoomCollectionRepository(
         val currency = copy?.currency ?: AppCurrency.USD
         val soldOn = copy?.dateAdded?.ifBlank { null }
         val note = copy?.note
+        // One row identity for the merge lookup and the insert (see addItem): the selected variant's
+        // set_id, else the number-resolved fallback for a legacy item.
+        val rowSetId = if (isFig) null else (item.setId ?: set?.setId)
         // An identical sale (condition, currency, per-unit paid, per-unit sale price, date, note) merges
         // into one row — bumps quantity and sums the paid/sale totals — instead of adding a duplicate.
-        val match = activeSalesOf(item.setId, item.setNumber, kind).firstOrNull {
+        val match = activeSalesOf(rowSetId, item.setNumber, kind).firstOrNull {
             it.condition == cond && it.soldOn == soldOn && it.notes.orEmpty() == note.orEmpty() &&
                 it.currency == currency.name &&
                 it.pricePaid * qty == paid * it.quantity &&
-                it.salePrice * qty == salePrice * it.quantity
+                it.salePrice * qty == salePrice * it.quantity &&
+                UserDataLimits.canMergeQty(it.quantity, qty)
         }
         if (match != null) {
             salesDao.upsert(
                 match.copy(
                     quantity = capQty(match.quantity + qty),
-                    pricePaid = match.pricePaid + paid,
-                    salePrice = match.salePrice + salePrice,
+                    pricePaid = capPrice(match.pricePaid + paid),
+                    salePrice = capPrice(match.salePrice + salePrice),
                     updatedAt = now, dirty = true,
                 ),
             )
@@ -510,29 +518,31 @@ class RoomCollectionRepository(
             salesDao.upsert(
                 SalesEntity(
                     id = UUID.randomUUID().toString(),
-                    // Prefer the item's own (SELECTED variant) fields over the number-resolved lowest
-                    // variant `set` (they differ for CMF/SDCC shared numbers) — see addItem.
-                    setId = item.setId ?: set?.setId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
+                    setId = rowSetId, figNum = if (isFig) item.setNumber else null, itemKind = kind,
                     setNumber = item.setNumber, name = item.name, theme = item.theme,
                     releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                     imageUrl = item.imageUrl ?: set?.imageUrl,
                     retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
                     quantity = capQty(qty), condition = cond,
-                    pricePaid = paid, salePrice = salePrice, currency = currency.name,
+                    pricePaid = capPrice(paid), salePrice = capPrice(salePrice), currency = currency.name,
                     soldOn = soldOn, notes = capNote(note), deleted = false,
                     updatedAt = now, dirty = true,
                 ),
             )
         }
         // A sale price is a community value point too (Decision 17) — reflect it locally at once.
-        contributeLocalValue(if (isFig) null else (item.setId ?: set?.setId), if (isFig) item.setNumber else null, item.setNumber, salePrice, currency, isSale = true)
+        contributeLocalValue(rowSetId, if (isFig) item.setNumber else null, item.setNumber, salePrice, currency, isSale = true)
     }
 
     override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String?) = write {
         val copy = collectionDao.getById(copyId) ?: return@write
         val available = copy.quantity
-        // Nothing to sell (a legacy 0-quantity copy) — bail before coerceIn(1, 0) throws on the empty range.
-        if (available <= 0) return@write
+        // Nothing to sell (a legacy 0-quantity copy): there are no units to move, so tombstone the empty
+        // row rather than leaving it (the UI hides Sell on it; this is the backstop for any other path).
+        if (available <= 0) {
+            collectionDao.markDeleted(copyId, System.currentTimeMillis())
+            return@write
+        }
         val sellQty = quantity.coerceIn(1, available)
         // Prorate the copy's paid cost so profit is a fair basis and paid stays conserved between
         // the remaining copy and the sale (whole-copy sale → full cost basis). The sale price is typed
@@ -549,14 +559,15 @@ class RoomCollectionRepository(
             it.condition == copy.condition && it.soldOn == soldOnNorm &&
                 it.notes.orEmpty() == copy.notes.orEmpty() && it.currency == currency.name &&
                 it.pricePaid * sellQty == soldPaid * it.quantity &&
-                it.salePrice * sellQty == salePrice * it.quantity
+                it.salePrice * sellQty == salePrice * it.quantity &&
+                UserDataLimits.canMergeQty(it.quantity, sellQty)
         }
         if (match != null) {
             salesDao.upsert(
                 match.copy(
                     quantity = capQty(match.quantity + sellQty),
-                    pricePaid = match.pricePaid + soldPaid,
-                    salePrice = match.salePrice + salePrice,
+                    pricePaid = capPrice(match.pricePaid + soldPaid),
+                    salePrice = capPrice(match.salePrice + salePrice),
                     updatedAt = now, dirty = true,
                 ),
             )
@@ -569,7 +580,7 @@ class RoomCollectionRepository(
                     releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
                     imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
                     quantity = capQty(sellQty), condition = copy.condition,
-                    pricePaid = soldPaid, salePrice = salePrice, currency = currency.name,
+                    pricePaid = capPrice(soldPaid), salePrice = capPrice(salePrice), currency = currency.name,
                     soldOn = soldOnNorm, notes = capNote(copy.notes),
                     deleted = false, updatedAt = now, dirty = true,
                 ),
@@ -604,7 +615,7 @@ class RoomCollectionRepository(
         salesDao.upsert(
             existing.copy(
                 quantity = capQty(quantity), condition = condition.dbName(),
-                pricePaid = pricePaid, salePrice = salePrice, currency = currency.name,
+                pricePaid = capPrice(pricePaid), salePrice = capPrice(salePrice), currency = currency.name,
                 soldOn = soldOn?.ifBlank { null }, notes = capNote(note),
                 updatedAt = System.currentTimeMillis(), dirty = true,
             ),
@@ -660,21 +671,12 @@ class RoomCollectionRepository(
         }
     }
 
-    /**
-     * Clamp a note to the server's length cap. The remote tables reject a note longer than
-     * [MAX_NOTE_CHARS]; an over-cap note would fail the whole push batch, and since push runs before
-     * pull that wedges sync in both directions until it's fixed (see [SyncCoordinator]). Every write
-     * that stores a user note passes it through here, and the add sheet caps its input too — so a dirty
-     * row can never exceed the cap by any path (fresh add, edit, sell, or CSV import).
-     */
-    private fun capNote(note: String?): String? = note?.take(MAX_NOTE_CHARS)
-
-    /**
-     * Clamp a quantity to the valid server range [1, [MAX_QUANTITY]]. Merging identical copies/sales
-     * sums their quantities, which can climb past the server's cap and fail the push batch (same wedge
-     * as [capNote]); this bounds every stored quantity, merged or not.
-     */
-    private fun capQty(quantity: Int): Int = quantity.coerceIn(1, MAX_QUANTITY)
+    // The server's CHECK caps (see [UserDataLimits]): every write that stores a note, quantity or price
+    // passes through these, so a dirty row can never exceed a cap by any path (add, edit, merge, sell,
+    // CSV import) — an over-cap row fails the whole push batch for its table.
+    private fun capNote(note: String?): String? = UserDataLimits.capNote(note)
+    private fun capQty(quantity: Int): Int = UserDataLimits.capQty(quantity)
+    private fun capPrice(amount: Long): Long = UserDataLimits.capPrice(amount)
 
     /** The catalog set for an add/wishlist write — the user-scoped cache first, else a one-set query. */
     private suspend fun resolveCatalog(setNumber: String): CatalogSet? =
@@ -804,10 +806,4 @@ class RoomCollectionRepository(
     private fun String.toAvailability(): Availability =
         runCatching { Availability.valueOf(this) }.getOrDefault(Availability.AVAILABLE)
 
-    private companion object {
-        /** Server-side check-constraint caps on the remote tables — a row past either fails the whole
-         *  push batch. Kept in step with the migration; the add sheet caps its inputs to the same values. */
-        const val MAX_NOTE_CHARS = 2000
-        const val MAX_QUANTITY = 9999
-    }
 }

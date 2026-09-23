@@ -11,24 +11,32 @@ import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.SyncStateStore
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.data.local.WishlistEntity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.EncodeDefault
@@ -36,7 +44,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
-import java.time.OffsetDateTime
 
 /**
  * Two-way sync between Room (local source of truth) and Supabase, per Arch Decision 10. Runs on
@@ -70,6 +77,12 @@ class SyncCoordinator(
     // made before the collector below has attached.
     private val syncRequests = Channel<Unit>(Channel.CONFLATED)
 
+    // Bounded retry after a FAILED sync while online — see [scheduleRetry]. A fresh request (a local
+    // write, a reconnect, the app coming to the foreground) restarts the schedule from the first delay.
+    private var retryJob: Job? = null
+    @Volatile private var retryAttempt = 0
+    private var sawFirstStart = false
+
     init {
         AuthRepository.authState
             .onEach { state -> if (state is AuthState.SignedIn) onSignedIn(state.user) }
@@ -85,11 +98,47 @@ class SyncCoordinator(
             .debounce(SYNC_DEBOUNCE_MS)
             .onEach { client.auth.currentUserOrNull()?.id?.let { sync(it) } }
             .launchIn(scope)
+        // Sync when the app returns to the foreground, so edits made on another device since this one
+        // was last open show up without waiting for a local write or a connectivity flip. The FIRST
+        // ON_START (cold start) is skipped: sign-in already runs a full sync then. Lifecycle observers
+        // must be registered on the main thread.
+        scope.launch(Dispatchers.Main) {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(
+                LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_START) {
+                        if (sawFirstStart) requestSync() else sawFirstStart = true
+                    }
+                },
+            )
+        }
     }
 
     /** Requests a sync after a local write (no-op if signed out). Debounced — see [syncRequests]. */
     fun requestSync() {
+        retryJob?.cancel()
+        retryAttempt = 0
         syncRequests.trySend(Unit)
+    }
+
+    /**
+     * A sync failed while the device believes it is online. The online edge can fire a beat before the
+     * network is actually routable (DNS not ready, captive portal), so a single attempt would strand the
+     * dirty rows until the next write. Retry on a short bounded backoff ([SyncRules.RETRY_DELAYS_MS]),
+     * skipping the attempt if the device went offline meanwhile (the reconnect edge re-requests then).
+     */
+    private fun scheduleRetry() {
+        if (retryJob?.isActive == true) return
+        val attempt = retryAttempt
+        if (attempt >= SyncRules.RETRY_DELAYS_MS.size) return
+        retryAttempt = attempt + 1
+        retryJob = scope.launch {
+            delay(SyncRules.RETRY_DELAYS_MS[attempt])
+            // Release the handle BEFORE syncing: a failed retry calls scheduleRetry() from inside this
+            // very job, and the isActive guard above would otherwise see itself and skip attempts 2..n.
+            retryJob = null
+            if (!AppGraph.connectivity.isOnline.value) return@launch
+            client.auth.currentUserOrNull()?.id?.let { sync(it) }
+        }
     }
 
     /**
@@ -121,7 +170,18 @@ class SyncCoordinator(
         sync(user.id)
     }
 
-    private suspend fun sync(uid: String): Boolean = mutex.withLock {
+    private suspend fun sync(uid: String): Boolean {
+        val ok = syncLocked(uid)
+        if (ok) {
+            retryJob?.cancel()
+            retryAttempt = 0
+        } else {
+            scheduleRetry()
+        }
+        return ok
+    }
+
+    private suspend fun syncLocked(uid: String): Boolean = mutex.withLock {
         // PULL before push. A newer remote row — e.g. another device's delete — must be applied locally
         // FIRST so it can supersede a stale dirty local edit (applyCopy/Wish/Sale now let a newer remote
         // replace even a dirty row). If we pushed first, a device reconnecting with an OLD offline edit
@@ -153,22 +213,74 @@ class SyncCoordinator(
         // clearDirtyIfUnchanged clears only when updatedAt still matches the pushed snapshot, so an edit
         // made mid-push keeps its dirty flag and syncs on the next round.
         // Never send an empty batch (a row with neither set_id nor fig_num can't be mapped to a remote row).
-        collectionDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
-            dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("collection_copies").upsert(it) }
-            dirty.forEach { collectionDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-            contributeValues(dirty) // publish paid prices as community value points (Decision 17)
-        }
-        wishlistDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
-            dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("wishlist_items").upsert(it) }
-            dirty.forEach { wishlistDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-        }
-        salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
-            // Includes minifig sales (fig_num, no set_id) — they used to be dropped here yet marked clean.
-            dirty.mapNotNull { it.toRemote(uid) }.takeIf { it.isNotEmpty() }?.let { client.from("sales").upsert(it) }
-            dirty.forEach { salesDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-            contributeSaleValues(dirty) // a realized sale price is a community value point too (Decision 17)
-        }
+        // The three tables are pushed INDEPENDENTLY: a rejected batch in one (a CHECK / unique violation on
+        // a single row) must not skip the others. A rejected row stays dirty (see [upsertRows]) so it is
+        // never claimed as synced; the first failure is rethrown at the end so sync() still reports it.
+        val failures = mutableListOf<Throwable>()
+        runCatching {
+            collectionDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
+                val rejected = upsertRows("collection_copies", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in rejected) collectionDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                contributeValues(dirty.filter { it.id !in rejected }) // publish paid prices as community value points (Decision 17)
+                if (rejected.isNotEmpty()) failures += rejectedError("collection_copies", rejected)
+            }
+        }.onFailure { if (it is CancellationException) throw it; failures += it }
+        runCatching {
+            wishlistDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
+                val rejected = upsertRows("wishlist_items", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in rejected) wishlistDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                if (rejected.isNotEmpty()) failures += rejectedError("wishlist_items", rejected)
+            }
+        }.onFailure { if (it is CancellationException) throw it; failures += it }
+        runCatching {
+            salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
+                // Includes minifig sales (fig_num, no set_id) — they used to be dropped here yet marked clean.
+                val rejected = upsertRows("sales", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in rejected) salesDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                contributeSaleValues(dirty.filter { it.id !in rejected }) // a realized sale price is a community value point too (Decision 17)
+                if (rejected.isNotEmpty()) failures += rejectedError("sales", rejected)
+            }
+        }.onFailure { if (it is CancellationException) throw it; failures += it }
+        failures.firstOrNull()?.let { throw it }
     }
+
+    private fun rejectedError(table: String, rejected: Set<String>) =
+        IllegalStateException("$table: ${rejected.size} row(s) rejected by the server (${rejected.joinToString()})")
+
+    /**
+     * Upsert [rows] as one batch; if the SERVER rejects the batch because of its CONTENT (a 400 CHECK
+     * violation or a 409 unique violation — one bad row fails the whole statement), fall back to one
+     * upsert per row so the good rows still land, and return the ids the server rejected. The caller
+     * clears dirty on the rows that landed (so they are not re-sent on every retry) and keeps the
+     * rejected ones dirty; each is logged once per push. Anything else — a transport failure (offline,
+     * timeout), an expired session (401), a gateway/server error (5xx) — is NOT retried row by row (it
+     * would fail N times for the same reason, N non-fatals each) and propagates so the sync counts as
+     * failed and is retried on the backoff.
+     */
+    private suspend inline fun <reified R : Any> upsertRows(table: String, rows: List<R>, idOf: (R) -> String): Set<String> {
+        if (rows.isEmpty()) return emptySet()
+        try {
+            client.from(table).upsert(rows)
+            return emptySet()
+        } catch (e: RestException) {
+            if (!e.isRowRejection()) throw e
+            Timber.tag(TAG).w(e, "$table batch rejected (${e.statusCode}) — pushing row by row")
+        }
+        val rejected = mutableSetOf<String>()
+        for (row in rows) {
+            try {
+                client.from(table).upsert(row)
+            } catch (e: RestException) {
+                if (!e.isRowRejection()) throw e
+                rejected += idOf(row)
+                Timber.tag(TAG).w("$table push rejected row ${idOf(row)}: ${e.statusCode} ${e.error}")
+            }
+        }
+        return rejected
+    }
+
+    /** A rejection caused by the row itself: 400 (CHECK / not-null) or 409 (unique / FK) — not 401/404/5xx. */
+    private fun RestException.isRowRejection(): Boolean = statusCode == 400 || statusCode == 409
 
     /**
      * Decision 17: publish each newly-synced paid price as a public community value point via the
@@ -249,21 +361,49 @@ class SyncCoordinator(
     }
 
     /**
-     * Fetch one table's rows stamped after that table's own cursor. Ascending order means that if
-     * PostgREST caps the page (max-rows), the next sync resumes from the last row we did get instead of
-     * skipping the rest. The cursor is advanced separately ([advanceCursor]) only after the rows apply.
+     * Fetch EVERY row of one table past that table's own cursor, paging through PostgREST's row cap.
+     * Keyset on (server_updated_at, id) — see [SyncRules.Cursor]: a bulk upsert stamps all its rows with
+     * ONE server time, so a stamp-only `>` cursor advanced past a capped page lost every sibling row
+     * (a 1,200-copy import left 200 of them missing on the other device). Each page continues from the
+     * LAST ROW of the previous one (not from an offset: a row re-stamped by another device mid-pull
+     * sorts to the end and would shift every later row up one slot, silently skipping one), until a
+     * short page; rows are then de-duplicated by id. The stored cursor advances separately
+     * ([advanceCursor]) only after the rows apply.
      */
     private suspend inline fun <reified T : RemoteRow> fetchTable(table: String): List<T> {
-        val cursor = syncState.pullCursor(table)
-        return client.from(table).select {
-            filter { if (cursor != null) gt(SERVER_UPDATED_AT, cursor) }
-            order(SERVER_UPDATED_AT, Order.ASCENDING)
-        }.decodeList<T>()
+        var cursor = SyncRules.Cursor.decode(syncState.pullCursor(table))
+        val pages = mutableListOf<List<T>>()
+        while (true) {
+            val after = cursor
+            val page = client.from(table).select {
+                filter {
+                    if (after != null) {
+                        val lastId = after.lastId
+                        if (lastId == null) {
+                            gt(SERVER_UPDATED_AT, after.stamp)
+                        } else {
+                            or {
+                                gt(SERVER_UPDATED_AT, after.stamp)
+                                and { eq(SERVER_UPDATED_AT, after.stamp); gt("id", lastId) }
+                            }
+                        }
+                    }
+                }
+                order(SERVER_UPDATED_AT, Order.ASCENDING)
+                order("id", Order.ASCENDING)
+                limit(SyncRules.PULL_PAGE_SIZE.toLong())
+            }.decodeList<T>()
+            pages += page
+            if (SyncRules.isLastPage(page.size)) break
+            val last = page.last()
+            cursor = last.serverUpdatedAt?.let { SyncRules.Cursor(it, last.id) } ?: break
+        }
+        return SyncRules.mergePages(pages) { it.id }
     }
 
-    /** Advance a table's pull cursor to the newest SERVER stamp actually received (never the client clock). */
+    /** Advance a table's pull cursor to the newest SERVER stamp (+ greatest id at it) actually received. */
     private suspend fun advanceCursor(table: String, rows: List<RemoteRow>) {
-        rows.mapNotNull { it.serverUpdatedAt }.maxByOrNull { parseIso(it) }?.let { syncState.setPullCursor(table, it) }
+        SyncRules.nextCursor(rows, { it.serverUpdatedAt }, { it.id })?.let { syncState.setPullCursor(table, it.encode()) }
     }
 
     private suspend fun applyCopy(r: RemoteCopy, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
@@ -273,7 +413,7 @@ class SyncCoordinator(
         // dirty (an unpushed edit), so a newer remote delete/edit supersedes a stale offline edit instead
         // of being blocked forever by the dirty flag. A dirty local that is newer-or-equal still wins and
         // is pushed. Pairs with pull-before-push and the server reject_stale_update trigger.
-        if (local != null && local.updatedAt >= remoteAt) return // local wins only when newer-or-equal
+        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
         // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
@@ -300,7 +440,7 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
         // Newer-wins even over a dirty local row (see applyCopy).
-        if (local != null && local.updatedAt >= remoteAt) return
+        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
@@ -316,13 +456,23 @@ class SyncCoordinator(
                 imageUrl = set?.imageUrl ?: fig?.imageUrl, deleted = r.deleted, updatedAt = remoteAt, dirty = false,
             ),
         )
+        // The server allows ONE live wishlist row per item. If this device minted its own row for the
+        // same item (wishlisted on two devices before either synced), that local row would violate the
+        // unique index on every push, forever — and block the sales push behind it. The remote row is the
+        // one the server already holds, so it survives; the local duplicate is tombstoned (dirty, so the
+        // tombstone pushes — deleted rows are outside the partial index).
+        if (!r.deleted) {
+            val now = System.currentTimeMillis()
+            SyncRules.wishlistDuplicates(wishlistDao.activeMatching(r.setId, r.figNum), r.id, r.setId, r.figNum)
+                .forEach { wishlistDao.markDeleted(it.id, now) }
+        }
     }
 
     private suspend fun applySale(r: RemoteSale, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = salesDao.getById(r.id)
         // Newer-wins even over a dirty local row (see applyCopy).
-        if (local != null && local.updatedAt >= remoteAt) return // local wins only when newer-or-equal
+        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
         // Polymorphic like copies: a minifig sale has fig_num only — reconstruct from the fig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
@@ -379,19 +529,15 @@ class SyncCoordinator(
 
     private fun toIso(millis: Long) = Instant.ofEpochMilli(millis).toString()
 
-    // PostgREST returns timestamptz as "…+00:00"; Instant.parse accepts that offset form only on newer
-    // java.time (JDK 12+ / recent Android) — elsewhere it throws and every remote row would read as epoch
-    // 0, so LWW would always keep local. OffsetDateTime handles both "Z" and "+00:00".
-    private fun parseIso(s: String): Long =
-        runCatching { OffsetDateTime.parse(s).toInstant().toEpochMilli() }
-            .recoverCatching { Instant.parse(s).toEpochMilli() }
-            .getOrDefault(0L)
+    private fun parseIso(s: String): Long = SyncRules.parseIso(s)
 
     /**
-     * Common shape of a pulled row: the DB-trigger stamp that drives that table's pull cursor. Sent as
-     * absent/null on push (its default) — the BEFORE trigger stamps it server-side regardless.
+     * Common shape of a pulled row: its id (the keyset tiebreaker) and the DB-trigger stamp that drives
+     * that table's pull cursor. The stamp is sent as absent/null on push (its default) — the BEFORE
+     * trigger stamps it server-side regardless.
      */
     private interface RemoteRow {
+        val id: String
         val serverUpdatedAt: String?
     }
 
@@ -405,7 +551,7 @@ class SyncCoordinator(
     @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteCopy(
-        val id: String,
+        override val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
@@ -425,7 +571,7 @@ class SyncCoordinator(
     @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteWish(
-        val id: String,
+        override val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,
@@ -439,7 +585,7 @@ class SyncCoordinator(
     @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     private data class RemoteSale(
-        val id: String,
+        override val id: String,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("set_id") val setId: Long? = null,
         @SerialName("fig_num") val figNum: String? = null,

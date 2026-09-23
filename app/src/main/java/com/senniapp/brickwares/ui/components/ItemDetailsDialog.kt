@@ -228,7 +228,9 @@ private fun ColumnScope.CollectionBody(
                     tint = colors.textMuted2,
                     modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onEditCopy(copy) },
                 )
-                if (allowSell) {
+                // No Sell on an empty (legacy 0-quantity) copy — there is nothing to sell, and offering it
+                // produced a "Sold" toast that recorded nothing. Edit or delete are the ways out.
+                if (allowSell && copy.qty > 0) {
                     Box(
                         modifier = Modifier.size(20.dp).clip(CircleShape).background(colors.brandYellow).clickable { onSellCopy(copy) },
                         contentAlignment = Alignment.Center,
