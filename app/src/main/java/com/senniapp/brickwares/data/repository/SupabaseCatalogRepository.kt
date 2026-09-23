@@ -241,11 +241,18 @@ class SupabaseCatalogRepository(
         row?.toCatalogSet()?.takeIf { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
     }
 
-    override suspend fun fetchSetsByNumbers(numbers: Collection<String>): List<CatalogSet> {
+    override suspend fun fetchSetsByNumbers(numbers: Collection<String>): List<CatalogSet> =
+        // Lowest variant per number wins (mirrors setByNumber) so a CMF-style multi-variant number is
+        // stable for the user-scoped overlay's legacy (set_id-less) rows.
+        fetchVariantsByNumbers(numbers)
+            .groupBy { it.setNumber }
+            .mapNotNull { (_, group) -> group.minByOrNull { it.numberVariant } }
+
+    override suspend fun fetchVariantsByNumbers(numbers: Collection<String>): List<CatalogSet> {
         val keys = numbers.filter { it.isNotBlank() }.distinct()
         if (keys.isEmpty()) return emptyList()
-        // Chunked so a large collection can't blow the URL length of the `in.(...)` filter. Lowest
-        // variant per number wins (mirrors setByNumber) so a CMF-style multi-variant number is stable.
+        // Chunked so a large collection can't blow the URL length of the `in.(...)` filter. Returns EVERY
+        // variant of each number (no per-number collapse) — the caller decides how to disambiguate.
         return keys.chunked(IN_CHUNK).flatMap { chunk ->
             withLoadTimeout {
                 client.from("sets").select(Columns.raw(SET_COLS)) {
@@ -259,8 +266,6 @@ class SupabaseCatalogRepository(
         }
             .map { it.toCatalogSet() }
             .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
-            .groupBy { it.setNumber }
-            .mapNotNull { (_, group) -> group.minByOrNull { it.numberVariant } }
     }
 
     override suspend fun fetchSetsByIds(ids: Collection<Long>): List<CatalogSet> {

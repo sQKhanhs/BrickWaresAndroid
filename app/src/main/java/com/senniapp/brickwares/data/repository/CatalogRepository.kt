@@ -55,6 +55,13 @@ interface CatalogRepository {
      */
     suspend fun fetchSetsByNumbers(numbers: Collection<String>): List<CatalogSet>
 
+    /**
+     * Batch-resolve catalog sets by number returning **every variant** (not just the lowest, unlike
+     * [fetchSetsByNumbers]). For CSV import, where a legacy row's number must be resolved to its exact
+     * variant — or left unresolved when the number has several — instead of being pinned to variant 1.
+     */
+    suspend fun fetchVariantsByNumbers(numbers: Collection<String>): List<CatalogSet>
+
     /** Batch-resolve catalog sets by their primary key (`sets.set_id`) — for the sync pull + value warm. */
     suspend fun fetchSetsByIds(ids: Collection<Long>): List<CatalogSet>
 

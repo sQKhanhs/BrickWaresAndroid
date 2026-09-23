@@ -36,7 +36,7 @@ object CollectionCsv {
     // a row simply leaves the columns its type doesn't use blank.
     private val COLUMNS = listOf(
         "format_version", "record_type",
-        "set_number", "name", "item_kind", "fig_num", "set_id",
+        "set_number", "name", "item_kind", "fig_num", "set_id", "number_variant",
         "theme", "subtheme", "release_year", "release_month", "pieces", "minifigs",
         "retail_price", "status", "image_url",
         "quantity", "condition", "currency", "price_paid", "sale_price",
@@ -51,12 +51,16 @@ object CollectionCsv {
         copies: List<CollectionCopyEntity>,
         sales: List<SalesEntity>,
         wishlist: List<WishlistEntity>,
+        /** The catalog `number_variant` for a row (from the caller's catalog overlay), or null when
+         *  unknown (a legacy set_id-less row, or a cold overlay). Exported so a future re-import can
+         *  resolve the EXACT variant of a shared-number (CMF/SDCC) set instead of the lowest one. */
+        variantOf: (setId: Long?, setNumber: String) -> Int? = { _, _ -> null },
     ): String {
         val sb = StringBuilder()
         sb.append(COLUMNS.joinToString(",") { escape(it) }).append('\n')
-        copies.forEach { appendRow(sb, it.toRow()) }
-        sales.forEach { appendRow(sb, it.toRow()) }
-        wishlist.forEach { appendRow(sb, it.toRow()) }
+        copies.forEach { appendRow(sb, it.toRow(variantOf(it.setId, it.setNumber))) }
+        sales.forEach { appendRow(sb, it.toRow(variantOf(it.setId, it.setNumber))) }
+        wishlist.forEach { appendRow(sb, it.toRow(variantOf(it.setId, it.setNumber))) }
         return sb.toString()
     }
 
@@ -65,10 +69,11 @@ object CollectionCsv {
         sb.append(COLUMNS.joinToString(",") { escape(row[it].orEmpty()) }).append('\n')
     }
 
-    private fun CollectionCopyEntity.toRow(): Map<String, String> = mapOf(
+    private fun CollectionCopyEntity.toRow(variant: Int?): Map<String, String> = mapOf(
         "format_version" to FORMAT_VERSION.toString(), "record_type" to "collection",
         "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
         "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "number_variant" to variant?.toString().orEmpty(),
         "theme" to theme, "subtheme" to subtheme,
         "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
         "pieces" to pieces.toString(), "minifigs" to minifigs.toString(),
@@ -79,10 +84,11 @@ object CollectionCsv {
         "acquired_on" to acquiredOn.orEmpty(), "notes" to notes.orEmpty(),
     )
 
-    private fun SalesEntity.toRow(): Map<String, String> = mapOf(
+    private fun SalesEntity.toRow(variant: Int?): Map<String, String> = mapOf(
         "format_version" to FORMAT_VERSION.toString(), "record_type" to "sale",
         "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
         "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "number_variant" to variant?.toString().orEmpty(),
         "theme" to theme,
         "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
         "retail_price" to retailPrice?.toString().orEmpty(), "image_url" to imageUrl.orEmpty(),
@@ -91,10 +97,11 @@ object CollectionCsv {
         "sold_on" to soldOn.orEmpty(), "notes" to notes.orEmpty(),
     )
 
-    private fun WishlistEntity.toRow(): Map<String, String> = mapOf(
+    private fun WishlistEntity.toRow(variant: Int?): Map<String, String> = mapOf(
         "format_version" to FORMAT_VERSION.toString(), "record_type" to "wishlist",
         "set_number" to setNumber, "name" to name, "item_kind" to itemKind,
         "fig_num" to figNum.orEmpty(), "set_id" to setId?.toString().orEmpty(),
+        "number_variant" to variant?.toString().orEmpty(),
         "theme" to theme, "subtheme" to subtheme,
         "release_year" to releaseYear.toString(), "release_month" to releaseMonth.toString(),
         "pieces" to pieces.toString(), "minifigs" to minifigs.toString(),

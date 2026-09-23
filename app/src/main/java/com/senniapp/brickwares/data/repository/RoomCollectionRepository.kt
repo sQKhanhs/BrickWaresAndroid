@@ -191,6 +191,12 @@ class RoomCollectionRepository(
             copies = collectionDao.getActive(),
             sales = salesDao.getActive(),
             wishlist = wishlistDao.getActive(),
+            // The EXACT number_variant, resolved from the row's set_id ONLY (never guessed from the
+            // number — that would be the lowest variant, which a re-import would then wrongly pin to).
+            // Null (blank) for a legacy set_id-less row or a cold overlay — we don't know its variant, so
+            // we don't fabricate one. Gives a human-editable (set_number, number_variant) identity that a
+            // future re-import can resolve without the opaque set_id (see [resolveImportedSetId]).
+            variantOf = { setId, _ -> setId?.let { setsById[it]?.numberVariant } },
         )
 
     override suspend fun importCollectionCsv(csv: String): Int {
@@ -205,16 +211,17 @@ class RoomCollectionRepository(
         val version = CollectionCsv.versionOf(parsed)
         if (version > CollectionCsv.FORMAT_VERSION) throw CsvTooNewException(version)
         val now = System.currentTimeMillis()
-        // A hand-edited file may omit set_id — resolve those in ONE batch catalog query (Decision 16),
-        // rather than a per-row lookup against a full in-memory catalog. Minifig rows carry no set_id.
-        val setIdByNumber: Map<String, Long> = run {
+        // A row that carries no explicit set_id resolves its variant from the catalog in ONE batch query
+        // (Decision 16). Fetch EVERY variant per number — NOT the lowest (fetchSetsByNumbers), which would
+        // pin a legacy CMF/SDCC row to variant 1. Minifig rows carry no set_id. See [resolveImportedSetId].
+        val variantsByNumber: Map<String, List<CatalogSet>> = run {
             val numbers = parsed.rows.mapNotNull { row ->
                 fun s(k: String) = row[k]?.trim()?.ifBlank { null }
                 val isFig = s("item_kind")?.lowercase() == "minifig"
                 if (isFig || s("set_id") != null) null else s("set_number")
             }.toSet()
-            runCatching { catalog.fetchSetsByNumbers(numbers) }.getOrDefault(emptyList())
-                .mapNotNull { st -> st.setId?.let { st.setNumber to it } }.toMap()
+            runCatching { catalog.fetchVariantsByNumbers(numbers) }.getOrDefault(emptyList())
+                .groupBy { it.setNumber }
         }
         // Split the tagged rows into the three lists (a v1 file has no record_type → all collection).
         val copies = mutableListOf<CollectionCopyEntity>()
@@ -222,9 +229,9 @@ class RoomCollectionRepository(
         val wishlist = mutableListOf<WishlistEntity>()
         for (row in parsed.rows) {
             when (CollectionCsv.recordType(row)) {
-                "sale" -> row.toImportedSale(now, setIdByNumber)?.let(sales::add)
-                "wishlist" -> row.toImportedWishlist(now, setIdByNumber)?.let(wishlist::add)
-                else -> row.toImportedCopy(now, setIdByNumber)?.let(copies::add)
+                "sale" -> row.toImportedSale(now, variantsByNumber)?.let(sales::add)
+                "wishlist" -> row.toImportedWishlist(now, variantsByNumber)?.let(wishlist::add)
+                else -> row.toImportedCopy(now, variantsByNumber)?.let(copies::add)
             }
         }
         // Overwrite all three tables: tombstone the current rows (so the removals push), then insert the
@@ -247,15 +254,30 @@ class RoomCollectionRepository(
         return copies.size + sales.size + wishlist.size
     }
 
+    /**
+     * The set_id for an imported row that carries no explicit set_id: the EXACT variant when the file
+     * gives a `number_variant` that matches one, else the sole variant when the number has exactly one,
+     * else **null**. Never pins a shared-number (CMF/SDCC) number to the lowest variant — a legacy
+     * (set_id-less) row of a multi-variant number stays unresolved rather than wrongly becoming variant 1
+     * (a mis-pin that would later collide with the real variant added as a second card). A null result
+     * imports as a legacy row (matched by number with set_id IS NULL, see [[UserDataDaos]]).
+     */
+    private fun resolveImportedSetId(number: String, variant: Int?, variantsByNumber: Map<String, List<CatalogSet>>): Long? {
+        val variants = variantsByNumber[number].orEmpty()
+        variant?.let { v -> variants.firstOrNull { it.numberVariant == v }?.setId?.let { return it } }
+        return variants.singleOrNull()?.setId
+    }
+
     /** One CSV row → a fresh dirty [CollectionCopyEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedCopy(now: Long, setIdByNumber: Map<String, Long>): CollectionCopyEntity? {
+    private fun Map<String, String>.toImportedCopy(now: Long, variantsByNumber: Map<String, List<CatalogSet>>): CollectionCopyEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
         // The sync key: from the file, else resolved from the catalog (a hand-edited file may omit it).
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
+        val setId = s("set_id")?.toLongOrNull()
+            ?: if (!isFig) resolveImportedSetId(setNumber, s("number_variant")?.toIntOrNull(), variantsByNumber) else null
         val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
         return CollectionCopyEntity(
             id = UUID.randomUUID().toString(),
@@ -280,13 +302,14 @@ class RoomCollectionRepository(
     }
 
     /** One CSV row → a fresh dirty [SalesEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedSale(now: Long, setIdByNumber: Map<String, Long>): SalesEntity? {
+    private fun Map<String, String>.toImportedSale(now: Long, variantsByNumber: Map<String, List<CatalogSet>>): SalesEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
+        val setId = s("set_id")?.toLongOrNull()
+            ?: if (!isFig) resolveImportedSetId(setNumber, s("number_variant")?.toIntOrNull(), variantsByNumber) else null
         val currency = s("currency")?.let { runCatching { AppCurrency.valueOf(it.uppercase()) }.getOrNull() }?.name ?: "USD"
         return SalesEntity(
             id = UUID.randomUUID().toString(),
@@ -309,13 +332,14 @@ class RoomCollectionRepository(
     }
 
     /** One CSV row → a fresh dirty [WishlistEntity]; null when it has no usable item identity. */
-    private fun Map<String, String>.toImportedWishlist(now: Long, setIdByNumber: Map<String, Long>): WishlistEntity? {
+    private fun Map<String, String>.toImportedWishlist(now: Long, variantsByNumber: Map<String, List<CatalogSet>>): WishlistEntity? {
         fun s(key: String) = this[key]?.trim()?.ifBlank { null }
         val kind = s("item_kind")?.lowercase()?.takeIf { it == "minifig" } ?: "set"
         val isFig = kind == "minifig"
         val figNum = s("fig_num") ?: if (isFig) s("set_number") else null
         val setNumber = s("set_number") ?: figNum ?: return null
-        val setId = s("set_id")?.toLongOrNull() ?: if (!isFig) setIdByNumber[setNumber] else null
+        val setId = s("set_id")?.toLongOrNull()
+            ?: if (!isFig) resolveImportedSetId(setNumber, s("number_variant")?.toIntOrNull(), variantsByNumber) else null
         return WishlistEntity(
             id = UUID.randomUUID().toString(),
             setId = setId, figNum = if (isFig) (figNum ?: setNumber) else figNum, itemKind = kind,
