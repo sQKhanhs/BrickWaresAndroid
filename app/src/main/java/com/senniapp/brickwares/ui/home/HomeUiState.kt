@@ -46,9 +46,10 @@ data class HomeUiState(
     val isReady: Boolean
         get() = !isLoading && authReady && catalogReady
 
-    /** The header share action only appears when signed in with a non-empty collection. */
+    /** The header share action only appears when signed in with a non-empty collection — counting
+     *  minifigs too, so a minifig-only collection can still be shared. */
     val canShare: Boolean
-        get() = isLoggedIn && (summary?.setCount ?: 0) > 0
+        get() = isLoggedIn && ((summary?.setCount ?: 0) + (summary?.minifigCount ?: 0)) > 0
 }
 
 /** A collection item as a "Top Sets" slot / picker entry. [value] is the line's total worth, in [HomeUiState.currency]'s unit. */
