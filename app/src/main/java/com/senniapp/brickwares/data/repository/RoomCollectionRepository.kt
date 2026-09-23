@@ -501,6 +501,8 @@ class RoomCollectionRepository(
     override fun sellCopy(setNumber: String, copyId: String, quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String?) = write {
         val copy = collectionDao.getById(copyId) ?: return@write
         val available = copy.quantity
+        // Nothing to sell (a legacy 0-quantity copy) — bail before coerceIn(1, 0) throws on the empty range.
+        if (available <= 0) return@write
         val sellQty = quantity.coerceIn(1, available)
         // Prorate the copy's paid cost so profit is a fair basis and paid stays conserved between
         // the remaining copy and the sale (whole-copy sale → full cost basis). The sale price is typed
