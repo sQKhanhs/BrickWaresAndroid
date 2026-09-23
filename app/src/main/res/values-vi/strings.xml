@@ -179,16 +179,16 @@
     <string name="settings_no_internet_title">Không có kết nối internet</string>
     <string name="settings_no_internet_body">Nhập cần kết nối để đồng bộ dữ liệu. Vui lòng thử lại sau.</string>
     <string name="settings_retirement_alerts">Thông báo ngừng bán</string>
-    <string name="settings_retirement_alerts_desc">Nhận thông báo khi một món trong danh sách mong muốn ngừng bán</string>
+    <string name="settings_retirement_alerts_desc">Nhận thông báo khi một bộ trong danh sách mong muốn ngừng bán</string>
     <string name="settings_notifications_blocked_title">Thông báo đang tắt</string>
     <string name="settings_notifications_disabled">Thông báo của BrickWares đang bị tắt nên không thể bật cảnh báo ngừng bán. Hãy bật thông báo trong cài đặt thiết bị.</string>
     <string name="settings_open_notification_settings">Mở cài đặt</string>
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Thông báo ngừng bán</string>
-    <string name="notif_channel_retirement_desc">Thông báo khi một món trong danh sách mong muốn chuyển sang ngừng bán</string>
+    <string name="notif_channel_retirement_desc">Thông báo khi một bộ trong danh sách mong muốn chuyển sang ngừng bán</string>
     <string name="notif_retired_title">Món mong muốn đã ngừng bán</string>
     <string name="notif_retired_one">%1$s đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
-    <string name="notif_retired_many">Có %1$d món trong danh sách mong muốn của bạn đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
+    <string name="notif_retired_many">Có %1$d bộ trong danh sách mong muốn của bạn đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
     <string name="settings_privacy_policy">Chính sách bảo mật</string>
     <string name="settings_terms">Điều khoản dịch vụ</string>
     <string name="settings_usage_analytics">Phân tích sử dụng</string>
@@ -250,7 +250,7 @@
     <string name="sd_edit_copy_cd">Sửa bản sao</string>
     <string name="sd_sell_copy_cd">Bán bản sao</string>
     <string name="sd_delete_copy_cd">Xóa bản sao</string>
-    <string name="sell_title">Bán món đồ</string>
+    <string name="sell_title">Bán bộ</string>
     <string name="sell_qty">Số lượng bán (còn %1$d)</string>
     <string name="sell_confirm">Bán</string>
     <string name="toast_added_sales">Đã thêm %1$s vào mục đã bán</string>
