@@ -184,7 +184,10 @@ fun ShareCollectionSheet(state: HomeUiState, onDismiss: () -> Unit) {
         if (!sharing && !saving) {
             sharing = true
             scope.launch {
-                shareCollectionImage(context, captureCard(), chooserTitle)
+                // A failed PNG write / FileProvider lookup / no share target returns false — tell the
+                // user instead of silently doing nothing (mirrors the save path's toast).
+                val ok = shareCollectionImage(context, captureCard(), chooserTitle)
+                if (!ok) Toast.makeText(context, context.getString(R.string.share_failed), Toast.LENGTH_SHORT).show()
                 sharing = false
             }
         }
