@@ -261,9 +261,12 @@ class SearchViewModel(
                 Timber.tag("SearchVM").w(e, "minifigsInTheme failed for %s", theme)
                 emptyList()
             }
-            minifigThemeItems = fetched
             _uiState.update {
+                // Adopt the backing list only AFTER the stale-result guard (see openThemeDetail): a slow
+                // fetch for a since-abandoned theme must not overwrite [minifigThemeItems], or the open
+                // theme's sort/subtheme filtering would show the old theme's figs.
                 if (it.minifigThemeDetail != theme) return@update it
+                minifigThemeItems = fetched
                 it.copy(
                     minifigThemeDetailLoading = false,
                     minifigThemeDetailSubOptions = minifigSubthemesFromItems(fetched, theme),
@@ -388,10 +391,13 @@ class SearchViewModel(
                 Timber.tag("SearchVM").w(e, "setsInTheme failed for %s", theme)
                 emptyList()
             }
-            themeSets = fetched
             _uiState.update {
                 // Ignore a stale result if the user has since navigated to another theme / closed it.
+                // Adopt the backing list only AFTER this guard: a slow fetch for a since-abandoned theme
+                // must not overwrite [themeSets], or the open theme's in-memory sort/subtheme filtering
+                // (which reads [themeSets]) would show the old theme's sets.
                 if (it.themeDetail != theme) return@update it
+                themeSets = fetched
                 it.copy(
                     themeDetailLoading = false,
                     themeDetailSubOptions = subthemesFrom(fetched),
