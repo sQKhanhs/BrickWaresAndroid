@@ -36,15 +36,18 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     /**
-     * Whether the intro hero GIF has already played this app session. Held here (not in the
+     * Whether the intro hero GIF has already had its turn this app session. Held here (not in the
      * Flow state) because this ViewModel is Activity-scoped, so the flag survives leaving and
-     * re-entering the Home tab — the GIF plays once on app open and never again.
+     * re-entering the Home tab — the GIF plays once on app open and never again. Marked the moment
+     * the animation STARTS (not on completion): otherwise leaving the tab mid-play left the flag
+     * false, so returning restarted the GIF from frame 0. Once it has started, a return shows the
+     * resting last-frame poster instead of replaying.
      */
-    var hasHeroGifPlayed: Boolean = false
+    var hasHeroGifStarted: Boolean = false
         private set
 
-    fun onHeroGifPlayed() {
-        hasHeroGifPlayed = true
+    fun onHeroGifStarted() {
+        hasHeroGifStarted = true
     }
 
     init {

@@ -48,7 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.gif.onAnimationEnd
+import coil3.gif.onAnimationStart
 import coil3.gif.repeatCount
 import coil3.request.ImageRequest
 import com.senniapp.brickwares.R
@@ -83,14 +83,14 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    // Animate the intro GIF until it has fully played once this session. "Played" is marked
-    // only when the animation completes (onGifFinished), so leaving mid-play replays it next
-    // visit; once finished, the static poster is shown instead.
-    val showGif = remember { !viewModel.hasHeroGifPlayed }
+    // Play the intro GIF once per app session. It's marked as having had its turn the moment it
+    // STARTS animating (onGifStarted), so leaving the tab mid-play and returning shows the resting
+    // poster instead of restarting from frame 0; a fresh app launch (new ViewModel) plays it again.
+    val showGif = remember { !viewModel.hasHeroGifStarted }
     HomeContent(
         state = state,
         showHeroGif = showGif,
-        onGifFinished = viewModel::onHeroGifPlayed,
+        onGifStarted = viewModel::onHeroGifStarted,
         onShareClick = viewModel::onShareClick,
         onCloseShare = viewModel::onCloseShare,
         onOpenSetDetail = onOpenSetDetail,
@@ -104,7 +104,7 @@ fun HomeScreen(
 private fun HomeContent(
     state: HomeUiState,
     showHeroGif: Boolean,
-    onGifFinished: () -> Unit,
+    onGifStarted: () -> Unit,
     onShareClick: () -> Unit,
     onCloseShare: () -> Unit = {},
     onOpenSetDetail: (String) -> Unit = {},
@@ -147,7 +147,7 @@ private fun HomeContent(
                     currency = state.currency,
                     showGif = showHeroGif,
                     showNoValue = !HeroAssets.showsDrop(shown.setCount, shown.minifigCount),
-                    onGifFinished = onGifFinished,
+                    onGifStarted = onGifStarted,
                 )
                 Spacer(Modifier.height(14.dp))
                 StatCardRow(
@@ -269,7 +269,7 @@ private fun HeroCard(
     currency: AppCurrency,
     showGif: Boolean,
     showNoValue: Boolean,
-    onGifFinished: () -> Unit,
+    onGifStarted: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -305,9 +305,10 @@ private fun HeroCard(
                     modifier = Modifier.matchParentSize(),
                 )
             }
-            // Layer 1: animated Lego-drop GIF, played over the dark card once. onAnimationEnd marks it
-            // played only on completion, so leaving mid-play replays it next visit. 100+ sets get the
-            // larger remote drop; others the small bundled gif.
+            // Layer 1: animated Lego-drop GIF, played over the dark card once. onAnimationStart marks
+            // it as having had its turn the instant it begins, so leaving mid-play and returning shows
+            // the resting poster instead of restarting. 100+ sets get the larger remote drop; others
+            // the small bundled gif.
             if (showGif) {
                 val heroGif = if (summary.setCount > HeroAssets.SET_THRESHOLD &&
                     HeroAssets.BIG_GIF_URL.isNotBlank()
@@ -320,7 +321,7 @@ private fun HeroCard(
                     model = ImageRequest.Builder(LocalPlatformContext.current)
                         .data(heroGif)
                         .repeatCount(0)
-                        .onAnimationEnd { onGifFinished() }
+                        .onAnimationStart { onGifStarted() }
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
@@ -572,7 +573,7 @@ private fun HomeLoggedInPreview() {
         HomeContent(
             state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = true, summary = previewSummary, themes = previewThemes),
             showHeroGif = false,
-            onGifFinished = {},
+            onGifStarted = {},
             onShareClick = {},
         )
     }
@@ -585,7 +586,7 @@ private fun HomeLoggedOutPreview() {
         HomeContent(
             state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = false, summary = previewSummary),
             showHeroGif = false,
-            onGifFinished = {},
+            onGifStarted = {},
             onShareClick = {},
         )
     }
@@ -598,7 +599,7 @@ private fun HomeDarkPreview() {
         HomeContent(
             state = HomeUiState(isLoading = false, authReady = true, catalogReady = true, isLoggedIn = true, summary = previewSummary),
             showHeroGif = false,
-            onGifFinished = {},
+            onGifStarted = {},
             onShareClick = {},
         )
     }
