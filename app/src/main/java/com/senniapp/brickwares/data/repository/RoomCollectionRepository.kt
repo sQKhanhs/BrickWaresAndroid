@@ -1,5 +1,6 @@
 package com.senniapp.brickwares.data.repository
 
+import androidx.room.withTransaction
 import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.BrickWaresDatabase
 import com.senniapp.brickwares.data.local.CollectionCopyEntity
@@ -47,7 +48,7 @@ import java.util.UUID
 class RoomCollectionRepository(
     private val catalog: CatalogRepository,
     private val sync: SyncCoordinator,
-    db: BrickWaresDatabase = AppGraph.database,
+    private val db: BrickWaresDatabase = AppGraph.database,
     private val values: ValueContributionRepository = ValueRepositoryProvider.instance,
 ) : CollectionRepository {
 
@@ -228,12 +229,17 @@ class RoomCollectionRepository(
         }
         // Overwrite all three tables: tombstone the current rows (so the removals push), then insert the
         // imported rows. Doing every table under one import keeps the file a full snapshot restore.
-        collectionDao.markAllActiveDeleted(now)
-        salesDao.markAllActiveDeleted(now)
-        wishlistDao.markAllActiveDeleted(now)
-        if (copies.isNotEmpty()) collectionDao.upsertAll(copies)
-        if (sales.isNotEmpty()) salesDao.upsertAll(sales)
-        if (wishlist.isNotEmpty()) wishlistDao.upsertAll(wishlist)
+        // ONE Room transaction so the tombstone + insert is atomic: a crash or process kill between the
+        // two must never commit the wipe on its own (that empties the collection, marks it dirty, and the
+        // next sync pushes the wipe to the server). Either the whole restore lands or nothing does.
+        db.withTransaction {
+            collectionDao.markAllActiveDeleted(now)
+            salesDao.markAllActiveDeleted(now)
+            wishlistDao.markAllActiveDeleted(now)
+            if (copies.isNotEmpty()) collectionDao.upsertAll(copies)
+            if (sales.isNotEmpty()) salesDao.upsertAll(sales)
+            if (wishlist.isNotEmpty()) wishlistDao.upsertAll(wishlist)
+        }
         // Sync now and wait, so the caller can hold a loading screen until the overwrite has pushed +
         // pulled (and the value cache re-warmed). Best-effort: if it fails (offline) the data is already
         // local and a reconnect sync will push it later.
