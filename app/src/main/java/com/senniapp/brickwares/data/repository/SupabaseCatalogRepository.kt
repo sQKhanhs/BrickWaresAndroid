@@ -78,9 +78,11 @@ class SupabaseCatalogRepository(
 
     // ---- Server-side queries (Decision 16). Suspend + throw on failure; callers handle loading/error. ----
 
-    /** Escape the user's text so their `%`/`_` are treated literally in the ILIKE pattern. */
+    /** Escape the user's `%`/`_` so they're treated literally in the ILIKE pattern. Don't pre-escape the
+     *  backslash — the postgrest client escapes backslashes itself inside `or { }` filters, so doing it
+     *  here too made the server see a literal backslash and match nothing for those queries. */
     private fun likePattern(q: String): String =
-        "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        "%" + q.replace("%", "\\%").replace("_", "\\_") + "%"
 
     /**
      * Like [withTimeout] but surfaces a timeout as an ordinary [IOException] instead of a
@@ -335,17 +337,22 @@ class SupabaseCatalogRepository(
             order("subtheme", Order.ASCENDING)
         }.map { ThemeSubthemeCount(it.theme, it.subtheme, it.minifigCount) }
 
-    override suspend fun minifigsInTheme(theme: String): List<Minifig> =
-        // !inner so only figs that appear in a set of this theme come back; the embedded sets are also
-        // filtered to this theme, which is what the in-theme browse wants. Paged over the parent figs
-        // (one row per fig), ordered by fig_num so range paging is stable.
-        fetchAllPaged<MinifigRow>(
+    override suspend fun minifigsInTheme(theme: String): List<Minifig> {
+        // First: the fig_nums that appear in a set of this theme (`!inner` + theme filter). We deliberately
+        // DON'T count sets off this FILTERED join — that under-reports a fig's total set count (a Star Wars
+        // fig also in two City sets would read "in 3 sets" here vs "in 5" in search, and the most-sets sort
+        // would use the truncated number). Paged (one row per fig), fig_num-ordered so ranges are stable.
+        val figNums = fetchAllPaged<FigNumRow>(
             "minifigs",
-            Columns.raw("fig_num,name,num_parts,image_url,set_minifigs!inner(set_id,sets!inner(theme,subtheme))"),
+            Columns.raw("fig_num,set_minifigs!inner(sets!inner(theme))"),
         ) {
             filter { eq("set_minifigs.sets.theme", theme) }
             order("fig_num", Order.ASCENDING)
-        }.map { it.toMinifig() }.distinctBy { it.figNum }
+        }.map { it.figNum }.distinct()
+        // Then: full fig data with the UNFILTERED set_minifigs join → correct total set count + all
+        // theme/subthemes (which the in-theme subtheme filter also needs).
+        return fetchMinifigsByNums(figNums).sortedBy { it.figNum }
+    }
 
     override suspend fun fetchMinifig(figNum: String): Minifig? = withLoadTimeout {
         client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
@@ -545,6 +552,10 @@ class SupabaseCatalogRepository(
         /** LEGO.com exit date (YYYY-MM-DD) for this region; past = retired. Null while still sold. */
         @SerialName("date_last_available") val dateLastAvailable: String? = null,
     )
+
+    /** Just a fig_num — for the in-theme fig lookup, which re-resolves full data via [fetchMinifigsByNums]. */
+    @Serializable
+    private data class FigNumRow(@SerialName("fig_num") val figNum: String)
 
     /** Row shape for `minifigs` + the embedded `set_minifigs → sets` join (for set-count + themes). */
     @Serializable
