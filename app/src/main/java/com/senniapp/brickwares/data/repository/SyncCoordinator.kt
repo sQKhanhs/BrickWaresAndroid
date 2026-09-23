@@ -122,20 +122,26 @@ class SyncCoordinator(
     }
 
     private suspend fun sync(uid: String): Boolean = mutex.withLock {
-        // Push and pull are isolated. Push runs first, so if it throws (e.g. the server rejects one
-        // over-cap row and the whole upsert batch fails) a single try/catch around both would skip the
-        // pull too — wedging sync in BOTH directions until the bad row is fixed. Catching push on its
-        // own lets the pull still run, so the device keeps receiving server changes; the dirty rows stay
-        // dirty and retry on the next push. syncNow() still reports success only when both halves ran.
+        // PULL before push. A newer remote row — e.g. another device's delete — must be applied locally
+        // FIRST so it can supersede a stale dirty local edit (applyCopy/Wish/Sale now let a newer remote
+        // replace even a dirty row). If we pushed first, a device reconnecting with an OLD offline edit
+        // would push it and resurrect a newer delete on the server; pulling first means that delete has
+        // already landed locally and the now-clean row isn't re-pushed. The BEFORE UPDATE trigger
+        // (migration 20260923120000) is the server-side backstop for the same race.
+        // Push and pull are isolated (each its own catch) so a failure in one half doesn't skip the
+        // other — a bad push batch still lets the pull through, and vice versa. syncNow() reports
+        // success only when both halves ran.
+        val pullOk = runCatching { pull() } // rebuilds each pulled row's display fields via a batch catalog query (Decision 16)
+            .onFailure { Timber.tag(TAG).e(it, "pull failed") }
+            .isSuccess
         val pushOk = runCatching { push(uid) }
             .onFailure { Timber.tag(TAG).e(it, "push failed") }
             .isSuccess
-        val pullOk = runCatching {
-            pull() // reconstructs each pulled row's display fields via a batch catalog query (Decision 16)
-            // Refresh the community value cache so a just-contributed paid price shows on the cards.
-            ValueRepositoryProvider.instance.warm()
-        }.onFailure { Timber.tag(TAG).e(it, "pull failed") }.isSuccess
-        pushOk && pullOk
+        // Refresh the community value cache AFTER push (which publishes this round's contributions) so a
+        // just-synced paid/sale price shows on the cards. Best-effort — a warm failure doesn't fail sync.
+        runCatching { ValueRepositoryProvider.instance.warm() }
+            .onFailure { Timber.tag(TAG).w(it, "value cache warm failed") }
+        pullOk && pushOk
     }
 
     // ---- push (dirty local → Supabase upsert) ----
@@ -258,7 +264,11 @@ class SyncCoordinator(
     private suspend fun applyCopy(r: RemoteCopy, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = collectionDao.getById(r.id)
-        if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins
+        // Newer-wins on the client updated_at — a NEWER remote row replaces the local one even when it's
+        // dirty (an unpushed edit), so a newer remote delete/edit supersedes a stale offline edit instead
+        // of being blocked forever by the dirty flag. A dirty local that is newer-or-equal still wins and
+        // is pushed. Pairs with pull-before-push and the server reject_stale_update trigger.
+        if (local != null && local.updatedAt >= remoteAt) return // local wins only when newer-or-equal
         // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
@@ -284,7 +294,8 @@ class SyncCoordinator(
     private suspend fun applyWish(r: RemoteWish, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
-        if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return
+        // Newer-wins even over a dirty local row (see applyCopy).
+        if (local != null && local.updatedAt >= remoteAt) return
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
@@ -305,7 +316,8 @@ class SyncCoordinator(
     private suspend fun applySale(r: RemoteSale, sets: Map<Long, CatalogSet>, figs: Map<String, Minifig>) {
         val remoteAt = parseIso(r.updatedAt)
         val local = salesDao.getById(r.id)
-        if (local != null && (local.dirty || local.updatedAt >= remoteAt)) return // local wins (LWW)
+        // Newer-wins even over a dirty local row (see applyCopy).
+        if (local != null && local.updatedAt >= remoteAt) return // local wins only when newer-or-equal
         // Polymorphic like copies: a minifig sale has fig_num only — reconstruct from the fig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
