@@ -420,7 +420,9 @@ private fun ThemesCard(themes: List<ThemeSummary>, currency: AppCurrency) {
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            pluralStringResource(R.plurals.home_theme_set_count, theme.setCount, theme.setCount) + " · ",
+                            // Item-neutral: a theme's count includes standalone minifigs, not just sets,
+                            // so "3 items" instead of miscounting 3 minifigs as "3 sets".
+                            pluralStringResource(R.plurals.home_theme_item_count, theme.setCount, theme.setCount) + " · ",
                             style = BwType.body.copy(fontSize = 12.sp),
                             color = colors.textMuted,
                         )

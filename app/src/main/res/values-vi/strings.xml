@@ -138,6 +138,9 @@
     <plurals name="home_theme_set_count">
         <item quantity="other">%1$d bộ</item>
     </plurals>
+    <plurals name="home_theme_item_count">
+        <item quantity="other">%1$d bộ</item>
+    </plurals>
 
     <!-- ============ Settings ============ -->
     <string name="settings_title">Cài đặt</string>

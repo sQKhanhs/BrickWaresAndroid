@@ -139,6 +139,11 @@
         <item quantity="one">%1$d set</item>
         <item quantity="other">%1$d sets</item>
     </plurals>
+    <!-- Collection-by-theme card: a theme groups sets AND standalone minifigs, so it's item-neutral. -->
+    <plurals name="home_theme_item_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
 
     <!-- ============ Settings ============ -->
     <string name="settings_title">Settings</string>
