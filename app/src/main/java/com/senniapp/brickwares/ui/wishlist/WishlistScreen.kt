@@ -192,7 +192,9 @@ private fun WishlistContent(
             if (!state.isLoading && state.visibleItems.isEmpty()) {
                 item { EmptyStateArt(stringResource(R.string.wishlist_empty)) }
             }
-            items(state.pageItems, key = { it.setId?.toString() ?: it.setNumber }) { item ->
+            // Key on the row id, not the variant identity: two devices wishlisting the same set before
+            // syncing merge to two rows sharing one setId/setNumber, and a duplicate LazyColumn key crashes.
+            items(state.pageItems, key = { it.id }) { item ->
                 SwipeToDelete(onSwiped = { onRemove(item) }, autoDismiss = true) {
                     WishlistCard(
                         item = item,

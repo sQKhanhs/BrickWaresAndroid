@@ -765,6 +765,7 @@ class RoomCollectionRepository(
         val cat = catalogFor(setId, setNumber)
         val value = if (figNum != null) values.valueForFig(figNum) else values.valueFor(setId)
         return WishlistItem(
+            id = id,
             setNumber = setNumber, name = name, itemType = itemKind.toItemType(), theme = theme, setId = setId,
             releaseYear = cat?.releaseYear?.takeIf { it > 0 } ?: releaseYear,
             releaseMonth = cat?.releaseMonth ?: releaseMonth,

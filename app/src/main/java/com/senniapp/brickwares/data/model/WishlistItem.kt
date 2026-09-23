@@ -7,6 +7,11 @@ package com.senniapp.brickwares.data.model
  * often absent — cards must render without them.
  */
 data class WishlistItem(
+    /** The wishlist row's own id (the Room/remote primary key). Unique per row even when two rows share
+     *  a [variantKey] — the same set wishlisted on two devices before syncing merges to two rows with one
+     *  key — so it's what the list is keyed on. Empty on an item built only to be handed to
+     *  `addToWishlist` (which assigns a fresh id); meaningful only on items read back for display. */
+    val id: String = "",
     val setNumber: String,
     val name: String,
     val itemType: ItemType,
