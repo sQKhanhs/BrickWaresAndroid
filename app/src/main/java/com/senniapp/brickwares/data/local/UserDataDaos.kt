@@ -33,9 +33,11 @@ interface CollectionDao {
     @Query("SELECT * FROM collection_copies WHERE id = :id")
     suspend fun getById(id: String): CollectionCopyEntity?
 
-    /** Active copies of one item (set number, or fig_num stored in setNumber for minifigs), for merging
-     *  a newly-added identical copy into an existing row instead of duplicating it. */
-    @Query("SELECT * FROM collection_copies WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber")
+    /** Active copies of one LEGACY item (a set number with no set_id, or a fig_num stored in setNumber
+     *  for minifigs), for merging a newly-added identical copy into an existing row instead of
+     *  duplicating it. `setId IS NULL` scopes this to set_id-less rows only — the only rows reached by
+     *  the number path — so a cataloged shared-number variant (which has a set_id) isn't conflated. */
+    @Query("SELECT * FROM collection_copies WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber AND setId IS NULL")
     suspend fun activeForItem(setNumber: String, kind: String): List<CollectionCopyEntity>
 
     /** Active copies of one EXACT set (by catalog set_id) — distinguishes shared-number variants (CMF /
@@ -52,7 +54,10 @@ interface CollectionDao {
     @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
     suspend fun markDeleted(id: String, ts: Long)
 
-    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND deleted = 0")
+    /** Tombstone the LEGACY copies of a number (set_id-less rows only). `setId IS NULL` is essential:
+     *  without it, deleting a legacy row would also wipe every cataloged shared-number variant that
+     *  shares this set_number (e.g. removing a legacy "71050" would delete 71050-2, 71050-4, …). */
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
     suspend fun markDeletedBySetNumber(setNumber: String, ts: Long)
 
     /** Tombstone every active copy of one EXACT set (by set_id) — removes just this shared-number variant. */
@@ -88,7 +93,9 @@ interface WishlistDao {
     @Query("SELECT * FROM wishlist_items WHERE id = :id")
     suspend fun getById(id: String): WishlistEntity?
 
-    @Query("SELECT * FROM wishlist_items WHERE setNumber = :setNumber AND deleted = 0 LIMIT 1")
+    /** Active LEGACY wishlist row for a number (set_id-less rows only) — the "already wishlisted?" dedup
+     *  for a minifig / legacy set. `setId IS NULL` keeps it from matching a cataloged shared-number variant. */
+    @Query("SELECT * FROM wishlist_items WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0 LIMIT 1")
     suspend fun findActiveBySetNumber(setNumber: String): WishlistEntity?
 
     /** Active wishlist row for one EXACT set (by set_id) — for the "already wishlisted?" dedup on a
@@ -102,7 +109,9 @@ interface WishlistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<WishlistEntity>)
 
-    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND deleted = 0")
+    /** Tombstone the LEGACY wishlist row for a number (set_id-less rows only). `setId IS NULL` prevents
+     *  a legacy removal from also wiping every cataloged shared-number variant sharing this set_number. */
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
     suspend fun markDeletedBySetNumber(setNumber: String, ts: Long)
 
     /** Tombstone the active wishlist row for one EXACT set (by set_id) — removes just this variant. */
@@ -138,9 +147,11 @@ interface SalesDao {
     @Query("SELECT * FROM sales WHERE id = :id")
     suspend fun getById(id: String): SalesEntity?
 
-    /** Active sales of one item (set number, or fig_num stored in setNumber for minifigs), for merging
-     *  a newly-recorded identical sale into an existing row instead of duplicating it. */
-    @Query("SELECT * FROM sales WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber")
+    /** Active sales of one LEGACY item (a set number with no set_id, or a fig_num stored in setNumber
+     *  for minifigs), for merging a newly-recorded identical sale into an existing row instead of
+     *  duplicating it. `setId IS NULL` scopes it to set_id-less rows so a cataloged shared-number
+     *  variant isn't conflated (mirrors [CollectionDao.activeForItem]). */
+    @Query("SELECT * FROM sales WHERE deleted = 0 AND itemKind = :kind AND setNumber = :setNumber AND setId IS NULL")
     suspend fun activeForItem(setNumber: String, kind: String): List<SalesEntity>
 
     /** Active sales of one EXACT set (by set_id) — distinguishes shared-number variants that
