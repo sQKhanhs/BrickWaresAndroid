@@ -339,7 +339,10 @@ fun AddToCollectionSheet(
             )
 
             Spacer(Modifier.height(4.dp))
-            val canAdd = currentSelection != null && paid.isNotBlank() && (!salesMode || salePrice.isNotBlank())
+            // A copy needs at least one unit — a typed "0" (or blank) disables submit rather than being
+            // silently repaired to 1 after the fact, so the user sees the quantity is rejected up front.
+            val qtyValid = (qty.toIntOrNull() ?: 0) >= 1
+            val canAdd = currentSelection != null && qtyValid && paid.isNotBlank() && (!salesMode || salePrice.isNotBlank())
             Button(
                 onClick = {
                     val set = selected ?: return@Button
