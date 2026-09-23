@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,6 +108,18 @@ fun SetThumb(
     }
     var index by remember(imageUrl, fallbackUrl, extraFallbacks) { mutableStateOf(0) }
     var failed by remember(imageUrl, fallbackUrl, extraFallbacks) { mutableStateOf(urls.isEmpty()) }
+    // Coil doesn't auto-retry a request that failed while offline, so a thumbnail whose whole URL chain
+    // errored with no connection would keep showing the "No image" placeholder even after the network is
+    // back (the card is reused, its URLs unchanged, so nothing re-triggers the load). When connectivity
+    // returns, restart the chain — but only if it had actually FAILED, so a loaded (or genuinely
+    // image-less) thumbnail isn't disturbed and a successful image isn't re-requested on every blip.
+    val isOnline = rememberIsOnline()
+    LaunchedEffect(isOnline) {
+        if (isOnline && failed && urls.isNotEmpty()) {
+            index = 0
+            failed = false
+        }
+    }
     val current = urls.getOrNull(index)
     Box(
         modifier = Modifier
