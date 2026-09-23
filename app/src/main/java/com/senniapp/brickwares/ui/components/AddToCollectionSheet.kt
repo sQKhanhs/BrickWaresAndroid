@@ -34,6 +34,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import com.senniapp.brickwares.util.moneyInputToAmount
 import com.senniapp.brickwares.util.sanitizeMoneyInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 /** Input caps for the numeric fields: 10 price digits (≈ 10B₫, above any real set) and 4 quantity
@@ -73,6 +76,17 @@ private const val MAX_QTY = 9999
 
 /** Debounce before a live-suggestion catalog query fires, so fast typing doesn't hit the DB per key. */
 private const val SEARCH_DEBOUNCE_MS = 180L
+
+/**
+ * Persists the sheet's in-progress set selection across a config change (rotation / process death) via
+ * `rememberSaveable`. A CatalogSet isn't a Bundle primitive, so it round-trips as JSON; "" means "none
+ * selected". A decode failure (e.g. a saved bundle from an older app version) falls back to null rather
+ * than crashing the restore.
+ */
+private val CatalogSetSaver: Saver<CatalogSet?, String> = Saver(
+    save = { it?.let { s -> runCatching { Json.encodeToString(CatalogSet.serializer(), s) }.getOrNull() } ?: "" },
+    restore = { if (it.isEmpty()) null else runCatching { Json.decodeFromString(CatalogSet.serializer(), it) }.getOrNull() },
+)
 
 /**
  * The Add-to-Collection bottom sheet. Shared by the Collection tab (add/edit a copy), the Wishlist
@@ -110,35 +124,37 @@ fun AddToCollectionSheet(
     val isEdit = initialCopy != null
     val isSaleEdit = isEdit && initialSalePrice != null
 
-    var salesMode by remember { mutableStateOf(isSaleEdit || (initialSalesMode && !isEdit)) }
-    var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf(initialSet) }
+    // All user input is rememberSaveable so a rotation (or process death) doesn't wipe a half-filled
+    // sheet; the picked set persists via [CatalogSetSaver] (see Fix — "sheets lose input on rotation").
+    var salesMode by rememberSaveable { mutableStateOf(isSaleEdit || (initialSalesMode && !isEdit)) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selected by rememberSaveable(stateSaver = CatalogSetSaver) { mutableStateOf(initialSet) }
     // Retail-based money prefill: retail × quantity in the field currency. paid / sale price are stored as
     // the TOTAL for the quantity, so a per-unit prefill would understate a multi-unit add — the qty field
     // recomputes these until the user types their own amount (the edited flags stop that clobbering it).
     fun retailField(units: Int): String =
         moneyFieldText(selected?.retailPrice?.takeIf { it > 0L }?.let { it * units.coerceAtLeast(1) }, AppCurrency.USD, currency)
-    var paidEdited by remember { mutableStateOf(false) }
-    var salePriceEdited by remember { mutableStateOf(false) }
+    var paidEdited by rememberSaveable { mutableStateOf(false) }
+    var salePriceEdited by rememberSaveable { mutableStateOf(false) }
     // Prefills convert into the field (display) currency: an edited copy/sale from its stored currency,
     // a retail default from USD cents.
-    var paid by remember {
+    var paid by rememberSaveable {
         mutableStateOf(
             if (initialCopy != null) moneyFieldText(initialCopy.pricePaid, editFrom, currency)
             else moneyFieldText(initialSet?.retailPrice, AppCurrency.USD, currency),
         )
     }
-    var salePrice by remember {
+    var salePrice by rememberSaveable {
         mutableStateOf(
             if (initialSalePrice != null) moneyFieldText(initialSalePrice, editFrom, currency)
             else moneyFieldText(initialSet?.retailPrice, AppCurrency.USD, currency),
         )
     }
-    var qty by remember { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
-    var condition by remember { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
-    var note by remember { mutableStateOf(initialCopy?.note ?: "") }
-    var dateAdded by remember { mutableStateOf(initialCopy?.dateAdded ?: LocalDate.now().toString()) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var qty by rememberSaveable { mutableStateOf(initialCopy?.qty?.toString() ?: "1") }
+    var condition by rememberSaveable { mutableStateOf(initialCopy?.condition ?: Condition.NEW) }
+    var note by rememberSaveable { mutableStateOf(initialCopy?.note ?: "") }
+    var dateAdded by rememberSaveable { mutableStateOf(initialCopy?.dateAdded ?: LocalDate.now().toString()) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
     // Live suggestions are a DB query now (Decision 16 — the catalog isn't held in memory), so they run
     // off the composition on a debounce keyed to the query; a new keystroke cancels the in-flight search.
@@ -230,14 +246,19 @@ fun AddToCollectionSheet(
                         Text("${currentSelection.setNumber} ${currentSelection.name}", style = BwType.body.copy(fontWeight = FontWeight.Bold), color = colors.text)
                         Text(currentSelection.theme, style = BwType.body.copy(fontSize = 11.sp), color = colors.textMuted)
                     }
-                    Text(
-                        "✕",
-                        color = colors.textMuted,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable { selected = null }
-                            .padding(8.dp),
-                    )
+                    // The set is fixed while editing an existing copy/sale: [submitAddSheet] updates only
+                    // that copy's editable fields (RoomCollectionRepository.updateCopy) and never re-keys
+                    // it, so a swapped set was silently ignored. Show it read-only — no clear (✕) control.
+                    if (!isEdit) {
+                        Text(
+                            "✕",
+                            color = colors.textMuted,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable { selected = null }
+                                .padding(8.dp),
+                        )
+                    }
                 }
             }
 

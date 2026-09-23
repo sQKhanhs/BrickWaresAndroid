@@ -46,6 +46,7 @@ class CollectionViewModel(
                     // Only the counts are read from this summary (the stat row); its money is in the
                     // current display currency for consistency, though the Collection tab doesn't show it.
                     it.copy(itemsLoaded = true, items = items, summary = collectionSummaryOf(items, CurrencyPrefs.current))
+                        .clearDetailIfEmpty()
                 }
             }
         }
@@ -55,7 +56,10 @@ class CollectionViewModel(
             repository.getSoldItems().collect { sold ->
                 // Money is summed in the current display currency; the UI recomputes it reactively too
                 // (SalesStatsRow/ProfitBar) so a currency switch updates the tiles without a data change.
-                _uiState.update { it.copy(soldItems = sold, salesSummary = salesSummaryOf(sold, CurrencyPrefs.current)) }
+                _uiState.update {
+                    it.copy(soldItems = sold, salesSummary = salesSummaryOf(sold, CurrencyPrefs.current))
+                        .clearDetailIfEmpty()
+                }
             }
         }
     }
@@ -325,3 +329,12 @@ class CollectionViewModel(
             setId = sold.setId,
         )
 }
+
+/**
+ * The merged See Details modal hides itself once its set has no copies and no sales left
+ * (the screen gates on [CollectionUiState.detailItem]/[CollectionUiState.detailSales]), but the
+ * id lingered — so re-adding the same set later silently reopened the modal on the stale id.
+ * Clear the id whenever it no longer resolves to anything, off the live item/sales Flows.
+ */
+private fun CollectionUiState.clearDetailIfEmpty(): CollectionUiState =
+    if (detailSetNumber != null && detailItem == null && detailSales.isEmpty()) copy(detailSetNumber = null) else this

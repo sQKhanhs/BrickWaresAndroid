@@ -1,5 +1,7 @@
 package com.senniapp.brickwares.data.model
 
+import kotlinx.serialization.Serializable
+
 /** Condition of an owned copy, chosen in the Add-to-Collection sheet. */
 enum class Condition { NEW, USED }
 
@@ -17,7 +19,12 @@ const val SID_PREFIX = "sid:"
  * Catalog (reference) data for a set, returned by set-number search in the Add sheet.
  * In production this comes from Brickset; here it's mock data. It carries everything
  * needed to build a [CollectionItem] except the user-supplied fields (paid, condition…).
+ *
+ * [Serializable] so the Add sheet can persist the in-progress selection across a rotation via a
+ * `rememberSaveable` Saver. Only the constructor properties serialize; [searchKey] (a body val) is
+ * recomputed from its initializer on decode, and [id]/[variantKey] are getters with no backing field.
  */
+@Serializable
 data class CatalogSet(
     val setNumber: String,
     val name: String,

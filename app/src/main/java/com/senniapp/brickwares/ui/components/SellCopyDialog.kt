@@ -26,7 +26,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,15 +68,16 @@ fun SellCopyDialog(
     // Display + input currency; the sale price is parsed back to stored ₫ on confirm.
     val currency = BwTheme.currency
     val maxQty = copy.qty.coerceAtLeast(1)
-    var qty by remember { mutableStateOf(maxQty.toString()) }
+    // All input is rememberSaveable so a rotation (or process death) doesn't wipe a half-filled dialog.
+    var qty by rememberSaveable { mutableStateOf(maxQty.toString()) }
     // The sale row stores the TOTAL for the units sold (sellCopy prorates the cost by quantity), so the
     // sale-price prefill is retail × quantity — not one unit's retail — and it recomputes as the quantity
     // changes until the user types their own amount.
     fun retailFor(units: Int) = moneyFieldText(item.retailPrice.takeIf { it > 0L }?.let { it * units }, AppCurrency.USD, currency)
-    var saleEdited by remember { mutableStateOf(false) }
-    var salePrice by remember { mutableStateOf(retailFor(maxQty)) }
-    var soldOn by remember { mutableStateOf(LocalDate.now().toString()) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var saleEdited by rememberSaveable { mutableStateOf(false) }
+    var salePrice by rememberSaveable { mutableStateOf(retailFor(maxQty)) }
+    var soldOn by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(18.dp), color = colors.card) {

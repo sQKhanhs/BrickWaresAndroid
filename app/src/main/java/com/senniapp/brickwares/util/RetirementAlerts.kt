@@ -104,8 +104,13 @@ object RetirementAlerts {
         // rows carry the status stored at add time, which may be stale in either direction (Decision 16).
         if (!CollectionRepositoryProvider.instance.catalogOverlayReady.value) return
 
-        val current = items.map { it.setNumber }.toSet()
-        val retiredNow = items.filter { it.status == Availability.RETIRED }.map { it.setNumber }.toSet()
+        // Key on the variant, not the bare set number — shared-number variants (CMF/SDCC) would
+        // otherwise collapse into one, so retiring one figure would alert (or suppress) the others.
+        // The stored prefs held set numbers before this change; a variantKey ("s…"/"n…") never equals
+        // one, so the first evaluation after upgrading finds no overlap and silently re-baselines
+        // (no spurious alerts), then persists variant keys for every run after.
+        val current = items.map { it.variantKey }.toSet()
+        val retiredNow = items.filter { it.status == Availability.RETIRED }.map { it.variantKey }.toSet()
         val lastWishlist = RetirementAlertPrefs.lastWishlist
         val lastRetired = RetirementAlertPrefs.lastRetired
 
@@ -115,7 +120,7 @@ object RetirementAlerts {
         // since the toggle can only have been switched on by a signed-in user.
         val signedOut = AuthRepository.authState.value is AuthState.SignedOut
         if (newlyRetired.isNotEmpty() && RetirementAlertPrefs.enabled && !signedOut) {
-            val names = items.filter { it.setNumber in newlyRetired }.map { it.name }
+            val names = items.filter { it.variantKey in newlyRetired }.map { it.name }
             deliver(context, names)
         }
 
