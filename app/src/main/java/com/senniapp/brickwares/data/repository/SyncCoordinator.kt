@@ -122,12 +122,20 @@ class SyncCoordinator(
     }
 
     private suspend fun sync(uid: String): Boolean = mutex.withLock {
-        runCatching {
-            push(uid)
+        // Push and pull are isolated. Push runs first, so if it throws (e.g. the server rejects one
+        // over-cap row and the whole upsert batch fails) a single try/catch around both would skip the
+        // pull too — wedging sync in BOTH directions until the bad row is fixed. Catching push on its
+        // own lets the pull still run, so the device keeps receiving server changes; the dirty rows stay
+        // dirty and retry on the next push. syncNow() still reports success only when both halves ran.
+        val pushOk = runCatching { push(uid) }
+            .onFailure { Timber.tag(TAG).e(it, "push failed") }
+            .isSuccess
+        val pullOk = runCatching {
             pull() // reconstructs each pulled row's display fields via a batch catalog query (Decision 16)
             // Refresh the community value cache so a just-contributed paid price shows on the cards.
             ValueRepositoryProvider.instance.warm()
-        }.onFailure { Timber.tag(TAG).e(it, "sync failed") }.isSuccess
+        }.onFailure { Timber.tag(TAG).e(it, "pull failed") }.isSuccess
+        pushOk && pullOk
     }
 
     // ---- push (dirty local → Supabase upsert) ----

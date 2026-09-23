@@ -64,6 +64,13 @@ import java.time.LocalDate
 private const val MAX_PRICE_DIGITS = 10
 private const val MAX_QTY_DIGITS = 4
 
+/** Server-side check-constraint caps (mirrored in RoomCollectionRepository). Enforced here on input/
+ *  submit too so a value that would be rejected by the sync push batch — which, running before pull,
+ *  would wedge sync in both directions — can't be entered in the first place. [MAX_QTY] also equals
+ *  the largest a [MAX_QTY_DIGITS]-digit field can hold. */
+private const val MAX_NOTE_CHARS = 2000
+private const val MAX_QTY = 9999
+
 /** Debounce before a live-suggestion catalog query fires, so fast typing doesn't hit the DB per key. */
 private const val SEARCH_DEBOUNCE_MS = 180L
 
@@ -326,7 +333,7 @@ fun AddToCollectionSheet(
             FieldLabel(stringResource(R.string.sheet_field_note))
             OutlinedTextField(
                 value = note,
-                onValueChange = { note = it },
+                onValueChange = { note = it.take(MAX_NOTE_CHARS) },
                 modifier = Modifier.fillMaxWidth().height(90.dp),
                 placeholder = { Text(stringResource(R.string.sheet_note_optional)) },
             )
@@ -348,7 +355,11 @@ fun AddToCollectionSheet(
                             Copy(
                                 id = initialCopy?.id ?: "${set.setNumber}-${System.currentTimeMillis()}",
                                 condition = condition,
-                                qty = qty.toIntOrNull() ?: 1,
+                                // A typed "0" (or blank) is meaningless for a copy — clamp to at least 1
+                                // so no 0-quantity copy is ever stored (selling one later throws on the
+                                // repository's coerceIn(1, 0) empty range). Upper-bound to the server cap
+                                // so an add can't exceed it (the field's 4 digits already limit to 9999).
+                                qty = (qty.toIntOrNull() ?: 1).coerceIn(1, MAX_QTY),
                                 // Parse the field into the field currency's own unit; store with its tag.
                                 pricePaid = moneyInputToAmount(paid, currency),
                                 currency = currency,

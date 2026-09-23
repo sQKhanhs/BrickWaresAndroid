@@ -269,12 +269,12 @@ class RoomCollectionRepository(
             retailPrice = s("retail_price")?.toLongOrNull(),
             status = s("status") ?: Availability.AVAILABLE.name,
             imageUrl = s("image_url"),
-            quantity = (s("quantity")?.toIntOrNull() ?: 1).coerceAtLeast(1),
+            quantity = capQty(s("quantity")?.toIntOrNull() ?: 1),
             condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
             pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
             currency = currency,
             acquiredOn = s("acquired_on"),
-            notes = s("notes"),
+            notes = capNote(s("notes")),
             deleted = false, updatedAt = now, dirty = true,
         )
     }
@@ -297,13 +297,13 @@ class RoomCollectionRepository(
             releaseMonth = s("release_month")?.toIntOrNull() ?: 0,
             imageUrl = s("image_url"),
             retailPrice = s("retail_price")?.toLongOrNull(),
-            quantity = (s("quantity")?.toIntOrNull() ?: 1).coerceAtLeast(1),
+            quantity = capQty(s("quantity")?.toIntOrNull() ?: 1),
             condition = s("condition")?.lowercase()?.takeIf { it == "used" } ?: "new",
             pricePaid = s("price_paid")?.toLongOrNull() ?: 0L,
             salePrice = s("sale_price")?.toLongOrNull() ?: 0L,
             currency = currency,
             soldOn = s("sold_on"),
-            notes = s("notes"),
+            notes = capNote(s("notes")),
             deleted = false, updatedAt = now, dirty = true,
         )
     }
@@ -387,7 +387,7 @@ class RoomCollectionRepository(
                 // pricePaid is the total for a copy's qty, so sum it alongside the quantity.
                 collectionDao.upsert(
                     match.copy(
-                        quantity = match.quantity + copy.qty,
+                        quantity = capQty(match.quantity + copy.qty),
                         pricePaid = match.pricePaid + copy.pricePaid,
                         updatedAt = now, dirty = true,
                     ),
@@ -406,9 +406,9 @@ class RoomCollectionRepository(
                         pieces = item.pieces, minifigs = item.minifigs,
                         retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
                         status = item.status.name, imageUrl = item.imageUrl ?: set?.imageUrl,
-                        quantity = copy.qty, condition = cond,
+                        quantity = capQty(copy.qty), condition = cond,
                         pricePaid = copy.pricePaid, currency = copy.currency.name, acquiredOn = date,
-                        notes = copy.note, deleted = false, updatedAt = now, dirty = true,
+                        notes = capNote(copy.note), deleted = false, updatedAt = now, dirty = true,
                     ),
                 )
             }
@@ -441,10 +441,10 @@ class RoomCollectionRepository(
         val existing = collectionDao.getById(copy.id) ?: return@write
         collectionDao.upsert(
             existing.copy(
-                quantity = copy.qty, condition = copy.condition.dbName(),
+                quantity = capQty(copy.qty), condition = copy.condition.dbName(),
                 pricePaid = copy.pricePaid, currency = copy.currency.name,
                 acquiredOn = copy.dateAdded.ifBlank { null },
-                notes = copy.note, updatedAt = System.currentTimeMillis(), dirty = true,
+                notes = capNote(copy.note), updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
         // Reflect the edited paid price in the community value cache immediately (Decision 17).
@@ -476,7 +476,7 @@ class RoomCollectionRepository(
         if (match != null) {
             salesDao.upsert(
                 match.copy(
-                    quantity = match.quantity + qty,
+                    quantity = capQty(match.quantity + qty),
                     pricePaid = match.pricePaid + paid,
                     salePrice = match.salePrice + salePrice,
                     updatedAt = now, dirty = true,
@@ -493,9 +493,9 @@ class RoomCollectionRepository(
                     releaseYear = item.releaseYear, releaseMonth = item.releaseMonth,
                     imageUrl = item.imageUrl ?: set?.imageUrl,
                     retailPrice = item.retailPrice.takeIf { it > 0L } ?: set?.retailPrice,
-                    quantity = qty, condition = cond,
+                    quantity = capQty(qty), condition = cond,
                     pricePaid = paid, salePrice = salePrice, currency = currency.name,
-                    soldOn = soldOn, notes = note, deleted = false,
+                    soldOn = soldOn, notes = capNote(note), deleted = false,
                     updatedAt = now, dirty = true,
                 ),
             )
@@ -530,7 +530,7 @@ class RoomCollectionRepository(
         if (match != null) {
             salesDao.upsert(
                 match.copy(
-                    quantity = match.quantity + sellQty,
+                    quantity = capQty(match.quantity + sellQty),
                     pricePaid = match.pricePaid + soldPaid,
                     salePrice = match.salePrice + salePrice,
                     updatedAt = now, dirty = true,
@@ -544,9 +544,9 @@ class RoomCollectionRepository(
                     setNumber = copy.setNumber, name = copy.name, theme = copy.theme,
                     releaseYear = copy.releaseYear, releaseMonth = copy.releaseMonth,
                     imageUrl = copy.imageUrl, retailPrice = copy.retailPrice,
-                    quantity = sellQty, condition = copy.condition,
+                    quantity = capQty(sellQty), condition = copy.condition,
                     pricePaid = soldPaid, salePrice = salePrice, currency = currency.name,
-                    soldOn = soldOnNorm, notes = copy.notes,
+                    soldOn = soldOnNorm, notes = capNote(copy.notes),
                     deleted = false, updatedAt = now, dirty = true,
                 ),
             )
@@ -579,9 +579,9 @@ class RoomCollectionRepository(
         val existing = salesDao.getById(saleId) ?: return@write
         salesDao.upsert(
             existing.copy(
-                quantity = quantity, condition = condition.dbName(),
+                quantity = capQty(quantity), condition = condition.dbName(),
                 pricePaid = pricePaid, salePrice = salePrice, currency = currency.name,
-                soldOn = soldOn?.ifBlank { null }, notes = note,
+                soldOn = soldOn?.ifBlank { null }, notes = capNote(note),
                 updatedAt = System.currentTimeMillis(), dirty = true,
             ),
         )
@@ -635,6 +635,22 @@ class RoomCollectionRepository(
             sync.requestSync()
         }
     }
+
+    /**
+     * Clamp a note to the server's length cap. The remote tables reject a note longer than
+     * [MAX_NOTE_CHARS]; an over-cap note would fail the whole push batch, and since push runs before
+     * pull that wedges sync in both directions until it's fixed (see [SyncCoordinator]). Every write
+     * that stores a user note passes it through here, and the add sheet caps its input too — so a dirty
+     * row can never exceed the cap by any path (fresh add, edit, sell, or CSV import).
+     */
+    private fun capNote(note: String?): String? = note?.take(MAX_NOTE_CHARS)
+
+    /**
+     * Clamp a quantity to the valid server range [1, [MAX_QUANTITY]]. Merging identical copies/sales
+     * sums their quantities, which can climb past the server's cap and fail the push batch (same wedge
+     * as [capNote]); this bounds every stored quantity, merged or not.
+     */
+    private fun capQty(quantity: Int): Int = quantity.coerceIn(1, MAX_QUANTITY)
 
     /** The catalog set for an add/wishlist write — the user-scoped cache first, else a one-set query. */
     private suspend fun resolveCatalog(setNumber: String): CatalogSet? =
@@ -762,4 +778,11 @@ class RoomCollectionRepository(
 
     private fun String.toAvailability(): Availability =
         runCatching { Availability.valueOf(this) }.getOrDefault(Availability.AVAILABLE)
+
+    private companion object {
+        /** Server-side check-constraint caps on the remote tables — a row past either fails the whole
+         *  push batch. Kept in step with the migration; the add sheet caps its inputs to the same values. */
+        const val MAX_NOTE_CHARS = 2000
+        const val MAX_QUANTITY = 9999
+    }
 }
