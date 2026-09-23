@@ -215,7 +215,10 @@ class SettingsViewModel(
             val toast = runCatching {
                 val csv = repository.exportCollectionCsv()
                 withContext(Dispatchers.IO) {
-                    resolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    // "wt" = write + TRUNCATE. Plain "w" doesn't truncate on Drive and some SAF
+                    // providers, so re-exporting a shorter file over a longer one leaves the old
+                    // trailing bytes — stale rows past the new content. "wt" clears the file first.
+                    resolver.openOutputStream(uri, "wt")?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
                         ?: error("Couldn't open the export file")
                 }
             }.fold(
