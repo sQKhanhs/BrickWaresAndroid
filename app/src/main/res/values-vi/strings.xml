@@ -186,7 +186,7 @@
     <!-- Retirement-alert notifications -->
     <string name="notif_channel_retirement">Thông báo ngừng bán</string>
     <string name="notif_channel_retirement_desc">Thông báo khi một bộ trong danh sách mong muốn chuyển sang ngừng bán</string>
-    <string name="notif_retired_title">Món mong muốn đã ngừng bán</string>
+    <string name="notif_retired_title">Bộ mong muốn đã ngừng bán</string>
     <string name="notif_retired_one">%1$s đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
     <string name="notif_retired_many">Có %1$d bộ trong danh sách mong muốn của bạn đã ngừng bán. Mở ứng dụng để xem chi tiết.</string>
     <string name="settings_privacy_policy">Chính sách bảo mật</string>
