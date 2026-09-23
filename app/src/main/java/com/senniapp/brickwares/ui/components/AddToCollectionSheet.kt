@@ -113,6 +113,13 @@ fun AddToCollectionSheet(
     var salesMode by remember { mutableStateOf(isSaleEdit || (initialSalesMode && !isEdit)) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(initialSet) }
+    // Retail-based money prefill: retail × quantity in the field currency. paid / sale price are stored as
+    // the TOTAL for the quantity, so a per-unit prefill would understate a multi-unit add — the qty field
+    // recomputes these until the user types their own amount (the edited flags stop that clobbering it).
+    fun retailField(units: Int): String =
+        moneyFieldText(selected?.retailPrice?.takeIf { it > 0L }?.let { it * units.coerceAtLeast(1) }, AppCurrency.USD, currency)
+    var paidEdited by remember { mutableStateOf(false) }
+    var salePriceEdited by remember { mutableStateOf(false) }
     // Prefills convert into the field (display) currency: an edited copy/sale from its stored currency,
     // a retail default from USD cents.
     var paid by remember {
@@ -198,8 +205,9 @@ fun AddToCollectionSheet(
                             .clickable {
                                 selected = set
                                 query = ""
-                                if (paid.isBlank()) paid = moneyFieldText(set.retailPrice, AppCurrency.USD, currency)
-                                if (salePrice.isBlank()) salePrice = moneyFieldText(set.retailPrice, AppCurrency.USD, currency)
+                                val units = qty.toIntOrNull() ?: 1
+                                if (paid.isBlank()) paid = retailField(units)
+                                if (salePrice.isBlank()) salePrice = retailField(units)
                             }
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                     ) {
@@ -250,7 +258,7 @@ fun AddToCollectionSheet(
             OutlinedTextField(
                 value = paid,
                 // Filtered + capped for the currency (VND digits only; USD digits + 2 decimals).
-                onValueChange = { input -> paid = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
+                onValueChange = { input -> paidEdited = true; paid = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = moneyKeyboard,
@@ -264,7 +272,7 @@ fun AddToCollectionSheet(
                 FieldLabel(stringResource(R.string.sheet_field_sale_price))
                 OutlinedTextField(
                     value = salePrice,
-                    onValueChange = { input -> salePrice = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
+                    onValueChange = { input -> salePriceEdited = true; salePrice = sanitizeMoneyInput(input, currency, MAX_PRICE_DIGITS) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = moneyKeyboard,
@@ -278,7 +286,17 @@ fun AddToCollectionSheet(
             FieldLabel(stringResource(R.string.sheet_field_qty))
             OutlinedTextField(
                 value = qty,
-                onValueChange = { input -> qty = input.filter { it.isDigit() }.take(MAX_QTY_DIGITS) },
+                onValueChange = { input ->
+                    val newQty = input.filter { it.isDigit() }.take(MAX_QTY_DIGITS)
+                    qty = newQty
+                    // paid / sale price are stored as the TOTAL for the quantity, so scale the retail-based
+                    // prefill with it — unless the user typed their own, or this is an edit (whose prefill is
+                    // the stored total, not a retail estimate).
+                    newQty.toIntOrNull()?.takeIf { it > 0 }?.let { units ->
+                        if (!isEdit && !paidEdited) paid = retailField(units)
+                        if (!isSaleEdit && !salePriceEdited) salePrice = retailField(units)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

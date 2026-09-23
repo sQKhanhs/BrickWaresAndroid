@@ -69,7 +69,12 @@ fun SellCopyDialog(
     val currency = BwTheme.currency
     val maxQty = copy.qty.coerceAtLeast(1)
     var qty by remember { mutableStateOf(maxQty.toString()) }
-    var salePrice by remember { mutableStateOf(moneyFieldText(item.retailPrice.takeIf { it > 0L }, AppCurrency.USD, currency)) }
+    // The sale row stores the TOTAL for the units sold (sellCopy prorates the cost by quantity), so the
+    // sale-price prefill is retail × quantity — not one unit's retail — and it recomputes as the quantity
+    // changes until the user types their own amount.
+    fun retailFor(units: Int) = moneyFieldText(item.retailPrice.takeIf { it > 0L }?.let { it * units }, AppCurrency.USD, currency)
+    var saleEdited by remember { mutableStateOf(false) }
+    var salePrice by remember { mutableStateOf(retailFor(maxQty)) }
     var soldOn by remember { mutableStateOf(LocalDate.now().toString()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -106,11 +111,14 @@ fun SellCopyDialog(
                     value = qty,
                     onValueChange = { input ->
                         val digits = input.filter { it.isDigit() }
-                        qty = when {
+                        val newQty = when {
                             digits.isBlank() -> ""
                             (digits.toIntOrNull() ?: 0) > maxQty -> maxQty.toString()
                             else -> digits
                         }
+                        qty = newQty
+                        // Keep the retail-based prefill in step with the quantity (until the user edits it).
+                        if (!saleEdited) newQty.toIntOrNull()?.takeIf { it > 0 }?.let { salePrice = retailFor(it) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -121,7 +129,7 @@ fun SellCopyDialog(
                 FieldLabel(stringResource(R.string.sheet_field_sale_price))
                 OutlinedTextField(
                     value = salePrice,
-                    onValueChange = { input -> salePrice = sanitizeMoneyInput(input, currency) },
+                    onValueChange = { input -> saleEdited = true; salePrice = sanitizeMoneyInput(input, currency) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
