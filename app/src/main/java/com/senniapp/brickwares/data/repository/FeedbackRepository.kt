@@ -10,6 +10,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -49,6 +50,12 @@ class FeedbackRepository(
         return try {
             withTimeout(TIMEOUT_MS) { client.postgrest.rpc("submit_feedback", params) }
             Result.SENT
+        } catch (e: TimeoutCancellationException) {
+            // A timeout is a network failure, not a real navigate-away cancellation. It's a
+            // CancellationException subtype, so catch it BEFORE the rethrow below or it would unwind
+            // silently and the caller would never see a Result — treat it as an ordinary failure.
+            Timber.tag(TAG).w(e, "submit_feedback timed out")
+            Result.FAILED
         } catch (e: CancellationException) {
             throw e
         } catch (e: RestException) {

@@ -16,10 +16,12 @@ import io.github.jan.supabase.postgrest.query.PostgrestRequestBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.io.IOException
 import java.time.LocalDate
 
 /**
@@ -81,6 +83,23 @@ class SupabaseCatalogRepository(
         "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
     /**
+     * Like [withTimeout] but surfaces a timeout as an ordinary [IOException] instead of a
+     * [TimeoutCancellationException]. That subtype IS a [kotlinx.coroutines.CancellationException], so
+     * every caller's `catch (e: CancellationException) { throw e }` — there to let a genuine
+     * navigate-away cancellation unwind quietly — would rethrow the timeout too, and the parent
+     * coroutine swallows it, leaving the screen (Home, the Search loaders, the in-sheet search boxes,
+     * the collection catalog fallback) stuck on its spinner forever. As a plain network error the
+     * timeout instead flows into the callers' generic `catch (e: Exception)` and surfaces as an
+     * error/empty state. One conversion here covers every query below.
+     */
+    private suspend fun <T> withLoadTimeout(block: suspend CoroutineScope.() -> T): T =
+        try {
+            withTimeout(LOAD_TIMEOUT_MS, block)
+        } catch (e: TimeoutCancellationException) {
+            throw IOException("Catalog request timed out after $LOAD_TIMEOUT_MS ms", e)
+        }
+
+    /**
      * Read a whole table/view, paging past PostgREST's `max_rows` cap ([PAGE_SIZE]). A single unpaged
      * `select()` silently returns only the first `max_rows` rows, so any read that can exceed 1000 rows
      * (theme browse counts, all sets/minifigs in a large theme) MUST page or it loses rows off the end.
@@ -96,7 +115,7 @@ class SupabaseCatalogRepository(
         val out = ArrayList<T>()
         var from = 0L
         while (true) {
-            val page = withTimeout(LOAD_TIMEOUT_MS) {
+            val page = withLoadTimeout {
                 client.from(table).select(columns) {
                     block()
                     range(from, from + PAGE_SIZE - 1)
@@ -139,7 +158,7 @@ class SupabaseCatalogRepository(
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val pattern = likePattern(q)
-        return withTimeout(LOAD_TIMEOUT_MS) {
+        return withLoadTimeout {
             client.from("sets").select(Columns.raw(SET_COLS)) {
                 filter {
                     neq("name", UNREVEALED_NAME)
@@ -187,7 +206,7 @@ class SupabaseCatalogRepository(
             .filter { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
             .let(::dedupeDuplicateVariants)
 
-    override suspend fun fetchSet(catalogKey: String): CatalogSet? = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun fetchSet(catalogKey: String): CatalogSet? = withLoadTimeout {
         // A "sid:<set_id>" key (from a Collection/Wishlist/Sales card, which stores the picked variant
         // only as a set_id) resolves the EXACT variant — checked first, before the "<number>-<variant>"
         // / bare-number parsing, since it has no dash and would otherwise hit the lowest-variant fallback.
@@ -199,7 +218,7 @@ class SupabaseCatalogRepository(
                     limit(1)
                 }.decodeList<SetRow>().firstOrNull()
             }
-            return@withTimeout row?.toCatalogSet()?.takeIf { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
+            return@withLoadTimeout row?.toCatalogSet()?.takeIf { it.name.isNotBlank() && it.name.trim() != UNREVEALED_NAME }
         }
         // catalogKey is CatalogSet.id ("<number>-<variant>") or a bare number. Try the exact
         // number+variant first, then fall back to the number (lowest variant).
@@ -228,7 +247,7 @@ class SupabaseCatalogRepository(
         // Chunked so a large collection can't blow the URL length of the `in.(...)` filter. Lowest
         // variant per number wins (mirrors setByNumber) so a CMF-style multi-variant number is stable.
         return keys.chunked(IN_CHUNK).flatMap { chunk ->
-            withTimeout(LOAD_TIMEOUT_MS) {
+            withLoadTimeout {
                 client.from("sets").select(Columns.raw(SET_COLS)) {
                     filter {
                         isIn("set_number", chunk)
@@ -248,7 +267,7 @@ class SupabaseCatalogRepository(
         val keys = ids.distinct()
         if (keys.isEmpty()) return emptyList()
         return keys.chunked(IN_CHUNK).flatMap { chunk ->
-            withTimeout(LOAD_TIMEOUT_MS) {
+            withLoadTimeout {
                 client.from("sets").select(Columns.raw(SET_COLS)) {
                     filter { isIn("set_id", chunk) }
                 }.decodeList<SetRow>()
@@ -262,7 +281,7 @@ class SupabaseCatalogRepository(
         val keys = figNums.filter { it.isNotBlank() }.distinct()
         if (keys.isEmpty()) return emptyList()
         return keys.chunked(IN_CHUNK).flatMap { chunk ->
-            withTimeout(LOAD_TIMEOUT_MS) {
+            withLoadTimeout {
                 client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
                     filter { isIn("fig_num", chunk) }
                 }.decodeList<MinifigRow>()
@@ -272,7 +291,7 @@ class SupabaseCatalogRepository(
             .distinctBy { it.figNum }
     }
 
-    override suspend fun newSetCandidates(): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun newSetCandidates(): List<CatalogSet> = withLoadTimeout {
         // Start of the previous month — the widest cutoff that still covers pending (future launch)
         // and current/previous-month releases; NewSets narrows to the exact rule over these.
         val cutoff = LocalDate.now().withDayOfMonth(1).minusMonths(1).toString()
@@ -293,7 +312,7 @@ class SupabaseCatalogRepository(
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val pattern = likePattern(q)
-        return withTimeout(LOAD_TIMEOUT_MS) {
+        return withLoadTimeout {
             client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
                 filter { or { ilike("fig_num", pattern); ilike("name", pattern) } }
                 limit(limit.toLong())
@@ -323,14 +342,14 @@ class SupabaseCatalogRepository(
             order("fig_num", Order.ASCENDING)
         }.map { it.toMinifig() }.distinctBy { it.figNum }
 
-    override suspend fun fetchMinifig(figNum: String): Minifig? = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun fetchMinifig(figNum: String): Minifig? = withLoadTimeout {
         client.from("minifigs").select(Columns.raw(MINIFIG_COLS)) {
             filter { eq("fig_num", figNum) }
             limit(1)
         }.decodeList<MinifigRow>().firstOrNull()?.toMinifig()
     }
 
-    override suspend fun fetchSetsForMinifig(figNum: String): List<CatalogSet> = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun fetchSetsForMinifig(figNum: String): List<CatalogSet> = withLoadTimeout {
         client.from("set_minifigs").select(Columns.raw("sets($SET_COLS)")) {
             filter { eq("fig_num", figNum) }
         }.decodeList<SetWrapperRow>()
@@ -340,7 +359,7 @@ class SupabaseCatalogRepository(
             .sortedByDescending { it.releaseYear }
     }
 
-    override suspend fun fetchMinifigsForSet(setId: Long): List<Minifig> = withTimeout(LOAD_TIMEOUT_MS) {
+    override suspend fun fetchMinifigsForSet(setId: Long): List<Minifig> = withLoadTimeout {
         // The grid needs only fig identity/image, so skip the theme join (avoids recursive embedding).
         client.from("set_minifigs").select(Columns.raw("minifigs(fig_num,name,num_parts,image_url)")) {
             filter { eq("set_id", setId) }
