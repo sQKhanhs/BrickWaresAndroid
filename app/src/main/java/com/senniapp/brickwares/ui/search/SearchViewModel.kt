@@ -21,6 +21,7 @@ import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -152,6 +153,10 @@ class SearchViewModel(
             delay(SUGGEST_DEBOUNCE_MS)
             val sets = runCatching { catalogRepo.searchSets(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
             val figs = runCatching { catalogRepo.fetchMinifigsMatching(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
+            // runCatching above also swallows the CancellationException from the next keystroke's
+            // suggestJob.cancel(), so bail before overwriting the newer query's suggestions with this
+            // (now stale / empty) result — otherwise "No matches" flashes for a debounce + round-trip each key.
+            ensureActive()
             _uiState.update { it.copy(suggestions = sets, minifigSuggestions = figs) }
         }
     }
@@ -516,7 +521,10 @@ class SearchViewModel(
 
     fun onClearSearch() {
         _uiState.update {
-            it.copy(query = "", submittedQuery = null, results = emptyList(), suggestions = emptyList(), minifigItems = emptyList())
+            it.copy(
+                query = "", submittedQuery = null, results = emptyList(),
+                suggestions = emptyList(), minifigSuggestions = emptyList(), minifigItems = emptyList(),
+            )
         }
     }
 
@@ -532,6 +540,7 @@ class SearchViewModel(
                 submittedQuery = null,
                 results = emptyList(),
                 suggestions = emptyList(),
+                minifigSuggestions = emptyList(),
                 themeDetail = null,
                 themeDetailSub = ALL_SUBTHEMES,
                 themeDetailResults = emptyList(),
