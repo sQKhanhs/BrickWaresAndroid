@@ -72,7 +72,7 @@ fun salesSummaryOf(sold: List<SoldItem>, display: AppCurrency): SalesSummary {
     val totalSaleValue = sold.sumOf { CurrencyConverter.convert(it.saleValue, it.currency, display) }
     val avg = if (sold.isEmpty()) 0.0 else sold.map { it.profitPercent }.average()
     val overall = if (totalPaid == 0L) 0.0 else totalProfit.toDouble() / totalPaid * 100.0
-    return SalesSummary(sold.size, totalSaleValue, totalProfit, avg, overall)
+    return SalesSummary(sold.sumOf { it.quantity }, totalSaleValue, totalProfit, avg, overall)
 }
 
 /**
