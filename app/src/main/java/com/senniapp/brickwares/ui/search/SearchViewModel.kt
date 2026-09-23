@@ -221,7 +221,7 @@ class SearchViewModel(
 
     /** Minifig theme browse (theme + subtheme counts) via DB views — no full minifig list in memory. */
     private fun loadMinifigBrowse() {
-        _uiState.update { it.copy(minifigsLoading = true) }
+        _uiState.update { it.copy(minifigsLoading = true, minifigLoadError = false) }
         viewModelScope.launch {
             try {
                 val counts = catalogRepo.minifigThemeCounts()
@@ -236,13 +236,15 @@ class SearchViewModel(
                             .sortedBy { it.name },
                     )
                 }.sortedBy { it.theme }
-                _uiState.update { it.copy(minifigThemes = themes, minifigsLoading = false).withReorderedThemes() }
+                _uiState.update { it.copy(minifigThemes = themes, minifigsLoading = false, minifigLoadError = false).withReorderedThemes() }
                 ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Surface the error+retry instead of leaving the empty grid read as "No minifigs in the
+                // catalog yet" for the rest of the session (the retry re-runs both browses).
                 Timber.tag("SearchVM").w(e, "minifig browse load failed")
-                _uiState.update { it.copy(minifigsLoading = false) }
+                _uiState.update { it.copy(minifigsLoading = false, minifigLoadError = true) }
             }
         }
     }

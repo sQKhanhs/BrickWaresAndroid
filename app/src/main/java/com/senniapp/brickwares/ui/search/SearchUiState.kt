@@ -116,6 +116,8 @@ data class SearchUiState(
     // ---- Minifig mode (toggled by the FAB) ----
     val mode: SearchMode = SearchMode.SETS,
     val minifigsLoading: Boolean = false,
+    /** The minifig theme browse failed to load (no connection / error) — show the error fallback + retry. */
+    val minifigLoadError: Boolean = false,
     /** Theme cards for the minifig browse (same shape as the set themes, so ThemeCard is reused). */
     val minifigThemes: List<ThemeGroup> = emptyList(),
     /** 1-based page for the minifig theme browse grid (10/page). */

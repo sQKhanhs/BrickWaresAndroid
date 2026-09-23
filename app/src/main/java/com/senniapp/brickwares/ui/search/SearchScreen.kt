@@ -465,9 +465,16 @@ private fun SearchContent(
                     }
                 }
 
-                // Minifig browse home (mode = Minifigs): loading, theme browse, or a theme's figs.
+                // Minifig browse home (mode = Minifigs): error, loading, theme browse, or a theme's figs.
                 state.isMinifigMode -> {
-                    if (state.minifigsLoading) {
+                    if (state.minifigLoadError) {
+                        // The theme/count queries failed (offline) — error+retry, not a false "No minifigs".
+                        item {
+                            Box(Modifier.fillMaxWidth().height(420.dp)) {
+                                ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+                            }
+                        }
+                    } else if (state.minifigsLoading) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator(color = colors.brandYellow)
@@ -511,7 +518,15 @@ private fun SearchContent(
                     // List mode shows ALL themes (no pagination); detail mode paginates 10/page.
                     val listMode = state.themeViewMode == ThemeViewMode.LIST
                     val browseGroups = if (listMode) state.orderedThemes else state.themePageItems
-                    if (browseGroups.isEmpty()) {
+                    if (state.isLoading) {
+                        // The theme + count queries are in flight — a spinner, never a flash of the empty
+                        // "No favorite themes yet" state (mirrors the minifig branch above).
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = colors.brandYellow)
+                            }
+                        }
+                    } else if (browseGroups.isEmpty()) {
                         item { SectionLabel(stringResource(R.string.search_no_favorite_themes)) }
                     } else {
                         themeBrowseItems(
