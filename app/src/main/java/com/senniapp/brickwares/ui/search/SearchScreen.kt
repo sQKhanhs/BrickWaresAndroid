@@ -389,7 +389,24 @@ private fun SearchContent(
                 // Global search results — matching sets AND minifigs, independent of the browse mode.
                 state.submittedQuery != null -> {
                     val q = state.submittedQuery.orEmpty()
-                    if (!state.tooMany && state.results.isEmpty() && state.minifigItems.isEmpty()) {
+                    if (state.searchLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = colors.brandYellow)
+                            }
+                        }
+                    }
+                    if (state.searchError) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(420.dp)) {
+                                ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onSubmit)
+                            }
+                        }
+                    }
+                    // Only a settled, successful search with nothing to show is a genuine "no results".
+                    if (!state.searchLoading && !state.searchError &&
+                        !state.tooMany && state.results.isEmpty() && state.minifigItems.isEmpty()
+                    ) {
                         item { NoResults(query = q) }
                     }
                     if (state.tooMany) {

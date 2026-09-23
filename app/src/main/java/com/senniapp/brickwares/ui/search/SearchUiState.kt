@@ -72,6 +72,10 @@ data class SearchUiState(
     /** The query that produced [results]; null while the user hasn't submitted a search yet. */
     val submittedQuery: String? = null,
     val results: List<CatalogSet> = emptyList(),
+    /** A submitted search is fetching (sets + minifigs) — show a spinner, not the previous or empty results. */
+    val searchLoading: Boolean = false,
+    /** The submitted search failed (offline / error) — show the error+retry, not the "no sets found" text. */
+    val searchError: Boolean = false,
     /** Live set suggestions (the typing dropdown), shown above [minifigSuggestions]. */
     val suggestions: List<CatalogSet> = emptyList(),
     /** Live minifig suggestions (matched by name or fig code, e.g. "fig-017485"), shown below the sets. */

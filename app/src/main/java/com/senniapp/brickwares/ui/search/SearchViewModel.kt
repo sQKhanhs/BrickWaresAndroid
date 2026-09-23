@@ -44,6 +44,7 @@ class SearchViewModel(
     private var themeSets: List<CatalogSet> = emptyList()
     private var minifigThemeItems: List<Minifig> = emptyList()
     private var suggestJob: Job? = null
+    private var searchJob: Job? = null
     private val _uiState = MutableStateFlow(
         // Seed favorites from disk so bookmarked themes survive an app restart.
         SearchUiState(
@@ -159,12 +160,30 @@ class SearchViewModel(
     fun onSubmit() {
         val q = _uiState.value.query.trim()
         if (q.isBlank()) return
-        _uiState.update { it.copy(submittedQuery = q, suggestions = emptyList()) }
-        viewModelScope.launch {
-            val sets = runCatching { catalogRepo.searchSets(q, limit = SEARCH_LIMIT) }.getOrDefault(emptyList())
-            val figs = runCatching { catalogRepo.fetchMinifigsMatching(q, limit = SEARCH_LIMIT) }.getOrDefault(emptyList())
-            _uiState.update {
-                it.copy(results = sets, minifigItems = figs, minifigThemeDetail = null, minifigPage = 1)
+        // Cancel any in-flight search so a slow earlier one can't land after — and overwrite — this one.
+        searchJob?.cancel()
+        // Clear the previous results and show a spinner up front, so the stale "too many" / "no results"
+        // text can't linger during the round-trip; searchError is reset for this fresh attempt.
+        _uiState.update {
+            it.copy(
+                submittedQuery = q, suggestions = emptyList(), minifigSuggestions = emptyList(),
+                results = emptyList(), minifigItems = emptyList(),
+                minifigThemeDetail = null, minifigPage = 1,
+                searchLoading = true, searchError = false,
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val sets = catalogRepo.searchSets(q, limit = SEARCH_LIMIT)
+                val figs = catalogRepo.fetchMinifigsMatching(q, limit = SEARCH_LIMIT)
+                _uiState.update { it.copy(results = sets, minifigItems = figs, searchLoading = false, searchError = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // superseded by a newer submit — unwind without touching state
+            } catch (e: Exception) {
+                // Offline / server error: surface it as an error state (with retry) instead of letting the
+                // empty result read as a genuine "no sets found".
+                Timber.tag("SearchVM").w(e, "search failed for %s", q)
+                _uiState.update { it.copy(searchLoading = false, searchError = true) }
             }
         }
     }
