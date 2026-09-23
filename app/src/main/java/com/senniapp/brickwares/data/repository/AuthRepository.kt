@@ -6,6 +6,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.NoCredentialException
 import com.senniapp.brickwares.data.local.AccountPrefs
 import com.senniapp.brickwares.BuildConfig
@@ -110,6 +111,14 @@ sealed interface SignInResult {
     /** The auth request was rate-limited (too many attempts / emails). */
     data object TooManyRequests : SignInResult
 
+    /**
+     * A transient connectivity failure — the app's own network is back but a piece the sign-in leans on
+     * couldn't reach its server yet: Google Play Services minting the ID token (`getToken() NETWORK_ERROR`,
+     * common for a moment right after the network returns), or the auth HTTP call itself. Retryable — the
+     * UI asks the user to try again rather than showing a generic "something went wrong".
+     */
+    data object NetworkError : SignInResult
+
     /** Any other failure. The [message] is for logging, NOT display — the UI shows a generic string. */
     data class Error(val message: String) : SignInResult
 }
@@ -140,6 +149,19 @@ object AuthRepository {
     private fun failed(call: String, e: Exception, fallback: String): SignInResult.Error {
         Timber.tag(TAG).w(e, "%s failed", call)
         return SignInResult.Error(e.message ?: fallback)
+    }
+
+    /** True when [t] or a cause in its chain is an I/O/network failure (UnknownHost / timeout / connect /
+     *  the Ktor engine's wrapped IOException) — so a transient connectivity blip surfaces a "check your
+     *  connection, try again" message instead of a generic error. */
+    private fun isNetworkError(t: Throwable?): Boolean {
+        var e = t
+        repeat(10) {
+            if (e == null) return false
+            if (e is java.io.IOException) return true
+            e = e?.cause
+        }
+        return false
     }
 
     private val client get() = SupabaseClientProvider.client
@@ -225,8 +247,19 @@ object AuthRepository {
             return SignInResult.Cancelled
         } catch (e: NoCredentialException) {
             return SignInResult.NoCredential
+        } catch (e: GetCredentialInterruptedException) {
+            // Transient: Google Play Services couldn't reach Google to mint the token (getToken()
+            // NETWORK_ERROR — common for a moment right after the network returns, before GMS's own
+            // network catches up). Retryable, so tell the user to try again, not "something went wrong".
+            Timber.tag(TAG).w(e, "Google credential interrupted (network)")
+            return SignInResult.NetworkError
         } catch (e: GetCredentialException) {
-            return SignInResult.Error(e.message ?: "Google sign-in failed")
+            // Some GMS network failures surface as a plain GetCredentialException — treat a network-ish
+            // one as retryable too (its type/message names it), else a genuine error.
+            val networkish = e.type.contains("INTERRUPT", ignoreCase = true) ||
+                e.message?.contains("network", ignoreCase = true) == true ||
+                e.message?.contains("connectivity", ignoreCase = true) == true
+            return if (networkish) SignInResult.NetworkError else SignInResult.Error(e.message ?: "Google sign-in failed")
         }
 
         return try {
@@ -237,7 +270,7 @@ object AuthRepository {
             }
             SignInResult.Success
         } catch (e: Exception) {
-            SignInResult.Error(e.message ?: "Couldn't complete sign-in")
+            if (isNetworkError(e)) SignInResult.NetworkError else SignInResult.Error(e.message ?: "Couldn't complete sign-in")
         }
     }
 
@@ -263,7 +296,7 @@ object AuthRepository {
             else -> rejected("signInWithEmail", e)
         }
     } catch (e: Exception) {
-        failed("signInWithEmail", e, "Couldn't sign in")
+        if (isNetworkError(e)) SignInResult.NetworkError else failed("signInWithEmail", e, "Couldn't sign in")
     }
 
     /**

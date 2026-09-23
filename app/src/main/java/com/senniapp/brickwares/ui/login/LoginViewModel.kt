@@ -119,6 +119,7 @@ class LoginViewModel(
             val message: UiText? = when (authRepository.signInWithGoogle(context)) {
                 SignInResult.Success, SignInResult.Cancelled -> null
                 SignInResult.NoCredential -> UiText.Res(R.string.login_err_no_google)
+                SignInResult.NetworkError -> UiText.Res(R.string.login_err_network)
                 else -> UiText.Res(R.string.login_err_generic)
             }
             _uiState.update { it.copy(signingIn = false, error = message) }
@@ -171,6 +172,7 @@ class LoginViewModel(
                     )
                     SignInResult.EmailAlreadyRegistered -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_email_exists))
                     SignInResult.TooManyRequests -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_too_many))
+                    SignInResult.NetworkError -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_network))
                     is SignInResult.Error -> it.copy(signingIn = false, error = UiText.Res(R.string.login_err_generic))
                     else -> it.copy(signingIn = false)
                 }
