@@ -270,27 +270,46 @@ class SearchViewModel(
                 minifigThemeDetailSort = MinifigSort.NAME,
                 minifigThemeDetailSubOptions = emptyList(),
                 minifigThemeDetailLoading = true,
+                minifigThemeDetailError = false,
                 minifigItems = emptyList(),
                 minifigPage = 1,
             )
         }
+        loadMinifigThemeDetail(theme)
+    }
+
+    /** Retry the open minifig theme's fig fetch after an error — from the theme-detail ErrorScreen. */
+    fun onMinifigThemeDetailRetry() {
+        val theme = _uiState.value.minifigThemeDetail ?: return
+        _uiState.update { it.copy(minifigThemeDetailLoading = true, minifigThemeDetailError = false) }
+        loadMinifigThemeDetail(theme)
+    }
+
+    private fun loadMinifigThemeDetail(theme: String) {
         viewModelScope.launch {
-            val fetched = runCatching { catalogRepo.minifigsInTheme(theme) }.getOrElse { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            try {
+                val fetched = catalogRepo.minifigsInTheme(theme)
+                _uiState.update {
+                    // Adopt the backing list only AFTER the stale-result guard (see loadThemeDetail): a slow
+                    // fetch for a since-abandoned theme must not overwrite [minifigThemeItems], or the open
+                    // theme's sort/subtheme filtering would show the old theme's figs.
+                    if (it.minifigThemeDetail != theme) return@update it
+                    minifigThemeItems = fetched
+                    it.copy(
+                        minifigThemeDetailLoading = false,
+                        minifigThemeDetailError = false,
+                        minifigThemeDetailSubOptions = minifigSubthemesFromItems(fetched, theme),
+                        minifigItems = minifigThemeResults(theme, it.minifigThemeDetailSub, it.minifigThemeDetailSort),
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // superseded by another theme open — unwind without touching state
+            } catch (e: Exception) {
                 Timber.tag("SearchVM").w(e, "minifigsInTheme failed for %s", theme)
-                emptyList()
-            }
-            _uiState.update {
-                // Adopt the backing list only AFTER the stale-result guard (see openThemeDetail): a slow
-                // fetch for a since-abandoned theme must not overwrite [minifigThemeItems], or the open
-                // theme's sort/subtheme filtering would show the old theme's figs.
-                if (it.minifigThemeDetail != theme) return@update it
-                minifigThemeItems = fetched
-                it.copy(
-                    minifigThemeDetailLoading = false,
-                    minifigThemeDetailSubOptions = minifigSubthemesFromItems(fetched, theme),
-                    minifigItems = minifigThemeResults(theme, it.minifigThemeDetailSub, it.minifigThemeDetailSort),
-                )
+                _uiState.update {
+                    if (it.minifigThemeDetail != theme) return@update it
+                    it.copy(minifigThemeDetailLoading = false, minifigThemeDetailError = true)
+                }
             }
         }
     }
@@ -399,29 +418,49 @@ class SearchViewModel(
                 themeDetailSub = sub,
                 themeDetailSort = ThemeDetailSort.NEWEST,
                 themeDetailLoading = true,
+                themeDetailError = false,
                 themeDetailSubOptions = emptyList(),
                 themeDetailResults = emptyList(),
                 themeDetailPage = 1,
             )
         }
+        loadThemeDetail(theme)
+    }
+
+    /** Retry the open theme's set fetch after an error (e.g. offline) — from the theme-detail ErrorScreen. */
+    fun onThemeDetailRetry() {
+        val theme = _uiState.value.themeDetail ?: return
+        _uiState.update { it.copy(themeDetailLoading = true, themeDetailError = false) }
+        loadThemeDetail(theme)
+    }
+
+    private fun loadThemeDetail(theme: String) {
         viewModelScope.launch {
-            val fetched = runCatching { catalogRepo.setsInTheme(theme) }.getOrElse { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            try {
+                val fetched = catalogRepo.setsInTheme(theme)
+                _uiState.update {
+                    // Ignore a stale result if the user has since navigated to another theme / closed it.
+                    // Adopt the backing list only AFTER this guard: a slow fetch for a since-abandoned theme
+                    // must not overwrite [themeSets], or the open theme's in-memory sort/subtheme filtering
+                    // (which reads [themeSets]) would show the old theme's sets.
+                    if (it.themeDetail != theme) return@update it
+                    themeSets = fetched
+                    it.copy(
+                        themeDetailLoading = false,
+                        themeDetailError = false,
+                        themeDetailSubOptions = subthemesFrom(fetched),
+                        themeDetailResults = themeDetailResults(it.themeDetailSub, it.themeDetailSort),
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // superseded by another theme open — unwind without touching state
+            } catch (e: Exception) {
+                // Offline / server error — surface the error+retry instead of an empty "0 sets" list.
                 Timber.tag("SearchVM").w(e, "setsInTheme failed for %s", theme)
-                emptyList()
-            }
-            _uiState.update {
-                // Ignore a stale result if the user has since navigated to another theme / closed it.
-                // Adopt the backing list only AFTER this guard: a slow fetch for a since-abandoned theme
-                // must not overwrite [themeSets], or the open theme's in-memory sort/subtheme filtering
-                // (which reads [themeSets]) would show the old theme's sets.
-                if (it.themeDetail != theme) return@update it
-                themeSets = fetched
-                it.copy(
-                    themeDetailLoading = false,
-                    themeDetailSubOptions = subthemesFrom(fetched),
-                    themeDetailResults = themeDetailResults(it.themeDetailSub, it.themeDetailSort),
-                )
+                _uiState.update {
+                    if (it.themeDetail != theme) return@update it
+                    it.copy(themeDetailLoading = false, themeDetailError = true)
+                }
             }
         }
     }

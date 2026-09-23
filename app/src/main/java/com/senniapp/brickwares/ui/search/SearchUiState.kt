@@ -104,6 +104,8 @@ data class SearchUiState(
     val themeDetailSort: ThemeDetailSort = ThemeDetailSort.NEWEST,
     /** The open theme's sets are fetched on demand (Decision 16); true while that query is in flight. */
     val themeDetailLoading: Boolean = false,
+    /** The open theme's set fetch failed (offline / error) — show the error+retry, not an empty "0 sets". */
+    val themeDetailError: Boolean = false,
     val themeDetailResults: List<CatalogSet> = emptyList(),
     val themeDetailSubOptions: List<SubthemeCount> = emptyList(),
     /** 1-based current page for the theme-detail results (numbered pagination). */
@@ -125,6 +127,8 @@ data class SearchUiState(
     /** The open minifig theme's figs are fetched on demand; true while that query is in flight
      *  (mirrors [themeDetailLoading]) — gates the "Minifig (0) / empty" flash before the fetch lands. */
     val minifigThemeDetailLoading: Boolean = false,
+    /** The open minifig theme's fig fetch failed (offline / error) — show the error+retry, not empty. */
+    val minifigThemeDetailError: Boolean = false,
     /** Selected subtheme filter inside the minifig theme-detail (ALL_SUBTHEMES = no filter). */
     val minifigThemeDetailSub: String = ALL_SUBTHEMES,
     /** Sort applied inside the minifig theme-detail. */

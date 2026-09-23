@@ -125,6 +125,7 @@ fun SearchScreen(
         onThemeDetailSubChange = viewModel::onThemeDetailSubChange,
         onThemeDetailSortChange = viewModel::onThemeDetailSortChange,
         onThemeDetailPageChange = viewModel::onThemeDetailPageChange,
+        onThemeDetailRetry = viewModel::onThemeDetailRetry,
         onAddToWishlist = viewModel::onAddToWishlist,
         onAddToCollectionClick = viewModel::onAddToCollectionClick,
         onDismissAdd = viewModel::onDismissAdd,
@@ -140,6 +141,7 @@ fun SearchScreen(
         onMinifigThemeDetailSubChange = viewModel::onMinifigThemeDetailSubChange,
         onMinifigThemeDetailSortChange = viewModel::onMinifigThemeDetailSortChange,
         onMinifigPageChange = viewModel::onMinifigPageChange,
+        onMinifigThemeDetailRetry = viewModel::onMinifigThemeDetailRetry,
         onAddMinifig = viewModel::onAddMinifigClick,
         onWishlistMinifig = viewModel::onAddMinifigToWishlist,
         onSearchMinifigsForModal = viewModel::searchMinifigs,
@@ -186,6 +188,8 @@ fun ThemeResultsScreen(
             currentPage = state.themeDetailCurrentPage,
             pageCount = state.themeDetailPageCount,
             loading = state.themeDetailLoading,
+            error = state.themeDetailError,
+            onRetry = viewModel::onThemeDetailRetry,
             onPageChange = viewModel::onThemeDetailPageChange,
             onBack = onBack,
             onSubChange = viewModel::onThemeDetailSubChange,
@@ -234,6 +238,7 @@ private fun SearchContent(
     onThemeDetailSubChange: (String) -> Unit,
     onThemeDetailSortChange: (ThemeDetailSort) -> Unit,
     onThemeDetailPageChange: (Int) -> Unit,
+    onThemeDetailRetry: () -> Unit,
     onAddToWishlist: (CatalogSet) -> Unit,
     onAddToCollectionClick: (CatalogSet) -> Unit,
     onDismissAdd: () -> Unit,
@@ -249,6 +254,7 @@ private fun SearchContent(
     onMinifigThemeDetailSubChange: (String) -> Unit,
     onMinifigThemeDetailSortChange: (MinifigSort) -> Unit,
     onMinifigPageChange: (Int) -> Unit,
+    onMinifigThemeDetailRetry: () -> Unit,
     onAddMinifig: (Minifig) -> Unit,
     onWishlistMinifig: (Minifig) -> Unit,
     onSearchMinifigsForModal: suspend (String) -> List<Minifig>,
@@ -294,6 +300,8 @@ private fun SearchContent(
                 currentPage = state.themeDetailCurrentPage,
                 pageCount = state.themeDetailPageCount,
                 loading = state.themeDetailLoading,
+                error = state.themeDetailError,
+                onRetry = onThemeDetailRetry,
                 onPageChange = onThemeDetailPageChange,
                 onBack = onThemeDetailBack,
                 onSubChange = onThemeDetailSubChange,
@@ -312,6 +320,8 @@ private fun SearchContent(
                 subOptions = state.minifigThemeDetailSubOptions,
                 sort = state.minifigThemeDetailSort,
                 loading = state.minifigThemeDetailLoading,
+                error = state.minifigThemeDetailError,
+                onRetry = onMinifigThemeDetailRetry,
                 ownedNumbers = state.ownedNumbers,
                 wishlistedNumbers = state.wishlistedNumbers,
                 totalCount = state.minifigItems.size,
@@ -764,6 +774,8 @@ private fun ThemeDetailView(
     subOptions: List<SubthemeCount>,
     sort: ThemeDetailSort,
     loading: Boolean,
+    error: Boolean,
+    onRetry: () -> Unit,
     wishlistedNumbers: Set<String>,
     ownedNumbers: Set<String>,
     soldNumbers: Set<String>,
@@ -804,7 +816,12 @@ private fun ThemeDetailView(
             )
             ThemeFavoriteStar(isFavorite = isFavorite, onToggle = onToggleFavorite)
         }
-        if (loading) {
+        if (error) {
+            // The theme's set fetch failed (offline) — the error+retry, not an empty "0 sets" page.
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+            }
+        } else if (loading) {
             // Fetching the theme's sets (Decision 16) — a spinner, never a flash of the empty "0 sets" page.
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = colors.brandYellow)
@@ -880,6 +897,8 @@ private fun MinifigThemeDetailView(
     subOptions: List<SubthemeCount>,
     sort: MinifigSort,
     loading: Boolean,
+    error: Boolean,
+    onRetry: () -> Unit,
     ownedNumbers: Set<String>,
     wishlistedNumbers: Set<String>,
     totalCount: Int,
@@ -918,7 +937,12 @@ private fun MinifigThemeDetailView(
             )
             ThemeFavoriteStar(isFavorite = isFavorite, onToggle = onToggleFavorite)
         }
-        if (loading) {
+        if (error) {
+            // The theme's fig fetch failed (offline) — the error+retry, not an empty "Minifig (0)" page.
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                ErrorScreen(message = stringResource(R.string.error_connection), onRetry = onRetry)
+            }
+        } else if (loading) {
             // Fetching the theme's figs — a spinner, never a flash of the empty "Minifig (0)" page.
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = colors.brandYellow)
