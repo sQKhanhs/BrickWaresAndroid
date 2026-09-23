@@ -170,8 +170,11 @@ fun ThemeResultsScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(theme) {
-        if (state.themeDetail != theme) viewModel.openSetTheme(theme, subtheme)
+    LaunchedEffect(theme, subtheme) {
+        // Compare the SUBTHEME too, not just the theme: two stacked entries for different subthemes of the
+        // same theme must each (re)open, otherwise the later filter shows under the earlier entry.
+        val targetSub = subtheme?.takeIf { it.isNotBlank() && it != theme } ?: ALL_SUBTHEMES
+        if (state.themeDetail != theme || state.themeDetailSub != targetSub) viewModel.openSetTheme(theme, subtheme)
     }
     val colors = BwTheme.colors
     Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
@@ -187,7 +190,9 @@ fun ThemeResultsScreen(
             totalCount = state.themeDetailResults.size,
             currentPage = state.themeDetailCurrentPage,
             pageCount = state.themeDetailPageCount,
-            loading = state.themeDetailLoading,
+            // Spinner (not a "0 sets" flash) until this screen's own view model has opened THIS theme —
+            // its state starts empty, and the LaunchedEffect above opens it on first show.
+            loading = state.themeDetailLoading || state.themeDetail != theme,
             error = state.themeDetailError,
             onRetry = viewModel::onThemeDetailRetry,
             onPageChange = viewModel::onThemeDetailPageChange,

@@ -197,10 +197,14 @@ fun BrickWaresApp(
                 )
             } else if (current != null && current.startsWith("t:")) { // a theme's results (Set Detail link)
                 val (theme, subtheme) = decodeThemeEntry(current)
+                // Its OWN view model, NOT the Search tab's — opening a theme from a Set Detail must not
+                // clobber the tab's live results (search → result → theme → Back, Back should return to the
+                // search results, not the theme page). Keyed, so it survives Back and re-open.
+                val themeResultsViewModel: SearchViewModel = viewModel(key = "themeResults")
                 ThemeResultsScreen(
                     theme = theme,
                     subtheme = subtheme,
-                    viewModel = searchViewModel,
+                    viewModel = themeResultsViewModel,
                     onBack = popDetail,
                     // Tapping a result pushes its detail; Back returns to this theme list.
                     onOpenSetDetail = openSet,
@@ -222,7 +226,8 @@ fun BrickWaresApp(
                     // Tapping the theme/subtheme link pushes that theme's result list onto the stack
                     // (stays on the current tab), so Back returns to this set — not the Search home.
                     onOpenTheme = { theme, subtheme ->
-                        searchViewModel.openSetTheme(theme, subtheme)
+                        // Just push the entry — ThemeResultsScreen opens the theme on its OWN view model,
+                        // so the Search tab's results are left intact.
                         detailStack.add(themeEntry(theme, subtheme))
                     },
                     // Show the search FABs on the detail only when it's opened from the Search tab.
