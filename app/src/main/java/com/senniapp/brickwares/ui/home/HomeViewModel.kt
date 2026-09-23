@@ -10,14 +10,18 @@ import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.collectionSummaryOf
 import com.senniapp.brickwares.data.repository.themeSummariesOf
+import com.senniapp.brickwares.data.local.AppGraph
 import com.senniapp.brickwares.data.local.CurrencyPrefs
 import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -49,6 +53,9 @@ class HomeViewModel(
     fun onHeroGifStarted() {
         hasHeroGifStarted = true
     }
+
+    /** Set once the New Sets preview has loaded, so the reconnect observer only retries a FAILED load. */
+    private var newSetsLoaded = false
 
     init {
         authRepository.authState
@@ -103,19 +110,38 @@ class HomeViewModel(
         // section appears with the rest of Home instead of popping in later; a failure still releases
         // the page (the card is simply absent) — Home is never held on a network error.
         loadNewSets()
+        // If the launch load failed (offline at open), reload when connectivity returns — otherwise the
+        // card stays gone for the whole session even after the network is back (the Search tab's Retry
+        // only refreshes the Search browse, not Home). drop(1) skips the current value; once a load
+        // succeeds [newSetsLoaded] stops further reloads so a connectivity blip doesn't reshuffle the card.
+        AppGraph.connectivity.isOnline
+            .drop(1)
+            .filter { it }
+            .onEach { if (!newSetsLoaded) loadNewSets() }
+            .launchIn(viewModelScope)
     }
 
     private fun loadNewSets() {
+        if (newSetsLoaded) return // already have it — don't reshuffle on a connectivity blip
         viewModelScope.launch {
-            try {
-                // A RANDOM 5 of the eligible new sets (reshuffled each load), not the first 5 — the full
-                // list is still available, sorted, behind "View more new sets".
-                val newSets = NewSets.select(catalogRepo.newSetCandidates()).shuffled().take(NEW_SETS_PREVIEW)
-                _uiState.update { it.copy(newSets = newSets, catalogReady = true) }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiState.update { it.copy(catalogReady = true) }
+            // Retry a few times: on a reconnect the isOnline edge can fire a beat before the network is
+            // actually routable, so a single attempt could fail with nothing left to re-trigger it. A
+            // short bounded retry rides out the settle so the card reliably comes back. catalogReady is
+            // released on the first failure so Home is never held on the network.
+            repeat(NEW_SETS_LOAD_ATTEMPTS) { attempt ->
+                try {
+                    // A RANDOM 5 of the eligible new sets (reshuffled each load), not the first 5 — the
+                    // full list is still available, sorted, behind "View more new sets".
+                    val newSets = NewSets.select(catalogRepo.newSetCandidates()).shuffled().take(NEW_SETS_PREVIEW)
+                    newSetsLoaded = true
+                    _uiState.update { it.copy(newSets = newSets, catalogReady = true) }
+                    return@launch
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(catalogReady = true) }
+                    if (attempt < NEW_SETS_LOAD_ATTEMPTS - 1) delay(NEW_SETS_RETRY_DELAY_MS)
+                }
             }
         }
     }
@@ -131,5 +157,9 @@ class HomeViewModel(
     private companion object {
         /** How many new sets the Home card previews before "View more new sets". */
         const val NEW_SETS_PREVIEW = 5
+        /** Bounded retry for the New Sets query, so a reload right as the network returns rides out the
+         *  brief window where connectivity is reported but the socket isn't routable yet. */
+        const val NEW_SETS_LOAD_ATTEMPTS = 3
+        const val NEW_SETS_RETRY_DELAY_MS = 2_000L
     }
 }
