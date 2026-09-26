@@ -1,9 +1,14 @@
-// Fetches a SAMPLE of the LEGO catalog from Brickset and writes supabase/seed.sql
-// (idempotent upserts into public.sets + public.set_prices). This is a prototype of
-// the future monthly ingestion Edge Function (Architecture Decision 5).
+// Fetches the LEGO catalog from Brickset and writes supabase/seed.sql (idempotent upserts into
+// public.sets + public.set_prices + minifigs). Since 2026-09-26 the LIVE catalog is kept current by the
+// daily `catalog-refresh` Edge Function (Architecture Decision 5), so seed.sql is for local dev and
+// disaster recovery; this script's remaining prod job is the ENRICH_PENDING pass (box images + VI notes
+// for the sets that function queues — BrickLink and MyMemory can't be used from a server).
 //
 // Run:  node --env-file=supabase/.env.local scripts/fetch-catalog.mjs
 // Then: supabase db reset      (applies migrations + this seed)
+// Enrichment (after a catalog-refresh email) — any shell:
+//       node --env-file=supabase/.env.local scripts/fetch-catalog.mjs --enrich
+//       then run the `Next:` command it prints (supabase db query --linked -f supabase/enrich-<date>.sql)
 //
 // Keys come from env ONLY (see supabase/.env.example). Never hard-code them.
 
@@ -91,7 +96,21 @@ const {
   // block — no Brickset/Rebrickable fetch, no other blocks touched. The right way to build box coverage
   // for the whole existing catalog without a slow full re-fetch (and without risking losing sets).
   BOX_ONLY = "",
+  // ---- Enrichment worklist (`--enrich`, or ENRICH_PENDING=1) — see enrichPendingRun ----
+  // "1" = read the sets the catalog-refresh job queued (sets.enrich_queued_at) from the live DB, re-host
+  // their box images + translate their notes, and write supabase/enrich-<date>.sql to apply to that same
+  // DB. No Brickset/Rebrickable fetch; seed.sql is untouched.
+  ENRICH_PENDING = "",
+  // The DB to read the worklist from: its API URL + publishable (anon) key — the catalog is public-read.
+  // Prod: https://<ref>.supabase.co ; local stack: http://127.0.0.1:54321 (key from `supabase status`).
+  ENRICH_API_URL = "",
+  ENRICH_API_KEY = "",
+  // "0" = notes only, skip the box re-host (e.g. while BrickLink is 403-ing this IP).
+  ENRICH_BOXES = "1",
 } = process.env;
+
+// `--enrich` on the command line works the same in PowerShell and bash (an inline `VAR=1 node …` is bash-only).
+const ENRICH = process.argv.includes("--enrich") || ENRICH_PENDING === "1" || ENRICH_PENDING.toLowerCase() === "true";
 
 const SAMPLES_ONLY = BRICKSET_SAMPLES_ONLY === "1" || BRICKSET_SAMPLES_ONLY.toLowerCase() === "true";
 const FULL_ALL = BRICKSET_FULL_ALL === "1" || BRICKSET_FULL_ALL.toLowerCase() === "true";
@@ -99,7 +118,7 @@ const FULL_ALL = BRICKSET_FULL_ALL === "1" || BRICKSET_FULL_ALL.toLowerCase() ==
 // the already-harvested box_image_url + notes_vi blocks.
 const APPEND = SAMPLES_ONLY || FULL_ALL || BRICKSET_APPEND === "1" || BRICKSET_APPEND.toLowerCase() === "true";
 
-if (!BRICKSET_API_KEY) {
+if (!BRICKSET_API_KEY && !ENRICH) {
   console.error("Missing BRICKSET_API_KEY — put it in supabase/.env.local (see .env.example).");
   process.exit(1);
 }
@@ -393,10 +412,11 @@ async function r2ListKeys(prefix) {
 }
 
 // Returns Map<setID, publicBoxUrl> = the boxes we now have on R2 (carrying forward [existingBySetId],
-// re-hosting any not-yet-on-R2 URL). No-op unless enabled + configured.
-async function rehostBoxImages(sets, existingBySetId = new Map()) {
+// re-hosting any not-yet-on-R2 URL). No-op unless enabled + configured. [missingOut] (a Set), when given,
+// collects the setIDs BrickLink has no box for (404 / placeholder) — the enrichment pass uses it to give up.
+async function rehostBoxImages(sets, existingBySetId = new Map(), enabled = REHOST, missingOut = null) {
   const byId = new Map(existingBySetId);
-  if (!REHOST) return byId;
+  if (!enabled) return byId;
   if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BASE) {
     console.warn("REHOST_BOX_IMAGES set but R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PUBLIC_BASE missing — skipping box re-host.");
     return byId;
@@ -444,11 +464,11 @@ async function rehostBoxImages(sets, existingBySetId = new Map()) {
       continue; // this set is retried on the next run (still not on R2)
     }
     streak403 = 0;
-    if (res.status === 404) { missing++; continue; } // no box on BrickLink → leave as-is (render fallback)
+    if (res.status === 404) { missing++; missingOut?.add(s.setID); continue; } // no box on BrickLink → render fallback
     if (!res.ok) { console.warn(`  ${number}-${variant}: HTTP ${res.status}`); continue; }
 
     const bytes = Buffer.from(await res.arrayBuffer());
-    if (bytes.length < 1000) { missing++; continue; } // a placeholder / error body, not a real image
+    if (bytes.length < 1000) { missing++; missingOut?.add(s.setID); continue; } // a placeholder / error body, not a real image
     try {
       const up = await r2PutRetry(boxPath(number, variant), bytes, "image/png", `${number}-${variant}`);
       if (!up || !up.ok) { console.warn(`  ${number}-${variant}: R2 upload ${up ? `HTTP ${up.status}: ${(await up.text()).slice(0, 140)}` : "failed (network)"}`); continue; }
@@ -629,7 +649,91 @@ where s.set_id = v.set_id;`
   console.log("Next: supabase db reset (local) / apply the box UPDATE block to prod");
 }
 
+// --enrich / ENRICH_PENDING: the local half of the daily catalog-refresh Edge Function. The function queues new and
+// newly-revealed sets, and sets whose English note changed, in sets.enrich_queued_at; this pass re-hosts
+// their box images and translates their notes, then writes supabase/enrich-<date>.sql for the same DB.
+// A set leaves the queue once both are done. A box BrickLink doesn't have yet (unreleased sets) keeps it
+// queued until 60 days after launch (or a year in the queue), then it's given up — the app shows the render.
+async function enrichPendingRun() {
+  if (!ENRICH_API_URL || !ENRICH_API_KEY) {
+    console.error("ENRICH_PENDING: set ENRICH_API_URL + ENRICH_API_KEY (the project's API URL + publishable key).");
+    process.exit(1);
+  }
+  const base = ENRICH_API_URL.replace(/\/$/, "");
+  const cols = "set_id,set_number,number_variant,name,notes,notes_vi,box_image_url,released,launch_date,enrich_queued_at";
+  const res = await fetch(`${base}/rest/v1/sets?select=${cols}&enrich_queued_at=not.is.null&order=enrich_queued_at.asc&limit=1000`, {
+    headers: { apikey: ENRICH_API_KEY },
+  });
+  if (!res.ok) {
+    console.error(`ENRICH_PENDING: worklist HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    process.exit(1);
+  }
+  const rows = (await res.json()).filter((r) => r.name !== "{?}"); // placeholders are never queued; be safe
+  console.log(`ENRICH_PENDING: ${rows.length} sets awaiting enrichment (from ${base}).`);
+  if (!rows.length) return;
+
+  // 1. Box images — only for sets that don't have one.
+  const boxesOn = ENRICH_BOXES !== "0" && ENRICH_BOXES.toLowerCase() !== "false";
+  const needBox = rows.filter((r) => !r.box_image_url)
+    .map((r) => ({ setID: r.set_id, number: r.set_number, numberVariant: r.number_variant }));
+  const missing = new Set();
+  const boxes = boxesOn && needBox.length ? await rehostBoxImages(needBox, new Map(), true, missing) : new Map();
+  if (!boxesOn && needBox.length) console.log(`  ENRICH_BOXES=0 — ${needBox.length} sets without a box stay queued.`);
+
+  // 2. Vietnamese notes — only notes without a translation.
+  const viByNote = await translateNotes(rows.filter((r) => r.notes && !r.notes_vi).map((r) => r.notes));
+  const viFor = (r) => (r.notes ? viByNote.get(r.notes.trim()) : undefined);
+
+  // 3. Done = box present / just hosted / given up, AND translation present / just made / not needed.
+  const launchCutoff = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+  const queuedCutoff = Date.now() - 365 * 86_400_000;
+  const boxGivenUp = (r) => missing.has(r.set_id) &&
+    ((r.released === true && (!r.launch_date || r.launch_date < launchCutoff)) || Date.parse(r.enrich_queued_at) < queuedCutoff);
+  const boxDone = (r) => Boolean(r.box_image_url || boxes.has(r.set_id) || boxGivenUp(r));
+  const notesDone = (r) => !r.notes?.trim() || Boolean(r.notes_vi || viFor(r));
+  const done = rows.filter((r) => boxDone(r) && notesDone(r));
+
+  for (const r of rows.filter((x) => !done.includes(x))) {
+    const why = [!boxDone(r) && (boxesOn ? "no box yet" : "boxes skipped"), !notesDone(r) && "translation failed"].filter(Boolean);
+    console.log(`  still queued: ${r.set_number}-${r.number_variant} ${r.name} (${why.join(", ")})`);
+  }
+  // One row per set that gained something: (set_id, box_image_url, notes the translation is of, notes_vi, done).
+  const changed = rows.filter((r) => boxes.has(r.set_id) || (!r.notes_vi && viFor(r)) || done.includes(r));
+  if (!changed.length) {
+    console.log("ENRICH_PENDING: nothing to write this time.");
+    return;
+  }
+  const values = changed.map((r) =>
+    `(${num(r.set_id)}, ${q(boxes.get(r.set_id))}, ${q(r.notes)}, ${q(r.notes_vi ? null : viFor(r))}, ${done.includes(r)})`);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const file = `enrich-${today}.sql`;
+  const boxCount = changed.filter((r) => boxes.has(r.set_id)).length;
+  const viCount = changed.filter((r) => !r.notes_vi && viFor(r)).length;
+  // ONE statement: `supabase db query` runs the file as a single prepared statement (no begin/commit or
+  // multiple commands), and one UPDATE touches each row once, so it is atomic on its own. The note guards
+  // skip a translation / the dequeue when the job changed the English note after this pass read it.
+  const sql =
+`-- Generated by scripts/fetch-catalog.mjs (ENRICH_PENDING) on ${today} from ${base}.
+-- ${done.length}/${rows.length} sets complete: ${boxCount} boxes hosted, ${viCount} notes translated.
+-- Apply to that SAME database:  supabase db query --linked -f supabase/${file}   (local stack: --local)
+update public.sets as s set
+  box_image_url    = coalesce(s.box_image_url, v.box_image_url::text),
+  notes_vi         = case when v.notes_vi is not null and s.notes = v.notes::text then v.notes_vi::text else s.notes_vi end,
+  enrich_queued_at = case when v.done::boolean and s.notes is not distinct from v.notes::text then null else s.enrich_queued_at end
+from (values
+  ${values.join(",\n  ")}
+) as v(set_id, box_image_url, notes, notes_vi, done)
+where s.set_id = v.set_id
+returning s.set_id, s.set_number, s.box_image_url is not null as has_box, s.notes_vi is not null as has_vi, s.enrich_queued_at is null as dequeued;
+`;
+  await writeFile(resolve(dirname(OUT), file), sql, "utf8");
+  console.log(`ENRICH_PENDING: ${done.length}/${rows.length} complete -> supabase/${file}`);
+  console.log(`Next: supabase db query --linked -f supabase/${file}`);
+}
+
 async function main() {
+  if (ENRICH) { await enrichPendingRun(); return; }
   if (BOX_ONLY === "1" || BOX_ONLY.toLowerCase() === "true") { await boxOnlyRun(); return; }
   const userHash = await getUserHash();
   const themes = BRICKSET_THEMES.split(",").map((t) => t.trim()).filter(Boolean);
@@ -775,10 +879,11 @@ insert into public.sets
 values
   ${setValues}
 on conflict (set_id) do update set
-  set_number = excluded.set_number, name = excluded.name, year = excluded.year,
-  theme = excluded.theme, theme_group = excluded.theme_group, subtheme = excluded.subtheme,
-  category = excluded.category, pieces = excluded.pieces, minifigs = excluded.minifigs,
-  released = excluded.released, image_url = excluded.image_url,
+  set_number = excluded.set_number, number_variant = excluded.number_variant, name = excluded.name,
+  year = excluded.year, theme = excluded.theme, theme_group = excluded.theme_group,
+  subtheme = excluded.subtheme, category = excluded.category, pieces = excluded.pieces,
+  minifigs = excluded.minifigs, age_min = excluded.age_min, released = excluded.released,
+  availability = excluded.availability, image_url = excluded.image_url,
   thumbnail_url = excluded.thumbnail_url, brickset_url = excluded.brickset_url,
   rating = excluded.rating, review_count = excluded.review_count, notes = excluded.notes,
   launch_date = excluded.launch_date, exit_date = excluded.exit_date,
