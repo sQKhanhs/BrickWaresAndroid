@@ -247,6 +247,20 @@ class SetDetailViewModel(
         _uiState.value.set?.let(::wishlist)
     }
 
+    /**
+     * From the hero's "Wishlisted" button: take this set off the wishlist. Removes every row that
+     * [SetDetailUiState.isWishlisted] counts — the exact variant's row AND a legacy (set_id-less) row for
+     * the number, each by its own identity — or a leftover legacy row would keep the button on
+     * "Wishlisted". The DAO deletes stay variant-safe (by set_id, or set_id-less rows only by number).
+     */
+    fun onRemoveFromWishlist() {
+        val set = _uiState.value.set ?: return
+        val matches = wishlist.filter { w -> w.variantKey == set.variantKey || (w.setId == null && w.setNumber == set.setNumber) }
+        if (matches.isEmpty()) return
+        matches.map { it.setNumber to it.setId }.distinct().forEach { (number, id) -> repository.removeFromWishlist(number, id) }
+        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(set.name))) }
+    }
+
     fun onAddToCollectionClick() {
         _uiState.update { it.copy(addTarget = it.set, addSalesMode = false) }
     }

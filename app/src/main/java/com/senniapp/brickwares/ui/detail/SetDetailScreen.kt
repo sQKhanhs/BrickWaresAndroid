@@ -128,6 +128,7 @@ fun SetDetailScreen(
         onOpenMinifig = onOpenMinifig,
         onOpenTheme = onOpenTheme,
         onAddWishlist = viewModel::onAddToWishlist,
+        onRemoveWishlist = viewModel::onRemoveFromWishlist,
         onAddCollectionClick = viewModel::onAddToCollectionClick,
         onRecommendAddCollection = viewModel::onAddRecommendToCollection,
         onRecommendAddWishlist = viewModel::onAddRecommendToWishlist,
@@ -164,6 +165,7 @@ private fun SetDetailContent(
     onOpenMinifig: (String) -> Unit,
     onOpenTheme: (theme: String, subtheme: String?) -> Unit,
     onAddWishlist: () -> Unit,
+    onRemoveWishlist: () -> Unit,
     onAddCollectionClick: () -> Unit,
     onRecommendAddCollection: (CatalogSet) -> Unit,
     onRecommendAddWishlist: (CatalogSet) -> Unit,
@@ -310,8 +312,9 @@ private fun SetDetailContent(
                             label = stringResource(if (state.isWishlisted) R.string.action_wishlisted else R.string.action_wishlist),
                             filled = false,
                             iconTint = if (state.isWishlisted) WishlistHeart else colors.textMuted,
+                            // A toggle, like the minifig page: "Wishlisted" removes it again.
                             onClick = when {
-                                state.isWishlisted -> null
+                                state.isWishlisted -> onRemoveWishlist
                                 isLoggedIn -> onAddWishlist
                                 else -> ({ SignInController.request() })
                             },
