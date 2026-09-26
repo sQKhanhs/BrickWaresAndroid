@@ -458,6 +458,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Daily catalog refresh, called by pg_cron (migration 20260926120000). It checks its own shared secret
+# (x-cron-secret header == CATALOG_CRON_SECRET) instead of a JWT, so the service-role key never has to
+# live in Vault for the cron job.
+[functions.catalog-refresh]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
