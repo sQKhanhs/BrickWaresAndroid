@@ -129,6 +129,21 @@ fun BrickWaresApp(
     // Held here (Activity-scoped) so re-entering the Search tab from another tab can reset it to
     // its default browse view — a lingering search shouldn't persist across tab switches.
     val searchViewModel: SearchViewModel = viewModel()
+    // A set tapped in Home's New Sets (the card, or its full page) opens in the SEARCH tab, so its detail
+    // gets the Search FABs (quick search + switch to minifigs) like any Search-tab detail. Opened from the
+    // full page, the page moves along underneath so Back still returns to the list. Reads the stacks at
+    // tap time rather than capturing this composition's values.
+    val openNewSet: (String) -> Unit = { setKey ->
+        if (tabStack.last() == BwTab.Search) {
+            openSet(setKey)
+        } else {
+            val fromNewSetsPage = detailStack.lastOrNull() == "n:"
+            searchViewModel.onEnterSearchTab() // entering Search from another tab resets it, like the nav tap
+            goToTab(BwTab.Search)
+            if (fromNewSetsPage) detailStack.add("n:")
+            openSet(setKey)
+        }
+    }
     // On-demand sign-in overlay (no login wall): gated surfaces call SignInController.request().
     val showLogin by SignInController.showLogin.collectAsStateWithLifecycle()
     val isLoggedIn = rememberIsLoggedIn()
@@ -213,8 +228,9 @@ fun BrickWaresApp(
                 NewSetsScreen(
                     viewModel = searchViewModel,
                     onBack = popDetail,
-                    // Tapping a new set pushes its detail onto the same stack (Back returns here).
-                    onOpenSetDetail = openSet,
+                    // Tapping a new set opens its detail in the Search tab, this page underneath (Back
+                    // returns here).
+                    onOpenSetDetail = openNewSet,
                 )
             } else if (current != null) { // "s:" — a set
                 SetDetailScreen(
@@ -241,7 +257,8 @@ fun BrickWaresApp(
             } else {
                 when (selectedTab) {
                     BwTab.Home -> HomeScreen(
-                        onOpenSetDetail = openSet,
+                        // Only the New Sets card opens sets from Home — in the Search tab (see openNewSet).
+                        onOpenSetDetail = openNewSet,
                         onOpenNewSets = { detailStack.add("n:") },
                     )
                     BwTab.Collection -> CollectionScreen(
