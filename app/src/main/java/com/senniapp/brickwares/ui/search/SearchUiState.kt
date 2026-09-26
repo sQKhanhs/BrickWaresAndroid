@@ -172,7 +172,10 @@ data class SearchUiState(
         get() = minifigItems.drop((minifigCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     val showThemeDetail: Boolean get() = themeDetail != null
-    val showBrowse: Boolean get() = submittedQuery == null && query.isBlank()
+    /** The browse HOME (theme grid): no query typed or submitted AND no theme's result list open. An open
+     *  theme list must not count — the mode-toggle FAB (hidden only here) belongs on it. */
+    val showBrowse: Boolean
+        get() = submittedQuery == null && query.isBlank() && !showThemeDetail && !showMinifigThemeDetail
     val showSuggestions: Boolean get() = submittedQuery == null && query.isNotBlank()
     val showResults: Boolean get() = submittedQuery != null
     val tooMany: Boolean get() = submittedQuery != null && results.size > MAX_RESULTS

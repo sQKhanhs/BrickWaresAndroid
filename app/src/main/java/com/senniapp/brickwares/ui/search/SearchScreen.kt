@@ -574,7 +574,8 @@ private fun SearchContent(
         }
 
         // Mode-toggle FAB (bottom-start) — flips the tab between Sets and Minifigs. Hidden on the browse
-        // home, where the mode swap now lives in the sticky header; still shown on results + theme-detail.
+        // home, where the mode swap now lives in the sticky header; shown on results and on a theme's
+        // result list (showBrowse excludes an open theme list).
         val minifigMode = state.isMinifigMode
         if (!state.showBrowse) {
             Box(
