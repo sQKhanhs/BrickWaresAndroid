@@ -112,7 +112,7 @@
     <string name="home_share_cd">Chia sẻ bộ sưu tập</string>
     <string name="home_collection_value">Giá trị bộ sưu tập</string>
     <string name="home_paid_pill">Đã trả %1$s</string>
-    <string name="home_signin_prompt">Đăng nhập để lưu và đồng bộ bộ sưu tập của bạn</string>
+    <string name="home_signin_prompt">Đăng nhập để đồng bộ và lưu bộ sưu tập</string>
     <string name="home_collection_by_theme">Bộ sưu tập theo chủ đề</string>
     <!-- New LEGO Sets (Home card + full page) -->
     <string name="home_new_sets_title">Bộ LEGO Mới</string>
