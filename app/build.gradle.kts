@@ -138,7 +138,9 @@ android {
         applicationId = "com.senniapp.brickwares"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        // Play refuses a bundle whose versionCode it has already seen — bump by 1 for EVERY upload (internal,
+        // closed, production alike); versionName is the human label and changes only at a public release.
+        versionCode = 2
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
