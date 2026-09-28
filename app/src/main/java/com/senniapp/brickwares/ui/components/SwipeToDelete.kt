@@ -27,8 +27,8 @@ import com.senniapp.brickwares.ui.theme.BwTheme
  *
  * @param onSwiped invoked once the swipe passes the threshold.
  * @param autoDismiss `true` = let the card animate off (the caller removes it from the list
- *   immediately, e.g. Wishlist); `false` = snap the card back after [onSwiped] so the caller can
- *   confirm first (e.g. Collection shows a dialog, then deletes).
+ *   immediately); `false` = snap the card back after [onSwiped] so the caller can
+ *   confirm first (Collection, Sales and Wishlist show a dialog, then remove).
  */
 @Composable
 fun SwipeToDelete(

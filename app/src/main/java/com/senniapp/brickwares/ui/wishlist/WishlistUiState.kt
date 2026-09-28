@@ -27,8 +27,15 @@ data class WishlistUiState(
     val page: Int = 1,
     /** Transient toast message (e.g. after a remove); cleared once shown. */
     val toastMessage: UiText? = null,
+    /** When non-null, the remove confirmation is open for this wishlist row (by row id). */
+    val pendingRemoveId: String? = null,
 ) {
     val isLoading: Boolean get() = !itemsLoaded
+
+    /** The row awaiting remove confirmation, resolved from the live list — the dialog closes on its own
+     *  if the row goes away meanwhile (e.g. removed on another device and synced). */
+    val pendingRemoveItem: WishlistItem?
+        get() = pendingRemoveId?.let { id -> items.find { it.id == id } }
 
     val visibleItems: List<WishlistItem>
         get() = when (filter) {

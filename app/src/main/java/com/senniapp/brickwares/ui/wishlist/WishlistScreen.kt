@@ -47,6 +47,7 @@ import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.SetThumb
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.ConfirmDeleteDialog
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.ItemSort
@@ -100,7 +101,9 @@ fun WishlistScreen(
         onMoveClick = viewModel::onMoveClick,
         onDismissMove = viewModel::onDismissMove,
         onMoveSubmit = viewModel::onMoveSubmit,
-        onRemove = viewModel::onRemove,
+        onRequestRemove = viewModel::onRequestRemove,
+        onConfirmRemove = viewModel::onConfirmRemove,
+        onCancelRemove = viewModel::onCancelRemove,
         onToastShown = viewModel::onToastShown,
         modifier = modifier,
     )
@@ -122,7 +125,9 @@ private fun WishlistContent(
     onMoveClick: (WishlistItem) -> Unit,
     onDismissMove: () -> Unit,
     onMoveSubmit: (CollectionItem) -> Unit,
-    onRemove: (WishlistItem) -> Unit,
+    onRequestRemove: (WishlistItem) -> Unit,
+    onConfirmRemove: () -> Unit,
+    onCancelRemove: () -> Unit,
     onToastShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -195,11 +200,12 @@ private fun WishlistContent(
             // Key on the row id, not the variant identity: two devices wishlisting the same set before
             // syncing merge to two rows sharing one setId/setNumber, and a duplicate LazyColumn key crashes.
             items(state.pageItems, key = { it.id }) { item ->
-                SwipeToDelete(onSwiped = { onRemove(item) }, autoDismiss = true) {
+                // The swipe snaps back and asks first (autoDismiss = false), like Collection / Sales.
+                SwipeToDelete(onSwiped = { onRequestRemove(item) }, autoDismiss = false) {
                     WishlistCard(
                         item = item,
                         onMove = { onMoveClick(item) },
-                        onRemove = { onRemove(item) },
+                        onRemove = { onRequestRemove(item) },
                         onOpenDetail = {
                             if (item.itemType == ItemType.MINIFIG) onOpenMinifigDetail(item.setNumber)
                             else onOpenSetDetail(item.detailNavKey)
@@ -248,6 +254,16 @@ private fun WishlistContent(
                 onDismiss = onDismissMove,
                 onSearch = onSearchCatalog,
                 onAdd = onMoveSubmit,
+            )
+        }
+
+        state.pendingRemoveItem?.let { item ->
+            ConfirmDeleteDialog(
+                title = stringResource(R.string.wishlist_remove_title),
+                message = stringResource(R.string.wishlist_remove_confirm, item.name),
+                confirmLabel = stringResource(R.string.action_remove),
+                onConfirm = onConfirmRemove,
+                onCancel = onCancelRemove,
             )
         }
 
@@ -346,7 +362,7 @@ private fun WishlistCard(item: WishlistItem, onMove: () -> Unit, onRemove: () ->
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.action_add), style = BwType.micro.copy(fontSize = 11.sp), color = colors.onYellow)
             }
-            // "Wishlisted" button — tap (or swipe the card) to remove from the wishlist.
+            // "Wishlisted" button — tap (or swipe the card) to remove from the wishlist, after a confirmation.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -48,6 +48,7 @@
     <string name="action_go">Go</string>
     <string name="pagination_go_title">Go to page</string>
     <string name="action_delete">Delete</string>
+    <string name="action_remove">Remove</string>
     <string name="action_import">Import</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Retry</string>
@@ -266,6 +267,8 @@
     <string name="wishlist_empty">Nothing here yet, look something up</string>
     <string name="wishlist_search_fab_cd">Search for sets</string>
     <string name="wishlist_remove_cd">Remove from wishlist</string>
+    <string name="wishlist_remove_title">Remove from wishlist</string>
+    <string name="wishlist_remove_confirm">Remove \"%1$s\" from your wishlist?</string>
 
     <!-- ============ Set detail ============ -->
     <string name="detail_set_not_found">Set not found.</string>

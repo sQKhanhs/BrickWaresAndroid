@@ -54,6 +54,7 @@ import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
+import com.senniapp.brickwares.ui.components.ConfirmDeleteDialog
 import com.senniapp.brickwares.ui.components.resolve
 import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.EmptyStateArt
@@ -428,7 +429,9 @@ private fun CollectionContent(
 
         state.pendingDeleteItem?.let { item ->
             ConfirmDeleteDialog(
+                title = stringResource(R.string.collection_delete_title),
                 message = stringResource(R.string.collection_delete_confirm, item.name),
+                confirmLabel = stringResource(R.string.action_delete),
                 onConfirm = onConfirmDeleteItem,
                 onCancel = onCancelDeleteItem,
             )
@@ -436,63 +439,15 @@ private fun CollectionContent(
 
         state.pendingDeleteSale?.let { sold ->
             ConfirmDeleteDialog(
+                title = stringResource(R.string.collection_delete_title),
                 message = stringResource(R.string.sales_delete_confirm, sold.name),
+                confirmLabel = stringResource(R.string.action_delete),
                 onConfirm = onConfirmDeleteSale,
                 onCancel = onCancelDeleteSale,
             )
         }
 
         BwToast(message = state.toastMessage?.resolve(), onDismiss = onToastShown)
-    }
-}
-
-@Composable
-private fun ConfirmDeleteDialog(message: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
-    val colors = BwTheme.colors
-    Dialog(onDismissRequest = onCancel) {
-        Surface(shape = RoundedCornerShape(18.dp), color = colors.card) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(stringResource(R.string.collection_delete_title), style = BwType.cardTitle, color = colors.text)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    message,
-                    style = BwType.body.copy(fontSize = 13.sp),
-                    color = colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(18.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(999.dp))
-                            .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp))
-                            .clickable(onClick = onCancel)
-                            .padding(vertical = 11.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(stringResource(R.string.action_cancel), style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = colors.text)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(colors.error)
-                            .clickable(onClick = onConfirm)
-                            .padding(vertical = 11.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(stringResource(R.string.action_delete), style = BwType.body.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
-                    }
-                }
-            }
-        }
     }
 }
 

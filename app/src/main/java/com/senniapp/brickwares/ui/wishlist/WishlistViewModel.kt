@@ -54,9 +54,25 @@ class WishlistViewModel(
     // Add-sheet suggestions — a DB query now (Decision 16); the sheet debounces it off the composition.
     suspend fun searchCatalog(query: String): List<CatalogSet> = catalogRepo.searchSets(query)
 
-    fun onRemove(item: WishlistItem) {
-        repository.removeFromWishlist(item.setNumber, item.setId)
-        _uiState.update { it.copy(toastMessage = UiText.Res(R.string.toast_removed_wishlist, listOf(item.name))) }
+    // ---- Remove (swipe or the "Wishlisted" button), with confirmation like Collection / Sales ----
+
+    fun onRequestRemove(item: WishlistItem) {
+        _uiState.update { it.copy(pendingRemoveId = item.id) }
+    }
+
+    fun onCancelRemove() {
+        _uiState.update { it.copy(pendingRemoveId = null) }
+    }
+
+    fun onConfirmRemove() {
+        val item = _uiState.value.pendingRemoveItem
+        if (item != null) repository.removeFromWishlist(item.setNumber, item.setId)
+        _uiState.update {
+            it.copy(
+                pendingRemoveId = null,
+                toastMessage = item?.let { i -> UiText.Res(R.string.toast_removed_wishlist, listOf(i.name)) } ?: it.toastMessage,
+            )
+        }
     }
 
     fun onToastShown() {

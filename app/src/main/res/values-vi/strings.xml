@@ -48,6 +48,7 @@
     <string name="action_go">Đến</string>
     <string name="pagination_go_title">Đến trang</string>
     <string name="action_delete">Xóa</string>
+    <string name="action_remove">Xóa</string>
     <string name="action_import">Nhập</string>
     <string name="action_ok">OK</string>
     <string name="action_retry">Thử lại</string>
@@ -263,6 +264,8 @@
     <string name="wishlist_empty">Chưa có gì ở đây, hãy tìm kiếm</string>
     <string name="wishlist_search_fab_cd">Tìm kiếm bộ</string>
     <string name="wishlist_remove_cd">Xóa khỏi danh sách mong muốn</string>
+    <string name="wishlist_remove_title">Xóa khỏi danh sách mong muốn</string>
+    <string name="wishlist_remove_confirm">Xóa \"%1$s\" khỏi danh sách mong muốn của bạn?</string>
 
     <!-- ============ Set detail ============ -->
     <string name="detail_set_not_found">Không tìm thấy bộ.</string>
