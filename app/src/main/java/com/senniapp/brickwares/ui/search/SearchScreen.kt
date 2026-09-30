@@ -82,6 +82,7 @@ import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
 import com.senniapp.brickwares.ui.components.ValuePriceLine
 import com.senniapp.brickwares.ui.components.SearchModal
+import com.senniapp.brickwares.ui.components.SearchingIndicator
 import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.SetThumb
@@ -388,7 +389,15 @@ private fun SearchContent(
                 // Live suggestions while typing (both browse modes) — sets first, then minifigs.
                 state.showSuggestions -> {
                     if (state.suggestions.isEmpty() && state.minifigSuggestions.isEmpty()) {
-                        item { SectionLabel(stringResource(R.string.search_no_matches, state.query)) }
+                        // Still fetching for this query → "Searching…"; a failed fetch → a connection
+                        // message. Only a settled, successful fetch with nothing found is "No matches".
+                        item {
+                            when {
+                                state.suggestionsLoading -> SearchingIndicator(Modifier.padding(vertical = 4.dp))
+                                state.suggestionsError -> SectionLabel(stringResource(R.string.search_suggest_error))
+                                else -> SectionLabel(stringResource(R.string.search_no_matches, state.query))
+                            }
+                        }
                     } else {
                         item {
                             SuggestionList(

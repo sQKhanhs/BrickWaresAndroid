@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -44,8 +45,9 @@ import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 
 /** How many quick-search results the modal shows before the user should narrow the query. */
 private const val SEARCH_MODAL_MAX = 20
@@ -73,21 +75,31 @@ fun SearchModal(
     // composition on a debounce keyed to the query so a new keystroke cancels the in-flight search.
     var results by remember { mutableStateOf<List<CatalogSet>>(emptyList()) }
     var figResults by remember { mutableStateOf<List<Minifig>>(emptyList()) }
+    // Pending from the first keystroke (typing, debounce, round trip) — an empty list then reads
+    // "Searching…", never "No matches". [failed] = the fetch failed with nothing to show.
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     LaunchedEffect(query) {
         if (query.isBlank()) {
             results = emptyList()
             figResults = emptyList()
+            loading = false
+            failed = false
         } else {
+            loading = true
+            failed = false
             delay(SEARCH_DEBOUNCE_MS)
-            try {
-                results = onSearch(query).take(SEARCH_MODAL_MAX)
-                figResults = onSearchMinifigs?.invoke(query)?.take(SEARCH_MODAL_MAX) ?: emptyList()
-            } catch (e: CancellationException) {
-                throw e // a newer keystroke cancelled this search — let it unwind, don't blank the results
-            } catch (e: Exception) {
-                results = emptyList()
-                figResults = emptyList()
-            }
+            // Sets and minifigs in parallel: the wait is the slower query, not the two added together.
+            val sets = async { runCatching { onSearch(query).take(SEARCH_MODAL_MAX) } }
+            val figs = async { runCatching { onSearchMinifigs?.invoke(query)?.take(SEARCH_MODAL_MAX) ?: emptyList() } }
+            val s = sets.await()
+            val f = figs.await()
+            // runCatching also catches the cancellation from a newer keystroke — unwind instead of writing.
+            ensureActive()
+            results = s.getOrDefault(emptyList())
+            figResults = f.getOrDefault(emptyList())
+            failed = (s.isFailure || f.isFailure) && results.isEmpty() && figResults.isEmpty()
+            loading = false
         }
     }
     val focusRequester = remember { FocusRequester() }
@@ -114,12 +126,15 @@ fun SearchModal(
                 )
                 Spacer(Modifier.height(10.dp))
                 if (query.isNotBlank() && results.isEmpty() && figResults.isEmpty()) {
-                    Text(
-                        stringResource(R.string.search_no_matches, query),
-                        style = BwType.body.copy(fontSize = 13.sp),
-                        color = colors.textMuted,
-                        modifier = Modifier.padding(8.dp),
-                    )
+                    when {
+                        loading -> SearchingIndicator(Modifier.padding(8.dp))
+                        else -> Text(
+                            stringResource(if (failed) R.string.search_suggest_error else R.string.search_no_matches, query),
+                            style = BwType.body.copy(fontSize = 13.sp),
+                            color = colors.textMuted,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
                 }
                 LazyColumn(modifier = Modifier.heightIn(max = 380.dp)) {
                     items(results, key = { it.id }) { set ->
@@ -160,5 +175,19 @@ fun SearchModal(
                 }
             }
         }
+    }
+}
+
+/**
+ * "Searching…" with a small spinner — shown in place of "No matches" while live suggestions for the
+ * current query are still pending (the Search tab's suggestions and this quick-search modal).
+ */
+@Composable
+fun SearchingIndicator(modifier: Modifier = Modifier) {
+    val colors = BwTheme.colors
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.brandYellow, strokeWidth = 2.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.search_searching), style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
     }
 }

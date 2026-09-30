@@ -80,6 +80,11 @@ data class SearchUiState(
     val suggestions: List<CatalogSet> = emptyList(),
     /** Live minifig suggestions (matched by name or fig code, e.g. "fig-017485"), shown below the sets. */
     val minifigSuggestions: List<Minifig> = emptyList(),
+    /** Suggestions for the current query are still pending (typing, debounce or the round trip). While
+     *  true, an empty list means "Searching…", never "No matches". */
+    val suggestionsLoading: Boolean = false,
+    /** The last suggestion fetch failed with nothing to show — a connection message, not "No matches". */
+    val suggestionsError: Boolean = false,
     val themes: List<ThemeGroup> = emptyList(),
     val themeSort: ThemeSort = ThemeSort.ALPHABETICAL,
     /** Detail cards vs a compact 2-column list. Shared by the set + minifig theme browse. */

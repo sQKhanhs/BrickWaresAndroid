@@ -20,6 +20,7 @@ import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.NewSets
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -149,18 +150,38 @@ class SearchViewModel(
         // suggestions still come from the in-memory minifig cache.
         suggestJob?.cancel()
         if (query.isBlank()) {
-            _uiState.update { it.copy(suggestions = emptyList(), minifigSuggestions = emptyList()) }
+            _uiState.update {
+                it.copy(suggestions = emptyList(), minifigSuggestions = emptyList(), suggestionsLoading = false, suggestionsError = false)
+            }
             return
         }
+        // Pending from the first keystroke: every key cancels the previous fetch, so while the user types —
+        // and through the debounce and the round trip — no result lands. Flag it so an empty list reads
+        // "Searching…" instead of a false "No matches". The previous query's suggestions stay up meanwhile.
+        _uiState.update { it.copy(suggestionsLoading = true, suggestionsError = false) }
         suggestJob = viewModelScope.launch {
             delay(SUGGEST_DEBOUNCE_MS)
-            val sets = runCatching { catalogRepo.searchSets(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
-            val figs = runCatching { catalogRepo.fetchMinifigsMatching(query, limit = SUGGESTION_LIMIT) }.getOrDefault(emptyList())
+            // Sets and minifigs in parallel: the wait is the slower query, not the two added together.
+            val setsCall = async { runCatching { catalogRepo.searchSets(query, limit = SUGGESTION_LIMIT) } }
+            val figsCall = async { runCatching { catalogRepo.fetchMinifigsMatching(query, limit = SUGGESTION_LIMIT) } }
+            val sets = setsCall.await()
+            val figs = figsCall.await()
             // runCatching above also swallows the CancellationException from the next keystroke's
             // suggestJob.cancel(), so bail before overwriting the newer query's suggestions with this
-            // (now stale / empty) result — otherwise "No matches" flashes for a debounce + round-trip each key.
+            // (now stale / empty) result.
             ensureActive()
-            _uiState.update { it.copy(suggestions = sets, minifigSuggestions = figs) }
+            val setList = sets.getOrDefault(emptyList())
+            val figList = figs.getOrDefault(emptyList())
+            _uiState.update {
+                it.copy(
+                    suggestions = setList,
+                    minifigSuggestions = figList,
+                    suggestionsLoading = false,
+                    // A failure with nothing to show can't be trusted as "no matches"; one side failing while
+                    // the other has results just shows those.
+                    suggestionsError = (sets.isFailure || figs.isFailure) && setList.isEmpty() && figList.isEmpty(),
+                )
+            }
         }
     }
 
@@ -176,7 +197,7 @@ class SearchViewModel(
         // text can't linger during the round-trip; searchError is reset for this fresh attempt.
         _uiState.update {
             it.copy(
-                submittedQuery = q, suggestions = emptyList(), minifigSuggestions = emptyList(),
+                submittedQuery = q, suggestions = emptyList(), minifigSuggestions = emptyList(), suggestionsLoading = false, suggestionsError = false,
                 results = emptyList(), minifigItems = emptyList(),
                 minifigThemeDetail = null, minifigPage = 1,
                 searchLoading = true, searchError = false,
@@ -431,7 +452,7 @@ class SearchViewModel(
             it.copy(
                 // Clear any in-progress search so the theme-filtered list is what shows (and Back from it
                 // returns to the browse, not the leftover suggestions).
-                query = "", submittedQuery = null, suggestions = emptyList(), minifigSuggestions = emptyList(),
+                query = "", submittedQuery = null, suggestions = emptyList(), minifigSuggestions = emptyList(), suggestionsLoading = false, suggestionsError = false,
                 themeDetail = theme,
                 themeDetailSub = sub,
                 themeDetailSort = ThemeDetailSort.NEWEST,
@@ -540,7 +561,7 @@ class SearchViewModel(
         _uiState.update {
             it.copy(
                 query = "", submittedQuery = null, results = emptyList(),
-                suggestions = emptyList(), minifigSuggestions = emptyList(), minifigItems = emptyList(),
+                suggestions = emptyList(), minifigSuggestions = emptyList(), minifigItems = emptyList(), suggestionsLoading = false, suggestionsError = false,
                 searchLoading = false, searchError = false,
             )
         }
@@ -563,6 +584,8 @@ class SearchViewModel(
                 searchError = false,
                 suggestions = emptyList(),
                 minifigSuggestions = emptyList(),
+                suggestionsLoading = false,
+                suggestionsError = false,
                 themeDetail = null,
                 themeDetailSub = ALL_SUBTHEMES,
                 themeDetailResults = emptyList(),
