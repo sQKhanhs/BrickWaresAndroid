@@ -42,13 +42,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.fromHtml
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -89,6 +96,7 @@ import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
+import com.senniapp.brickwares.util.WebLinks
 import com.senniapp.brickwares.util.formatIn
 import kotlinx.coroutines.launch
 import com.senniapp.brickwares.ui.components.releaseLabel
@@ -349,13 +357,7 @@ private fun SetDetailContent(
                 // language is VI and a translation exists; otherwise the original English note.
                 val noteLang = LocalConfiguration.current.locales[0].language
                 val note = if (noteLang == "vi") (set.notesVi ?: set.notes) else set.notes
-                note?.let { n ->
-                    Text(
-                        n,
-                        style = BwType.body.copy(fontSize = 12.sp, fontStyle = FontStyle.Italic),
-                        color = colors.textMuted,
-                    )
-                }
+                note?.let { n -> SetNote(n) }
                 // Community current value (Decision 17) — median of users' paid prices, with the
                 // contribution count / staleness explained in the "!" info bubble.
                 CurrentValueRow(value = state.currentValue, loading = state.valueLoading)
@@ -710,3 +712,41 @@ private fun DetailLinkRow(label: String, value: String, onClick: () -> Unit) {
 }
 
 // ImageGalleryDialog now lives in ui/components/ImageGalleryDialog.kt (shared with the item cards).
+
+/** The only markup Brickset puts in notes (~160 of them): `<a href>` links and `<br>` breaks. */
+private val NOTE_MARKUP = Regex("""<\s*/?\s*(a|br)\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * A set's Brickset note, italic under the retail price. Most notes are plain text and render as-is; the
+ * ones carrying markup render it instead of showing literal tags — `<br>` as a line break and `<a href>`
+ * as a tappable link that opens in the in-app browser tab (http(s) only).
+ */
+@Composable
+private fun SetNote(note: String) {
+    val colors = BwTheme.colors
+    val context = LocalContext.current
+    val linkColor = colors.linkAccent
+    val text = remember(note, linkColor, context) {
+        if (!NOTE_MARKUP.containsMatchIn(note)) {
+            AnnotatedString(note)
+        } else {
+            AnnotatedString.fromHtml(
+                note
+                    // Escape "&" so text like "Barnes & Noble" (or an & in a link's query) isn't read as an entity.
+                    .replace("&", "&amp;")
+                    // A bare "<a>" is Brickset's typo for "</a>" (e.g. "…HoMa<a>)") — as an opening tag it's useless.
+                    .replace(Regex("""<a\s*>""", RegexOption.IGNORE_CASE), "</a>")
+                    // HTML collapses raw line breaks, so keep the note's own as <br>…
+                    .replace(Regex("\r\n?|\n"), "<br>")
+                    // …but drop breaks at the very start/end (several notes end in "<br/>"), which would leave
+                    // an empty line under the note.
+                    .replace(Regex("""^(\s|<br\s*/?>)+|(\s|<br\s*/?>)+$""", RegexOption.IGNORE_CASE), ""),
+                linkStyles = TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)),
+                linkInteractionListener = { link ->
+                    (link as? LinkAnnotation.Url)?.let { WebLinks.openWebUrl(context, it.url) }
+                },
+            )
+        }
+    }
+    Text(text, style = BwType.body.copy(fontSize = 12.sp, fontStyle = FontStyle.Italic), color = colors.textMuted)
+}
