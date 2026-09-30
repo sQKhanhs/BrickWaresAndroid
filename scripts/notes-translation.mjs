@@ -312,7 +312,7 @@ function zip(files) {
 }
 
 /** name -> Buffer for every entry, read through the central directory (robust to data descriptors). */
-function unzip(buf) {
+export function unzip(buf) {
   let eocd = buf.length - 22;
   while (eocd >= 0 && buf.readUInt32LE(eocd) !== 0x06054b50) eocd--;
   if (eocd < 0) throw new Error("not a zip/xlsx file");
@@ -354,7 +354,7 @@ function unxml(s) {
 const itemText = (xml) => [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "").matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>|<t\b[^>]*\/>/g)]
   .map((m) => unxml(m[1] ?? "")).join("");
 
-function readSheet(files, sheetName) {
+export function readSheet(files, sheetName) {
   const wb = files.get("xl/workbook.xml")?.toString("utf8") ?? "";
   const sheet = [...wb.matchAll(/<sheet\b([^>]*)\/?>/g)].map((m) => m[1]).find((a) => new RegExp(`name="${sheetName}"`).test(a));
   if (!sheet) throw new Error(`no "${sheetName}" sheet in the workbook`);
@@ -407,11 +407,24 @@ async function importCmd() {
   console.log(`${pairs.length} translated notes found (of ${enById.size} exported)${unknownIds ? `; ${unknownIds} filled rows had an unknown ID and were skipped` : ""}.`);
   if (!pairs.length) return;
 
-  // HTML guard: a translation must keep the English note's tags, or a link would break.
-  const tags = (s) => (s.match(/<[^>]+>/g) ?? []).join("");
-  const tagMismatch = pairs.filter((p) => HTML_TAG.test(p.en) && tags(p.en) !== tags(p.vi));
-  for (const p of tagMismatch) console.warn(`  ${p.id}: the HTML tags differ from the English — skipped (fix the tags and re-import)`);
-  const ok = pairs.filter((p) => !tagMismatch.includes(p));
+  // HTML guard: a translation must keep the English note's tags, or a link would break. Whitespace inside a
+  // tag doesn't count (machine translators collapse it) — those tags are restored byte-for-byte from the
+  // English. Any other difference is refused.
+  const tagsOf = (s) => s.match(/<[^>]+>/g) ?? [];
+  const squash = (t) => t.replace(/\s+/g, " ");
+  const ok = [];
+  for (const p of pairs) {
+    const enTags = tagsOf(p.en);
+    const viTags = tagsOf(p.vi);
+    if (!HTML_TAG.test(p.en) || enTags.join("") === viTags.join("")) { ok.push(p); continue; }
+    if (enTags.length === viTags.length && enTags.every((t, i) => squash(t) === squash(viTags[i]))) {
+      let i = 0;
+      ok.push({ ...p, vi: p.vi.replace(/<[^>]+>/g, () => enTags[i++]) });
+      console.log(`  ${p.id}: whitespace inside the HTML tags differed — restored the English tags`);
+      continue;
+    }
+    console.warn(`  ${p.id}: the HTML tags differ from the English — skipped (fix the tags and re-import)`);
+  }
 
   const stamp = today();
   const outFiles = [];
@@ -439,10 +452,13 @@ select count(*) as sets_updated from u;
 
 // ---------------------------------------------------------------------------------------------------
 
-const cmd = process.argv[2];
-if (cmd === "export") await exportCmd();
-else if (cmd === "import") await importCmd();
-else {
-  console.error("usage: notes-translation.mjs export [--out <dir>] | import <file.xlsx> [--source <json>]");
-  process.exit(1);
+// Run the CLI only when executed directly, so other scripts can import the xlsx helpers above.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const cmd = process.argv[2];
+  if (cmd === "export") await exportCmd();
+  else if (cmd === "import") await importCmd();
+  else {
+    console.error("usage: notes-translation.mjs export [--out <dir>] | import <file.xlsx> [--source <json>]");
+    process.exit(1);
+  }
 }
