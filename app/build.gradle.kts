@@ -140,7 +140,7 @@ android {
         targetSdk = 36
         // Play refuses a bundle whose versionCode it has already seen — bump by 1 for EVERY upload (internal,
         // closed, production alike); versionName is the human label and changes only at a public release.
-        versionCode = 2
+        versionCode = 3
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
