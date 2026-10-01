@@ -652,8 +652,9 @@ where s.set_id = v.set_id;`
 // --enrich / ENRICH_PENDING: the local half of the daily catalog-refresh Edge Function. The function queues new and
 // newly-revealed sets, and sets whose English note changed, in sets.enrich_queued_at; this pass re-hosts
 // their box images and translates their notes, then writes supabase/enrich-<date>.sql for the same DB.
-// A set leaves the queue once both are done. A box BrickLink doesn't have yet (unreleased sets) keeps it
-// queued until 60 days after launch (or a year in the queue), then it's given up — the app shows the render.
+// A set leaves the queue once both are done. A box BrickLink doesn't have yet keeps it queued until 60 days
+// after launch — or after it was queued, when the launch date is unknown — and at most a year; then it's
+// given up and the app shows the render.
 async function enrichPendingRun() {
   if (!ENRICH_API_URL || !ENRICH_API_KEY) {
     console.error("ENRICH_PENDING: set ENRICH_API_URL + ENRICH_API_KEY (the project's API URL + publishable key).");
@@ -685,10 +686,15 @@ async function enrichPendingRun() {
   const viFor = (r) => (r.notes ? viByNote.get(r.notes.trim()) : undefined);
 
   // 3. Done = box present / just hosted / given up, AND translation present / just made / not needed.
-  const launchCutoff = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
-  const queuedCutoff = Date.now() - 365 * 86_400_000;
+  // A box is given up on when BrickLink has none AND the set is released AND 60 days have passed — counted
+  // from its launch date, or, when Brickset has no launch date, from when it entered the queue. (Giving up
+  // at once on a missing date was too hasty: a normal set whose date just isn't filled in yet got a single
+  // try.) A year in the queue is the backstop for sets that never release.
+  const DAY_MS = 86_400_000;
+  const outSince = (r) => Date.parse(r.launch_date ? `${r.launch_date}T00:00:00Z` : r.enrich_queued_at);
   const boxGivenUp = (r) => missing.has(r.set_id) &&
-    ((r.released === true && (!r.launch_date || r.launch_date < launchCutoff)) || Date.parse(r.enrich_queued_at) < queuedCutoff);
+    ((r.released === true && outSince(r) < Date.now() - 60 * DAY_MS) ||
+      Date.parse(r.enrich_queued_at) < Date.now() - 365 * DAY_MS);
   const boxDone = (r) => Boolean(r.box_image_url || boxes.has(r.set_id) || boxGivenUp(r));
   const notesDone = (r) => !r.notes?.trim() || Boolean(r.notes_vi || viFor(r));
   const done = rows.filter((r) => boxDone(r) && notesDone(r));
