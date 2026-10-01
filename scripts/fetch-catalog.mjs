@@ -414,7 +414,7 @@ async function r2ListKeys(prefix) {
 // Returns Map<setID, publicBoxUrl> = the boxes we now have on R2 (carrying forward [existingBySetId],
 // re-hosting any not-yet-on-R2 URL). No-op unless enabled + configured. [missingOut] (a Set), when given,
 // collects the setIDs BrickLink has no box for (404 / placeholder) — the enrichment pass uses it to give up.
-async function rehostBoxImages(sets, existingBySetId = new Map(), enabled = REHOST, missingOut = null) {
+async function rehostBoxImages(sets, existingBySetId = new Map(), enabled = REHOST, missingOut = null, maxNewOverride = undefined) {
   const byId = new Map(existingBySetId);
   if (!enabled) return byId;
   if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BASE) {
@@ -422,7 +422,7 @@ async function rehostBoxImages(sets, existingBySetId = new Map(), enabled = REHO
     return byId;
   }
   const delay = Number(BOX_FETCH_DELAY_MS) || 3000;
-  const maxNew = BOX_MAX ? Number(BOX_MAX) : Infinity;
+  const maxNew = maxNewOverride ?? (BOX_MAX ? Number(BOX_MAX) : Infinity);
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
   console.log(`Box re-host -> R2 bucket "${R2_BUCKET}"; new downloads ${maxNew === Infinity ? "uncapped" : `capped at ${maxNew}`}, ~${delay}ms apart.`);
 
@@ -653,15 +653,15 @@ where s.set_id = v.set_id;`
 // newly-revealed sets, and sets whose English note changed, in sets.enrich_queued_at; this pass re-hosts
 // their box images and translates their notes, then writes supabase/enrich-<date>.sql for the same DB.
 // A set leaves the queue once both are done. A box BrickLink doesn't have yet keeps it queued until 60 days
-// after launch — or after it was queued, when the launch date is unknown — and at most a year; then it's
-// given up and the app shows the render.
+// after launch — or after it was queued, when the launch date is unknown — and at most a year; an unreleased
+// set from a past year (cancelled / never sold) is dropped on the first miss. Then the app shows the render.
 async function enrichPendingRun() {
   if (!ENRICH_API_URL || !ENRICH_API_KEY) {
     console.error("ENRICH_PENDING: set ENRICH_API_URL + ENRICH_API_KEY (the project's API URL + publishable key).");
     process.exit(1);
   }
   const base = ENRICH_API_URL.replace(/\/$/, "");
-  const cols = "set_id,set_number,number_variant,name,notes,notes_vi,box_image_url,released,launch_date,enrich_queued_at";
+  const cols = "set_id,set_number,number_variant,name,year,notes,notes_vi,box_image_url,released,launch_date,enrich_queued_at";
   const res = await fetch(`${base}/rest/v1/sets?select=${cols}&enrich_queued_at=not.is.null&order=enrich_queued_at.asc&limit=1000`, {
     headers: { apikey: ENRICH_API_KEY },
   });
@@ -678,7 +678,9 @@ async function enrichPendingRun() {
   const needBox = rows.filter((r) => !r.box_image_url)
     .map((r) => ({ setID: r.set_id, number: r.set_number, numberVariant: r.number_variant }));
   const missing = new Set();
-  const boxes = boxesOn && needBox.length ? await rehostBoxImages(needBox, new Map(), true, missing) : new Map();
+  // Uncapped: BOX_MAX is a batching knob for the big BOX_ONLY harvest; a leftover value in .env.local would
+  // silently stop this pass after that many photos.
+  const boxes = boxesOn && needBox.length ? await rehostBoxImages(needBox, new Map(), true, missing, Infinity) : new Map();
   if (!boxesOn && needBox.length) console.log(`  ENRICH_BOXES=0 — ${needBox.length} sets without a box stay queued.`);
 
   // 2. Vietnamese notes — only notes without a translation.
@@ -690,10 +692,16 @@ async function enrichPendingRun() {
   // from its launch date, or, when Brickset has no launch date, from when it entered the queue. (Giving up
   // at once on a missing date was too hasty: a normal set whose date just isn't filled in yet got a single
   // try.) A year in the queue is the backstop for sets that never release.
+  // An UNRELEASED set from a past year is not "upcoming": Brickset lists cancelled / never-sold items that way
+  // (6968 Wookiee Attack, the BIONICLE PC game, "{snowmobile}"…). Give those up on the first miss, instead of
+  // retrying them every run for a year.
   const DAY_MS = 86_400_000;
+  const thisYear = new Date().getFullYear();
   const outSince = (r) => Date.parse(r.launch_date ? `${r.launch_date}T00:00:00Z` : r.enrich_queued_at);
+  const neverReleased = (r) => r.released !== true && Number(r.year) > 0 && Number(r.year) < thisYear;
   const boxGivenUp = (r) => missing.has(r.set_id) &&
     ((r.released === true && outSince(r) < Date.now() - 60 * DAY_MS) ||
+      neverReleased(r) ||
       Date.parse(r.enrich_queued_at) < Date.now() - 365 * DAY_MS);
   const boxDone = (r) => Boolean(r.box_image_url || boxes.has(r.set_id) || boxGivenUp(r));
   const notesDone = (r) => !r.notes?.trim() || Boolean(r.notes_vi || viFor(r));
