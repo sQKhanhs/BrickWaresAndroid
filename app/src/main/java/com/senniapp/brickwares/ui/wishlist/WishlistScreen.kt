@@ -49,10 +49,9 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ConfirmDeleteDialog
 import com.senniapp.brickwares.ui.components.resolve
-import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.ItemSort
 import com.senniapp.brickwares.ui.components.ItemSortOptionsFull
-import com.senniapp.brickwares.ui.components.SortRow
+import com.senniapp.brickwares.ui.components.FilterSortRow
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.blinkAttention
 import com.senniapp.brickwares.ui.components.GrowthPill
@@ -188,9 +187,14 @@ private fun WishlistContent(
                 // Sticky so the filter + sort stay reachable while the list scrolls; the opaque
                 // background hides the cards sliding under it.
                 Column(Modifier.background(colors.bg)) {
-                    FilterChips(selected = state.filter, onSelect = onFilterSelected)
-                    Spacer(Modifier.height(10.dp))
-                    SortRow(selected = state.sort, options = ItemSortOptionsFull, onSelect = onSortChange)
+                    FilterSortRow(
+                        filterOptions = filterOptions(),
+                        selectedFilter = state.filter,
+                        onFilterSelect = onFilterSelected,
+                        sort = state.sort,
+                        sortOptions = ItemSortOptionsFull,
+                        onSortSelect = onSortChange,
+                    )
                     Spacer(Modifier.height(14.dp))
                 }
             }
@@ -271,14 +275,13 @@ private fun WishlistContent(
     }
 }
 
+/** The All / Set / Minifig switch options. */
 @Composable
-private fun FilterChips(selected: WishlistFilter, onSelect: (WishlistFilter) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipItem(R.drawable.ic_bw_all, stringResource(R.string.filter_all), selected == WishlistFilter.ALL, { onSelect(WishlistFilter.ALL) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_set, stringResource(R.string.filter_set), selected == WishlistFilter.SET, { onSelect(WishlistFilter.SET) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_minifig, stringResource(R.string.filter_minifig), selected == WishlistFilter.MINIFIG, { onSelect(WishlistFilter.MINIFIG) }, Modifier.weight(1f))
-    }
-}
+private fun filterOptions(): List<Pair<WishlistFilter, String>> = listOf(
+    WishlistFilter.ALL to stringResource(R.string.filter_all),
+    WishlistFilter.SET to stringResource(R.string.filter_set),
+    WishlistFilter.MINIFIG to stringResource(R.string.filter_minifig),
+)
 
 /** The filled-heart accent from the design handoff (matches the "Wishlisted" glyph). */
 private val WishlistHeart = Color(0xFFC9506F)

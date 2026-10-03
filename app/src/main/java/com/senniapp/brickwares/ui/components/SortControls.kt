@@ -8,10 +8,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.senniapp.brickwares.R
@@ -55,38 +62,76 @@ fun ItemSort.label(): String = stringResource(
     },
 )
 
-/** A "Sort  ……  [current ▾]" row — the label on the left, the dropdown on the right. */
+/** Height shared by the list-header controls ([SegmentedSwitch] and [SortDropdown]) so they line up. */
+val ListControlHeight = 40.dp
+
+/**
+ * The sticky header row of the Collection / Sales / Wishlist lists, as on iOS: the All / Set / Minifig
+ * [SegmentedSwitch] filling the row and the sort pill beside it.
+ */
 @Composable
-fun SortRow(selected: ItemSort, options: List<ItemSort>, onSelect: (ItemSort) -> Unit) {
-    val colors = BwTheme.colors
+fun <T> FilterSortRow(
+    filterOptions: List<Pair<T, String>>,
+    selectedFilter: T,
+    onFilterSelect: (T) -> Unit,
+    sort: ItemSort,
+    sortOptions: List<ItemSort>,
+    onSortSelect: (ItemSort) -> Unit,
+) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            stringResource(R.string.search_sort_label),
-            style = BwType.body.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
-            color = colors.textMuted,
+        SegmentedSwitch(
+            options = filterOptions,
+            selected = selectedFilter,
+            onSelect = onFilterSelect,
+            modifier = Modifier.weight(1f).height(ListControlHeight),
         )
-        Spacer(Modifier.weight(1f))
-        SortDropdown(selected = selected, options = options, onSelect = onSelect)
+        Spacer(Modifier.width(8.dp))
+        SortDropdown(selected = sort, options = sortOptions, onSelect = onSortSelect)
     }
 }
 
-/** A compact bordered "current sort ▾" pill that opens the options in a dropdown menu. */
+/**
+ * The sort pill — "⇅ current ⌄" — opening the options in a dropdown menu. Capped in width so the filter
+ * switch beside it keeps room; a long option ("Price: high to low") ellipsizes in the pill, in full in
+ * the menu.
+ */
 @Composable
 fun SortDropdown(selected: ItemSort, options: List<ItemSort>, onSelect: (ItemSort) -> Unit) {
     val colors = BwTheme.colors
     var expanded by remember { mutableStateOf(false) }
+    val pill = RoundedCornerShape(999.dp)
     Box {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(10.dp))
+                .height(ListControlHeight)
+                .widthIn(max = 150.dp)
+                .clip(pill)
+                .border(BorderStroke(1.dp, colors.borderStrong), pill)
                 .clickable { expanded = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(selected.label(), style = BwType.body.copy(fontSize = 12.sp), color = colors.textSecondary, maxLines = 1)
-            Text("▾", style = BwType.body.copy(fontSize = 12.sp), color = colors.textMuted)
+            Icon(
+                painter = painterResource(R.drawable.ic_bw_sort),
+                contentDescription = stringResource(R.string.search_sort_label),
+                tint = colors.text,
+                modifier = Modifier.size(15.dp),
+            )
+            Text(
+                selected.label(),
+                style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                color = colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_bw_chevron_down),
+                contentDescription = null,
+                tint = colors.textMuted,
+                modifier = Modifier.size(14.dp),
+            )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { opt ->

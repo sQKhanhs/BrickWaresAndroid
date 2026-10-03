@@ -402,29 +402,3 @@ fun GrowthPill(percent: Double) {
     }
 }
 
-/** A single filter chip (icon over label). Selected chips turn yellow. */
-@Composable
-fun ChipItem(
-    iconRes: Int,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = BwTheme.colors
-    val bg = if (selected) colors.brandYellow else colors.card
-    val fg = if (selected) colors.onYellow else colors.text
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .then(if (selected) Modifier else Modifier.border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(12.dp)))
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painter = painterResource(iconRes), contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(6.dp))
-        Text(label, style = BwType.navLabel, color = fg, fontWeight = FontWeight.Bold)
-    }
-}

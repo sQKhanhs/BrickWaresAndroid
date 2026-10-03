@@ -1,0 +1,14 @@
+<!-- Sort — up/down arrows (the sort pill on Collection / Sales / Wishlist), same stroke style as the set. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3,8 L7,4 L11,8 M7,4 V20 M21,16 L17,20 L13,16 M17,20 V4"
+        android:fillColor="#00000000"
+        android:strokeColor="#111111"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

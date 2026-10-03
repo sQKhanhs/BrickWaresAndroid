@@ -57,6 +57,8 @@ data class CollectionUiState(
     val sort: ItemSort = ItemSort.DATE_ADDED,
     /** Sort order for the Sales (sold items) list — independent of [sort]. */
     val salesSort: ItemSort = ItemSort.DATE_ADDED,
+    /** All / Set / Minifig filter for the Sales list — independent of [filter]. */
+    val salesFilter: CollectionFilter = CollectionFilter.ALL,
     /** When non-null, the swipe-to-delete confirmation dialog is open for this set. */
     val pendingDeleteSetNumber: String? = null,
     /** When non-null, the swipe-to-delete confirmation dialog is open for this sale record. */
@@ -90,11 +92,19 @@ data class CollectionUiState(
     val pageItems: List<CollectionItem>
         get() = visibleItems.applyItemSort(sort).drop((currentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
+    /** The sold items that pass [salesFilter] (the Sales stats still cover every sale). */
+    val visibleSoldItems: List<SoldItem>
+        get() = when (salesFilter) {
+            CollectionFilter.ALL -> soldItems
+            CollectionFilter.SET -> soldItems.filter { it.itemType == ItemType.SET }
+            CollectionFilter.MINIFIG -> soldItems.filter { it.itemType == ItemType.MINIFIG }
+        }
+
     /** Numbered pagination for the Sales (sold items) list. */
-    val salesPageCount: Int get() = ((soldItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+    val salesPageCount: Int get() = ((visibleSoldItems.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
     val salesCurrentPage: Int get() = salesPage.coerceIn(1, salesPageCount)
     val salesPageItems: List<SoldItem>
-        get() = soldItems.applySalesSort(salesSort).drop((salesCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
+        get() = visibleSoldItems.applySalesSort(salesSort).drop((salesCurrentPage - 1) * PAGE_SIZE).take(PAGE_SIZE)
 
     /** The set whose See Details modal is open, resolved from the live list by variant key (null closes it). */
     val detailItem: CollectionItem?

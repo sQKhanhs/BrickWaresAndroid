@@ -84,6 +84,10 @@ class CollectionViewModel(
         _uiState.update { it.copy(salesSort = sort, salesPage = 1) }
     }
 
+    fun onSalesFilterSelected(filter: CollectionFilter) {
+        _uiState.update { it.copy(salesFilter = filter, salesPage = 1) }
+    }
+
     fun onToggleMode() {
         _uiState.update {
             val next = if (it.mode == CollectionMode.COLLECTION) CollectionMode.SALES else CollectionMode.COLLECTION

@@ -56,7 +56,6 @@ import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ConfirmDeleteDialog
 import com.senniapp.brickwares.ui.components.resolve
-import com.senniapp.brickwares.ui.components.ChipItem
 import com.senniapp.brickwares.ui.components.EmptyStateArt
 import com.senniapp.brickwares.ui.components.SignInPromptCard
 import com.senniapp.brickwares.ui.components.blinkAttention
@@ -72,7 +71,7 @@ import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.ItemSort
 import com.senniapp.brickwares.ui.components.ItemSortOptionsFull
 import com.senniapp.brickwares.ui.components.SetThumb
-import com.senniapp.brickwares.ui.components.SortRow
+import com.senniapp.brickwares.ui.components.FilterSortRow
 import com.senniapp.brickwares.ui.components.PaginationBar
 import com.senniapp.brickwares.ui.components.PriceLine
 import com.senniapp.brickwares.ui.components.MinifigSetsWithValueInfo
@@ -114,6 +113,7 @@ fun CollectionScreen(
         onSalesPageChange = viewModel::onSalesPageChange,
         onSortChange = viewModel::onSortChange,
         onSalesSortChange = viewModel::onSalesSortChange,
+        onSalesFilterSelected = viewModel::onSalesFilterSelected,
         onToggleMode = viewModel::onToggleMode,
         onAddClick = viewModel::onAddClick,
         onItemDetail = viewModel::onItemDetail,
@@ -157,6 +157,7 @@ private fun CollectionContent(
     onSalesPageChange: (Int) -> Unit,
     onSortChange: (ItemSort) -> Unit,
     onSalesSortChange: (ItemSort) -> Unit,
+    onSalesFilterSelected: (CollectionFilter) -> Unit = {},
     onToggleMode: () -> Unit,
     onAddClick: () -> Unit,
     onItemDetail: (CollectionItem) -> Unit,
@@ -259,9 +260,14 @@ private fun CollectionContent(
                     // Sticky so the filter + sort stay reachable while the list scrolls; the opaque
                     // background hides the cards sliding under it.
                     Column(Modifier.background(colors.bg)) {
-                        FilterChips(selected = state.filter, onSelect = onFilterSelected)
-                        Spacer(Modifier.height(10.dp))
-                        SortRow(selected = state.sort, options = ItemSortOptionsFull, onSelect = onSortChange)
+                        FilterSortRow(
+                            filterOptions = filterOptions(),
+                            selectedFilter = state.filter,
+                            onFilterSelect = onFilterSelected,
+                            sort = state.sort,
+                            sortOptions = ItemSortOptionsFull,
+                            onSortSelect = onSortChange,
+                        )
                         Spacer(Modifier.height(14.dp))
                     }
                 }
@@ -309,12 +315,21 @@ private fun CollectionContent(
                     item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                 } else {
                     stickyHeader {
-                        // Sales has no All/Set/Minifig filter, so its sort control sticks on its own.
+                        // The same sticky filter + sort as the Collection list (its own filter choice).
                         Column(Modifier.background(colors.bg)) {
-                            SortRow(selected = state.salesSort, options = ItemSortOptionsFull, onSelect = onSalesSortChange)
+                            FilterSortRow(
+                                filterOptions = filterOptions(),
+                                selectedFilter = state.salesFilter,
+                                onFilterSelect = onSalesFilterSelected,
+                                sort = state.salesSort,
+                                sortOptions = ItemSortOptionsFull,
+                                onSortSelect = onSalesSortChange,
+                            )
                             Spacer(Modifier.height(14.dp))
                         }
                     }
+                    // Sales exist but none of the filtered type.
+                    if (state.visibleSoldItems.isEmpty()) item { EmptyStateArt(stringResource(R.string.sales_empty)) }
                     items(state.salesPageItems, key = { it.id }) { sold ->
                         SwipeToDelete(onSwiped = { onRequestDeleteSale(sold.id) }, autoDismiss = false) {
                             SoldCard(
@@ -328,7 +343,7 @@ private fun CollectionContent(
                         }
                         Spacer(Modifier.height(12.dp))
                     }
-                    item {
+                    if (state.visibleSoldItems.isNotEmpty()) item {
                         PaginationBar(
                             currentPage = state.salesCurrentPage,
                             totalPages = state.salesPageCount,
@@ -451,14 +466,13 @@ private fun CollectionContent(
     }
 }
 
+/** The All / Set / Minifig switch options — shared by the Collection and Sales lists (each keeps its own choice). */
 @Composable
-private fun FilterChips(selected: CollectionFilter, onSelect: (CollectionFilter) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipItem(R.drawable.ic_bw_all, stringResource(R.string.filter_all), selected == CollectionFilter.ALL, { onSelect(CollectionFilter.ALL) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_set, stringResource(R.string.filter_set), selected == CollectionFilter.SET, { onSelect(CollectionFilter.SET) }, Modifier.weight(1f))
-        ChipItem(R.drawable.ic_bw_minifig, stringResource(R.string.filter_minifig), selected == CollectionFilter.MINIFIG, { onSelect(CollectionFilter.MINIFIG) }, Modifier.weight(1f))
-    }
-}
+private fun filterOptions(): List<Pair<CollectionFilter, String>> = listOf(
+    CollectionFilter.ALL to stringResource(R.string.filter_all),
+    CollectionFilter.SET to stringResource(R.string.filter_set),
+    CollectionFilter.MINIFIG to stringResource(R.string.filter_minifig),
+)
 
 @Composable
 private fun ItemCard(item: CollectionItem, onDetail: () -> Unit, onOpenDetail: () -> Unit) {
