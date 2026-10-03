@@ -1,7 +1,10 @@
 package com.senniapp.brickwares.ui.search
 
 import com.senniapp.brickwares.data.model.CatalogSet
+import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.Minifig
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.ui.components.UiText
 import com.senniapp.brickwares.ui.components.PAGE_SIZE
 
@@ -15,7 +18,7 @@ data class SubthemeCount(val name: String, val count: Int)
 data class ThemeGroup(
     val theme: String,
     val setCount: Int,
-    /** The theme's icon URL (R2 `themes/<slug>.png`, see CatalogImages.themeIconUrl); null = no icon (placeholder). */
+    /** The theme's icon URL (R2 `themes/<slug>.png`, see CatalogImages.themeIconUrl); null = no icon. A URL that 404s (no icon uploaded) is recorded in ThemeIcons and the card shows just the name. */
     val logoAsset: String?,
     val subthemes: List<SubthemeCount> = emptyList(),
 )
@@ -117,6 +120,19 @@ data class SearchUiState(
     val themeDetailPage: Int = 1,
     /** When non-null, the shared Add-to-Collection sheet is open for this set. */
     val addTarget: CatalogSet? = null,
+    /** The Add sheet opens in Sales mode (the See Details panel's add-a-sale). */
+    val addSalesMode: Boolean = false,
+    /** The owned copy the Add sheet is editing (the See Details panel's pencil); null = adding. */
+    val editingCopy: Copy? = null,
+    /**
+     * An owned / sold result card's "See Detail" panel (copies + sales, in place — not the detail page):
+     * the card's item, keyed by its exact variantKey, and the live copies / sales the VM resolves for it.
+     */
+    val copiesTarget: CatalogSet? = null,
+    val copiesItem: CollectionItem? = null,
+    val copiesSales: List<SoldItem> = emptyList(),
+    /** The copy being sold from that panel (the Sell dialog renders over it). */
+    val sellCopy: Copy? = null,
     val toastMessage: UiText? = null,
     // ---- Minifig mode (toggled by the FAB) ----
     val mode: SearchMode = SearchMode.SETS,

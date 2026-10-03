@@ -24,8 +24,11 @@ object ImagePrefetcher {
         app = context.applicationContext
     }
 
-    /** Enqueues [urls] for background download into the disk cache. Duplicates are harmless (cache hits). */
-    fun warm(urls: Collection<String>) {
+    /**
+     * Enqueues [urls] for background download into the disk cache. Duplicates are harmless (cache hits).
+     * [onError] hears about each URL that fails (e.g. [ThemeIcons.onLoadError] notes the 404s).
+     */
+    fun warm(urls: Collection<String>, onError: ((url: String, error: Throwable) -> Unit)? = null) {
         val context = app ?: return
         val loader = SingletonImageLoader.get(context)
         urls.forEach { url ->
@@ -33,6 +36,7 @@ object ImagePrefetcher {
                 ImageRequest.Builder(context)
                     .data(url)
                     .memoryCachePolicy(CachePolicy.DISABLED)
+                    .listener(onError = { _, result -> onError?.invoke(url, result.throwable) })
                     .build(),
             )
         }

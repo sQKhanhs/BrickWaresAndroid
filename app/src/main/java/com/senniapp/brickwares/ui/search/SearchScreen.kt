@@ -72,6 +72,9 @@ import com.senniapp.brickwares.data.model.CollectionItem
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.Minifig
 import com.senniapp.brickwares.ui.components.AddToCollectionSheet
+import com.senniapp.brickwares.ui.components.ItemDetailsDialog
+import com.senniapp.brickwares.ui.components.ItemDetailsTab
+import com.senniapp.brickwares.ui.components.SellCopyDialog
 import com.senniapp.brickwares.ui.components.Banner
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.resolve
@@ -90,6 +93,8 @@ import com.senniapp.brickwares.ui.components.StatusBadge
 import com.senniapp.brickwares.ui.theme.BwTheme
 import com.senniapp.brickwares.ui.theme.BwType
 import com.senniapp.brickwares.util.AppCurrency
+import com.senniapp.brickwares.util.ThemeIcons
+import com.senniapp.brickwares.data.repository.SupabaseCatalogRepository
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.util.formatMoney
 
@@ -129,10 +134,10 @@ fun SearchScreen(
         onThemeDetailRetry = viewModel::onThemeDetailRetry,
         onAddToWishlist = viewModel::onAddToWishlist,
         onAddToCollectionClick = viewModel::onAddToCollectionClick,
-        onDismissAdd = viewModel::onDismissAdd,
         onSearchCatalog = viewModel::searchCatalog,
-        onAddToCollectionSubmit = viewModel::onAddToCollectionSubmit,
-        onAddToSalesSubmit = viewModel::onAddToSalesSubmit,
+        onSeeCopies = viewModel::onSeeCopies,
+        onSeeMinifigCopies = viewModel::onSeeMinifigCopies,
+        overlays = { SearchItemOverlays(state, viewModel) },
         onToastShown = viewModel::onToastShown,
         onRetry = viewModel::retry,
         onToggleMode = viewModel::onToggleMode,
@@ -203,23 +208,59 @@ fun ThemeResultsScreen(
             onOpenSetDetail = onOpenSetDetail,
             onAddCollection = viewModel::onAddToCollectionClick,
             onAddWishlist = viewModel::onAddToWishlist,
+            onSeeCopies = viewModel::onSeeCopies,
             isFavorite = theme in state.favoriteThemes,
             onToggleFavorite = { viewModel.onToggleFavorite(theme) },
         )
 
-        // Shared Add-to-Collection sheet + toast (same ones the Search tab and New Sets page use).
-        state.addTarget?.let { target ->
-            AddToCollectionSheet(
-                initialSet = target,
-                initialCopy = null,
-                onDismiss = viewModel::onDismissAdd,
-                onSearch = viewModel::searchCatalog,
-                onAdd = viewModel::onAddToCollectionSubmit,
-                allowSalesMode = true,
-                onAddSale = viewModel::onAddToSalesSubmit,
-            )
-        }
+        // Shared Add sheet + See Details panel + toast (same ones the Search tab and New Sets page use).
+        SearchItemOverlays(state, viewModel)
         BwToast(message = state.toastMessage?.resolve(), onDismiss = viewModel::onToastShown)
+    }
+}
+
+/**
+ * The [SearchViewModel]'s item overlays, shared by the Search tab, a theme's result list on the detail
+ * stack, and the New Sets page:
+ *  - the Add sheet — a plain add, or the See Details panel's add-a-copy / add-a-sale / edit-a-copy;
+ *  - an owned / sold result card's See Details panel (copies + sales, in place of the detail page), with
+ *    the Sell dialog over it while a copy is being sold (cancelling returns to the panel).
+ */
+@Composable
+fun SearchItemOverlays(state: SearchUiState, viewModel: SearchViewModel) {
+    state.addTarget?.let { target ->
+        AddToCollectionSheet(
+            initialSet = target,
+            initialCopy = state.editingCopy,
+            onDismiss = viewModel::onDismissAdd,
+            onSearch = viewModel::searchCatalog,
+            onAdd = viewModel::onAddToCollectionSubmit,
+            allowSalesMode = true,
+            onAddSale = viewModel::onAddToSalesSubmit,
+            initialSalesMode = state.addSalesMode,
+        )
+    }
+    val target = state.copiesTarget ?: return
+    val copiesItem = state.copiesItem
+    val sellCopy = state.sellCopy
+    if (sellCopy != null && copiesItem != null) {
+        SellCopyDialog(item = copiesItem, copy = sellCopy, onDismiss = viewModel::onDismissSell, onConfirm = viewModel::onConfirmSell)
+    } else {
+        ItemDetailsDialog(
+            item = copiesItem,
+            sales = state.copiesSales,
+            onDismiss = viewModel::onDismissCopies,
+            onDeleteCopy = viewModel::onDeleteCopy,
+            onEditCopy = viewModel::onEditCopy,
+            onSellCopy = viewModel::onSellCopyRequest,
+            // Minifig sell isn't wired (as on the minifig detail page).
+            allowSell = target.itemType != ItemType.MINIFIG,
+            onDeleteSale = viewModel::onDeleteSale,
+            salesEditable = false, // sale edit lives on the Collection > Sales tab
+            onAddCollection = viewModel::onAddCopyForItem,
+            onAddSale = viewModel::onAddSaleForItem,
+            initialTab = if (copiesItem != null) ItemDetailsTab.COLLECTION else ItemDetailsTab.SALES,
+        )
     }
 }
 
@@ -247,10 +288,12 @@ private fun SearchContent(
     onThemeDetailRetry: () -> Unit,
     onAddToWishlist: (CatalogSet) -> Unit,
     onAddToCollectionClick: (CatalogSet) -> Unit,
-    onDismissAdd: () -> Unit,
     onSearchCatalog: suspend (String) -> List<CatalogSet>,
-    onAddToCollectionSubmit: (CollectionItem) -> Unit,
-    onAddToSalesSubmit: (CollectionItem, Long) -> Unit,
+    /** An owned / sold card's "See Detail" → its See Details panel (set / minifig). */
+    onSeeCopies: (CatalogSet) -> Unit,
+    onSeeMinifigCopies: (Minifig) -> Unit,
+    /** The Add sheet + See Details panel ([SearchItemOverlays]). */
+    overlays: @Composable () -> Unit,
     onToastShown: () -> Unit,
     onRetry: () -> Unit,
     onToggleMode: () -> Unit,
@@ -315,6 +358,7 @@ private fun SearchContent(
                 onOpenSetDetail = onOpenSetDetail,
                 onAddCollection = onAddToCollectionClick,
                 onAddWishlist = onAddToWishlist,
+                onSeeCopies = onSeeCopies,
                 isFavorite = state.themeDetail.orEmpty() in state.favoriteThemes,
                 onToggleFavorite = { onToggleFavorite(state.themeDetail.orEmpty()) },
             )
@@ -329,6 +373,7 @@ private fun SearchContent(
                 error = state.minifigThemeDetailError,
                 onRetry = onMinifigThemeDetailRetry,
                 ownedNumbers = state.ownedNumbers,
+                soldNumbers = state.soldNumbers,
                 wishlistedNumbers = state.wishlistedNumbers,
                 totalCount = state.minifigItems.size,
                 currentPage = state.minifigCurrentPage,
@@ -340,6 +385,7 @@ private fun SearchContent(
                 onOpen = onOpenMinifig,
                 onAdd = onAddMinifig,
                 onWishlist = onWishlistMinifig,
+                onSeeCopies = onSeeMinifigCopies,
                 isFavorite = state.minifigThemeDetail.orEmpty() in state.favoriteMinifigThemes,
                 onToggleFavorite = { onToggleMinifigFavorite(state.minifigThemeDetail.orEmpty()) },
             )
@@ -448,6 +494,7 @@ private fun SearchContent(
                                 onOpenDetail = { onOpenSetDetail(set.id) },
                                 onAddCollection = { onAddToCollectionClick(set) },
                                 onAddWishlist = { onAddToWishlist(set) },
+                                onSeeDetail = { onSeeCopies(set) },
                             )
                             Spacer(Modifier.height(12.dp))
                         }
@@ -461,11 +508,13 @@ private fun SearchContent(
                         items(state.minifigPageItems, key = { it.figNum }) { fig ->
                             MinifigCard(
                                 fig = fig,
-                                owned = fig.variantKey in state.ownedNumbers,
+                                // Owned or sold → "See Detail", like the set cards above.
+                                owned = fig.variantKey in state.ownedNumbers || fig.variantKey in state.soldNumbers,
                                 wishlisted = fig.variantKey in state.wishlistedNumbers,
                                 onOpen = { onOpenMinifig(fig.figNum) },
                                 onAdd = { onAddMinifig(fig) },
                                 onWishlist = { onWishlistMinifig(fig) },
+                                onSeeDetail = { onSeeMinifigCopies(fig) },
                             )
                             Spacer(Modifier.height(12.dp))
                         }
@@ -569,18 +618,8 @@ private fun SearchContent(
         }
         }
 
-        // Add-to-collection sheet (shared by both modes).
-        state.addTarget?.let { target ->
-            AddToCollectionSheet(
-                initialSet = target,
-                initialCopy = null,
-                onDismiss = onDismissAdd,
-                onSearch = onSearchCatalog,
-                onAdd = onAddToCollectionSubmit,
-                allowSalesMode = true,
-                onAddSale = onAddToSalesSubmit,
-            )
-        }
+        // Add sheet + See Details panel (shared by both modes).
+        overlays()
 
         // Mode-toggle FAB (bottom-start) — flips the tab between Sets and Minifigs. Hidden on the browse
         // home, where the mode swap now lives in the sticky header; shown on results and on a theme's
@@ -691,13 +730,13 @@ private fun SectionLabel(text: String) {
 
 /**
  * A theme's icon box (card colour + soft border), shared by the detail and list cards. Loads the
- * hand-curated R2 icon (see [CatalogImages.themeIconUrl]); while a theme has no icon uploaded yet the
- * request 404s and the muted "logo" placeholder shows instead of an empty box.
+ * hand-curated R2 icon (see [CatalogImages.themeIconUrl]). A theme with no icon uploaded gets no box at
+ * all: its request 404s, [ThemeIcons] records that, and [hasThemeLogo] turns false for the cards. Any
+ * other failure (offline) leaves the empty frame, since the icon may well exist.
  */
 @Composable
-private fun ThemeLogoBox(url: String?, width: Dp, height: Dp, corner: Dp, padding: Dp) {
+private fun ThemeLogoBox(url: String, width: Dp, height: Dp, corner: Dp, padding: Dp) {
     val colors = BwTheme.colors
-    var failed by remember(url) { mutableStateOf(url == null) }
     Box(
         modifier = Modifier
             .width(width)
@@ -707,18 +746,24 @@ private fun ThemeLogoBox(url: String?, width: Dp, height: Dp, corner: Dp, paddin
             .border(BorderStroke(1.dp, colors.borderSoft), RoundedCornerShape(corner)),
         contentAlignment = Alignment.Center,
     ) {
-        if (failed) {
-            Text("logo", style = BwType.micro, color = colors.textFaint)
-        } else {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                onState = { if (it is AsyncImagePainter.State.Error) failed = true },
-                modifier = Modifier.fillMaxSize().padding(padding),
-            )
-        }
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            onState = { if (it is AsyncImagePainter.State.Error) ThemeIcons.onLoadError(url, it.result.throwable) },
+            modifier = Modifier.fillMaxSize().padding(padding),
+        )
     }
+}
+
+/**
+ * Whether a theme card shows its logo box: there is an icon URL and it hasn't 404'd ([ThemeIcons]). A
+ * theme without an icon shows just its name (like the iOS app), not an empty frame.
+ */
+@Composable
+private fun hasThemeLogo(url: String?): Boolean {
+    val missing by ThemeIcons.missing.collectAsStateWithLifecycle()
+    return url != null && url !in missing
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -742,12 +787,21 @@ private fun ThemeCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ThemeLogoBox(url = group.logoAsset, width = 140.dp, height = 80.dp, corner = 8.dp, padding = 10.dp)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val hasLogo = hasThemeLogo(group.logoAsset)
+            if (hasLogo) ThemeLogoBox(url = group.logoAsset!!, width = 140.dp, height = 80.dp, corner = 8.dp, padding = 10.dp)
+            Row(
+                // Without the logo the name sits on the star's line — keep it clear of the star.
+                modifier = if (hasLogo) Modifier else Modifier.padding(horizontal = 28.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 Text(group.theme, style = BwType.cardTitle, color = colors.text)
                 Text("(${group.setCount})", style = BwType.body.copy(fontSize = 13.sp), color = colors.textMuted)
             }
-            if (group.subthemes.isNotEmpty()) {
+            // A theme whose sets are all "General" (no subtheme) shows just its name: that lone link would
+            // only repeat the theme itself.
+            val onlyGeneral = group.subthemes.singleOrNull()?.name == SupabaseCatalogRepository.SUBTHEME_NONE
+            if (group.subthemes.isNotEmpty() && !onlyGeneral) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -819,6 +873,7 @@ private fun ThemeDetailView(
     onOpenSetDetail: (String) -> Unit,
     onAddCollection: (CatalogSet) -> Unit,
     onAddWishlist: (CatalogSet) -> Unit,
+    onSeeCopies: (CatalogSet) -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
 ) {
@@ -899,6 +954,7 @@ private fun ThemeDetailView(
                 onOpenDetail = { onOpenSetDetail(set.id) },
                 onAddCollection = { onAddCollection(set) },
                 onAddWishlist = { onAddWishlist(set) },
+                onSeeDetail = { onSeeCopies(set) },
             )
             Spacer(Modifier.height(12.dp))
         }
@@ -930,6 +986,7 @@ private fun MinifigThemeDetailView(
     error: Boolean,
     onRetry: () -> Unit,
     ownedNumbers: Set<String>,
+    soldNumbers: Set<String>,
     wishlistedNumbers: Set<String>,
     totalCount: Int,
     currentPage: Int,
@@ -941,6 +998,7 @@ private fun MinifigThemeDetailView(
     onOpen: (String) -> Unit,
     onAdd: (Minifig) -> Unit,
     onWishlist: (Minifig) -> Unit,
+    onSeeCopies: (Minifig) -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
 ) {
@@ -1018,11 +1076,12 @@ private fun MinifigThemeDetailView(
             items(results, key = { it.figNum }) { fig ->
                 MinifigCard(
                     fig = fig,
-                    owned = fig.variantKey in ownedNumbers,
+                    owned = fig.variantKey in ownedNumbers || fig.variantKey in soldNumbers,
                     wishlisted = fig.variantKey in wishlistedNumbers,
                     onOpen = { onOpen(fig.figNum) },
                     onAdd = { onAdd(fig) },
                     onWishlist = { onWishlist(fig) },
+                    onSeeDetail = { onSeeCopies(fig) },
                 )
                 Spacer(Modifier.height(12.dp))
             }
@@ -1199,6 +1258,7 @@ private fun ThemeListCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = BwTheme.colors
+    val hasLogo = hasThemeLogo(group.logoAsset)
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -1208,16 +1268,19 @@ private fun ThemeListCard(
                 .clickable(onClick = onClick)
                 .padding(vertical = 12.dp, horizontal = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            // No logo → the name centres in the card (its row partner may be taller).
+            verticalArrangement = if (hasLogo) Arrangement.spacedBy(8.dp) else Arrangement.Center,
         ) {
             // Same logo box as the detail card, at a smaller scale.
-            ThemeLogoBox(url = group.logoAsset, width = 84.dp, height = 48.dp, corner = 6.dp, padding = 6.dp)
+            if (hasLogo) ThemeLogoBox(url = group.logoAsset!!, width = 84.dp, height = 48.dp, corner = 6.dp, padding = 6.dp)
             Text(
                 group.theme,
                 style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                 color = colors.text,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
+                // Without the logo the name sits on the star's line — keep it clear of the star.
+                modifier = if (hasLogo) Modifier else Modifier.padding(horizontal = 22.dp),
             )
         }
         // Favorite star (top-right overlay) — shares the same favorites as detail mode.
@@ -1285,7 +1348,16 @@ private fun LazyListScope.themeBrowseItems(
 // ---- Minifig mode ----
 
 @Composable
-private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpen: () -> Unit, onAdd: () -> Unit, onWishlist: () -> Unit) {
+private fun MinifigCard(
+    fig: Minifig,
+    owned: Boolean,
+    wishlisted: Boolean,
+    onOpen: () -> Unit,
+    onAdd: () -> Unit,
+    onWishlist: () -> Unit,
+    /** Owned / sold "See Detail" → the See Details panel (copies + sales). */
+    onSeeDetail: () -> Unit,
+) {
     val colors = BwTheme.colors
     val isLoggedIn = rememberIsLoggedIn()
     val add = { if (isLoggedIn) onAdd() else SignInController.request() }
@@ -1315,14 +1387,16 @@ private fun MinifigCard(fig: Minifig, owned: Boolean, wishlisted: Boolean, onOpe
             // Bubble sits beside "in N sets" (above) when shown; a set-less minifig keeps it on this line.
             ValuePriceLine(currentValue, showBubble = fig.setCount == 0)
             if (owned) {
+                // Owned (or sold) → a single "See Detail" opening its copies / sales panel, like SetResultCard
+                // — not a dead "Owned" tag. The name above still opens the full minifig page.
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
-                        .border(BorderStroke(1.dp, colors.borderStrong), RoundedCornerShape(999.dp)).padding(vertical = 7.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).background(colors.track)
+                        .clickable(onClick = onSeeDetail).padding(vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
                 ) {
                     Icon(painterResource(R.drawable.ic_bw_check), null, tint = colors.text, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.action_owned), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
+                    Text(stringResource(R.string.action_see_detail), style = BwType.micro.copy(fontSize = 11.sp), color = colors.text)
                 }
             } else {
                 Row(

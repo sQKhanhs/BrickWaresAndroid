@@ -6,8 +6,10 @@ import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.CollectionItem
+import com.senniapp.brickwares.data.model.Copy
 import com.senniapp.brickwares.data.model.ItemType
 import com.senniapp.brickwares.data.model.Minifig
+import com.senniapp.brickwares.data.model.SoldItem
 import com.senniapp.brickwares.data.model.WishlistItem
 import com.senniapp.brickwares.data.repository.CatalogRepository
 import com.senniapp.brickwares.data.repository.CatalogRepositoryProvider
@@ -16,9 +18,11 @@ import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
 import com.senniapp.brickwares.data.repository.ValueRepositoryProvider
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.ui.components.UiText
+import com.senniapp.brickwares.util.AppCurrency
 import com.senniapp.brickwares.util.CatalogImages
 import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.NewSets
+import com.senniapp.brickwares.util.ThemeIcons
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -47,6 +51,9 @@ class SearchViewModel(
     private var minifigThemeItems: List<Minifig> = emptyList()
     private var suggestJob: Job? = null
     private var searchJob: Job? = null
+    // The user's collection + sales, for the See Details panel (the state keeps only their key sets).
+    private var collectionItems: List<CollectionItem> = emptyList()
+    private var soldItems: List<SoldItem> = emptyList()
     private val _uiState = MutableStateFlow(
         // Seed favorites from disk so bookmarked themes survive an app restart.
         SearchUiState(
@@ -79,17 +86,19 @@ class SearchViewModel(
                 _uiState.update { it.copy(wishlistedNumbers = items.map { w -> w.variantKey }.toSet()) }
             }
         }
-        // Observe the collection so result cards for owned sets show "See Detail" instead of add/wishlist.
+        // Observe the collection so result cards for owned sets show "See Detail" instead of add/wishlist
+        // (and an open See Details panel follows its copies).
         viewModelScope.launch {
             repository.getCollectionItems().collect { items ->
-                _uiState.update { it.copy(ownedNumbers = items.map { c -> c.variantKey }.toSet()) }
+                collectionItems = items
+                _uiState.update { it.copy(ownedNumbers = items.map { c -> c.variantKey }.toSet()).withLiveCopies() }
             }
         }
-        // Observe sales too, so a set the user has sold also shows "See Detail" (opens the detail page,
-        // which surfaces the sale in the merged modal).
+        // Observe sales too, so a set the user has sold also shows "See Detail" (its panel lists the sales).
         viewModelScope.launch {
             repository.getSoldItems().collect { items ->
-                _uiState.update { it.copy(soldNumbers = items.map { s -> s.variantKey }.toSet()) }
+                soldItems = items
+                _uiState.update { it.copy(soldNumbers = items.map { s -> s.variantKey }.toSet()).withLiveCopies() }
             }
         }
     }
@@ -131,7 +140,7 @@ class SearchViewModel(
                     ).withReorderedThemes()
                 }
                 // Warm the theme icons into Coil's disk cache so the browse draws fully on first open.
-                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
+                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset }, onError = ThemeIcons::onLoadError)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -269,7 +278,7 @@ class SearchViewModel(
                     )
                 }.sortedBy { it.theme }
                 _uiState.update { it.copy(minifigThemes = themes, minifigsLoading = false, minifigLoadError = false).withReorderedThemes() }
-                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset })
+                ImagePrefetcher.warm(themes.mapNotNull { it.logoAsset }, onError = ThemeIcons::onLoadError)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -677,22 +686,91 @@ class SearchViewModel(
     // ---- Add to collection (shared sheet) ----
 
     fun onAddToCollectionClick(set: CatalogSet) {
-        _uiState.update { it.copy(addTarget = set) }
+        _uiState.update { it.copy(addTarget = set, addSalesMode = false, editingCopy = null) }
     }
 
     fun onDismissAdd() {
-        _uiState.update { it.copy(addTarget = null) }
+        _uiState.update { it.copy(addTarget = null, addSalesMode = false, editingCopy = null) }
     }
 
     fun onAddToCollectionSubmit(item: CollectionItem) {
-        repository.addItem(item)
-        _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name))) }
+        if (_uiState.value.editingCopy != null) {
+            // Edit mode (the See Details pencil): replace the copy rather than adding a new one.
+            repository.updateCopy(item.setNumber, item.copies.first())
+            _uiState.update { it.copy(addTarget = null, editingCopy = null) }
+        } else {
+            repository.addItem(item)
+            _uiState.update {
+                it.copy(addTarget = null, addSalesMode = false, toastMessage = UiText.Res(R.string.toast_added_collection, listOf(item.name)))
+            }
+        }
     }
 
     /** Add sheet in Sales mode: records a standalone sale (does not add to the collection). */
     fun onAddToSalesSubmit(item: CollectionItem, salePrice: Long) {
         repository.addSale(item, salePrice)
-        _uiState.update { it.copy(addTarget = null, toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name))) }
+        _uiState.update {
+            it.copy(addTarget = null, addSalesMode = false, editingCopy = null, toastMessage = UiText.Res(R.string.toast_added_sales, listOf(item.name)))
+        }
+    }
+
+    // ---- See Details panel (an owned / sold result card's "See Detail") ----
+
+    /** An owned or sold set card's "See Detail" — its copies / sales panel in place, not the detail page. */
+    fun onSeeCopies(set: CatalogSet) = _uiState.update { it.copy(copiesTarget = set, sellCopy = null).withLiveCopies() }
+
+    /** The same for an owned / sold minifig card. */
+    fun onSeeMinifigCopies(fig: Minifig) = onSeeCopies(minifigAsCatalogSet(fig))
+
+    fun onDismissCopies() = _uiState.update { it.closeCopies() }
+
+    fun onDeleteCopy(setNumber: String, copyId: String) = repository.removeCopy(setNumber, copyId)
+
+    /** Delete a sale shown in the panel (sale edit lives on the Collection > Sales tab). */
+    fun onDeleteSale(saleId: String) = repository.removeSale(saleId)
+
+    /** The panel's add-another-copy → the Add sheet in Collection mode for the same item. */
+    fun onAddCopyForItem() = openAddFromCopies(salesMode = false, editing = null)
+
+    /** The panel's add-a-sale → the Add sheet in Sales mode for the same item. */
+    fun onAddSaleForItem() = openAddFromCopies(salesMode = true, editing = null)
+
+    /** The panel's pencil → the Add sheet editing that copy. */
+    fun onEditCopy(copy: Copy) = openAddFromCopies(salesMode = false, editing = copy)
+
+    private fun openAddFromCopies(salesMode: Boolean, editing: Copy?) = _uiState.update {
+        it.closeCopies().copy(addTarget = it.copiesTarget, addSalesMode = salesMode, editingCopy = editing)
+    }
+
+    // Keep the panel's item open behind the Sell dialog so cancelling returns to it.
+    fun onSellCopyRequest(copy: Copy) = _uiState.update { it.copy(sellCopy = copy) }
+
+    fun onDismissSell() = _uiState.update { it.copy(sellCopy = null) }
+
+    fun onConfirmSell(quantity: Int, salePrice: Long, currency: AppCurrency, soldOn: String) {
+        val state = _uiState.value
+        val copy = state.sellCopy
+        val item = state.copiesItem
+        // sellCopy resolves the copy by its id, so the exact owned variant is targeted.
+        if (copy != null && item != null) repository.sellCopy(item.setNumber, copy.id, quantity, salePrice, currency, soldOn)
+        _uiState.update {
+            it.closeCopies().copy(toastMessage = item?.let { i -> UiText.Res(R.string.toast_sold, listOf(i.name)) } ?: it.toastMessage)
+        }
+    }
+
+    private fun SearchUiState.closeCopies(): SearchUiState =
+        copy(copiesTarget = null, copiesItem = null, copiesSales = emptyList(), sellCopy = null)
+
+    /**
+     * Re-resolves an open See Details panel from the live collection / sales — by the card's exact
+     * variantKey, so a shared-number CMF/SDCC variant never pulls in a sibling's rows — so edits, deletes
+     * and sells show at once. Closes it when the item has neither copies nor sales left.
+     */
+    private fun SearchUiState.withLiveCopies(): SearchUiState {
+        val vk = copiesTarget?.variantKey ?: return this
+        val item = collectionItems.find { it.variantKey == vk }
+        val sales = soldItems.filter { it.variantKey == vk }
+        return if (item == null && sales.isEmpty()) closeCopies() else copy(copiesItem = item, copiesSales = sales)
     }
 
     fun onToastShown() {

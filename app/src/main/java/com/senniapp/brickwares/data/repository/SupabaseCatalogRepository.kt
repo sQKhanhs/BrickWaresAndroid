@@ -41,14 +41,15 @@ class SupabaseCatalogRepository(
         }
     }
 
-    private companion object {
-        const val LOAD_TIMEOUT_MS = 15_000L
+    companion object {
+        private const val LOAD_TIMEOUT_MS = 15_000L
 
         /** Max keys per `in.(...)` batch query, so a large user collection can't blow the URL length. */
-        const val IN_CHUNK = 200
+        private const val IN_CHUNK = 200
 
         /** Label for a set with no subtheme — Brickset leaves it null; the app buckets those as "General"
-         *  (kept in step across [SetRow.toCatalogSet] and [subthemeCounts] so chip filters match). */
+         *  (kept in step across [SetRow.toCatalogSet] and [subthemeCounts] so chip filters match). Public:
+         *  the Search tab hides a theme card's lone "General" chip. */
         const val SUBTHEME_NONE = "General"
 
         /**
@@ -56,24 +57,24 @@ class SupabaseCatalogRepository(
          * (supabase/config.toml + prod = 1000): a single unpaged `select()` silently returns only the
          * first `max_rows` (Content-Range 0-999/N), so reads that can exceed it page through in these.
          */
-        const val PAGE_SIZE = 1000
+        private const val PAGE_SIZE = 1000
 
         /**
          * Brickset's placeholder name for an unrevealed/announced-but-unnamed set. Such rows carry no
          * real data yet (no name, image, pieces, or price), so they're filtered out of the catalog —
          * showing them is just scatter in search/browse. They reappear once Brickset names the set.
          */
-        const val UNREVEALED_NAME = "{?}"
+        private const val UNREVEALED_NAME = "{?}"
 
         /** The `sets` columns the app reads, shared by the full load and the server-side queries. */
-        const val SET_COLS =
+        private const val SET_COLS =
             "set_id,set_number,number_variant,name,item_type,theme,subtheme,box_image_url,render_url,year,pieces," +
                 "minifigs,availability,notes,notes_vi,launch_date,exit_date," +
                 "set_prices(region,retail_price,date_first_available,date_last_available)"
 
         /** The `minifigs` columns + the join to each fig's sets (for themes / set-count), shared by the
          *  full load and the server-side queries. */
-        const val MINIFIG_COLS = "fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"
+        private const val MINIFIG_COLS = "fig_num,name,num_parts,image_url,set_minifigs(set_id,sets(theme,subtheme))"
     }
 
     // ---- Server-side queries (Decision 16). Suspend + throw on failure; callers handle loading/error. ----

@@ -26,13 +26,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.senniapp.brickwares.R
 import com.senniapp.brickwares.data.model.CatalogSet
-import com.senniapp.brickwares.ui.components.AddToCollectionSheet
 import com.senniapp.brickwares.ui.components.BackCircleButton
 import com.senniapp.brickwares.ui.components.BwToast
 import com.senniapp.brickwares.ui.components.ErrorScreen
 import com.senniapp.brickwares.ui.components.LoadingScreen
 import com.senniapp.brickwares.ui.components.SetResultCard
 import com.senniapp.brickwares.ui.components.resolve
+import com.senniapp.brickwares.ui.search.SearchItemOverlays
 import com.senniapp.brickwares.ui.search.SearchUiState
 import com.senniapp.brickwares.ui.search.SearchViewModel
 import com.senniapp.brickwares.ui.theme.BwTheme
@@ -81,18 +81,8 @@ fun NewSetsScreen(
             }
         }
 
-        // Shared Add-to-Collection sheet (same one the Search tab uses).
-        state.addTarget?.let { target ->
-            AddToCollectionSheet(
-                initialSet = target,
-                initialCopy = null,
-                onDismiss = viewModel::onDismissAdd,
-                onSearch = viewModel::searchCatalog,
-                onAdd = viewModel::onAddToCollectionSubmit,
-                allowSalesMode = true,
-                onAddSale = viewModel::onAddToSalesSubmit,
-            )
-        }
+        // Shared Add sheet + See Details panel (same ones the Search tab uses).
+        SearchItemOverlays(state, viewModel)
 
         BwToast(message = state.toastMessage?.resolve(), onDismiss = viewModel::onToastShown)
     }
@@ -129,6 +119,7 @@ private fun NewSetsList(
                             onOpenDetail = { onOpenSetDetail(set.id) },
                             onAddCollection = { viewModel.onAddToCollectionClick(set) },
                             onAddWishlist = { viewModel.onAddToWishlist(set) },
+                            onSeeDetail = { viewModel.onSeeCopies(set) },
                         )
                         Spacer(Modifier.height(12.dp))
                     }
