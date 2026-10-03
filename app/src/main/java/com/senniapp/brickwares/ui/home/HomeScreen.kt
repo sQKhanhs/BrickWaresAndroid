@@ -501,16 +501,15 @@ private fun NewSetsCard(
                         append(stringResource(R.string.home_new_sets_view_more))
                         withStyle(SpanStyle(fontSize = 18.sp)) { append("  →") }
                     },
-                    // Match the "New LEGO Sets" card title (cardTitle: 15sp ExtraBold); arrow stays a touch larger.
                     style = BwType.cardTitle,
-                    color = colors.text,
+                    color = colors.linkAccent,
                 )
             }
         }
     }
 }
 
-/** One compact new-set row: thumbnail + number/name (opens detail), theme/pieces meta, retail + status. */
+/** One compact new-set row: thumbnail (opens the image gallery) + number/name (row opens detail), theme/pieces meta, status. */
 @Composable
 private fun NewSetPreviewRow(set: CatalogSet, onClick: () -> Unit) {
     val colors = BwTheme.colors
@@ -522,13 +521,15 @@ private fun NewSetPreviewRow(set: CatalogSet, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // No gallery here — a tap anywhere on the row opens the set detail (which has its own gallery).
+        // Tap the image → full-screen gallery (render first, then the box shot), like the result cards;
+        // the rest of the row opens the set detail.
         SetThumb(
             imageUrl = set.thumbnailUrl ?: CatalogImages.thumbUrl(set.setNumber, set.numberVariant),
             fallbackUrl = set.boxImageUrl,
             itemType = set.itemType,
             size = 56.dp,
             iconSize = 22.dp,
+            galleryImages = listOfNotNull(set.imageUrl, set.boxImageUrl),
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
