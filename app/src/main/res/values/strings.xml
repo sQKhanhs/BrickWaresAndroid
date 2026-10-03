@@ -240,6 +240,9 @@
     <string name="collection_delete_title">Delete set</string>
     <string name="collection_delete_confirm">Delete \"%1$s\" and all its copies from your collection?</string>
     <string name="sales_delete_confirm">Delete this sale of \"%1$s\"?</string>
+    <string name="sale_delete_title">Delete sale</string>
+    <string name="copy_delete_title">Delete copy</string>
+    <string name="copy_delete_confirm">Delete this copy of \"%1$s\"?</string>
     <string name="filter_all">All</string>
     <string name="filter_set">Set</string>
     <string name="filter_minifig">Minifig</string>

@@ -439,7 +439,7 @@ private fun CollectionContent(
 
         state.pendingDeleteSale?.let { sold ->
             ConfirmDeleteDialog(
-                title = stringResource(R.string.collection_delete_title),
+                title = stringResource(R.string.sale_delete_title),
                 message = stringResource(R.string.sales_delete_confirm, sold.name),
                 confirmLabel = stringResource(R.string.action_delete),
                 onConfirm = onConfirmDeleteSale,

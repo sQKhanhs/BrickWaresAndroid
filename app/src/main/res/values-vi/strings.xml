@@ -237,6 +237,9 @@
     <string name="collection_delete_title">Xóa bộ</string>
     <string name="collection_delete_confirm">Xóa \"%1$s\" và tất cả bản sao khỏi bộ sưu tập của bạn?</string>
     <string name="sales_delete_confirm">Xóa lần bán \"%1$s\" này?</string>
+    <string name="sale_delete_title">Xóa lần bán</string>
+    <string name="copy_delete_title">Xóa bản sao</string>
+    <string name="copy_delete_confirm">Xóa bản sao này của \"%1$s\"?</string>
     <string name="filter_all">Tất cả</string>
     <string name="filter_set">Bộ</string>
     <string name="filter_minifig">Minifig</string>

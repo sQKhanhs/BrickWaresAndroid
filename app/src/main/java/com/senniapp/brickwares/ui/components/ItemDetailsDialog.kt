@@ -106,6 +106,11 @@ fun ItemDetailsDialog(
         )
     }
 
+    // The copy / sale whose delete icon was tapped — removed only after the confirmation below (deleting
+    // straight from the icon, one mistap away, lost a purchase or sale record with no way back).
+    var pendingCopy by remember(setNumber) { mutableStateOf<Copy?>(null) }
+    var pendingSale by remember(setNumber) { mutableStateOf<SoldItem?>(null) }
+
     // Cap the dialog height so a long copies list scrolls inside it (pinned header + footer) rather
     // than growing past the screen and pushing the Add button out of reach.
     val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.85f).dp
@@ -151,12 +156,44 @@ fun ItemDetailsDialog(
                 Spacer(Modifier.height(14.dp))
                 when {
                     tab == ItemDetailsTab.COLLECTION && item != null && item.copies.isNotEmpty() ->
-                        CollectionBody(item, onDeleteCopy, onEditCopy, onAddCollection, onSellCopy, allowSell)
+                        CollectionBody(item, { pendingCopy = it }, onEditCopy, onAddCollection, onSellCopy, allowSell)
                     tab == ItemDetailsTab.COLLECTION -> EmptyDetailBody(onAdd = onAddCollection)
-                    hasSales -> SalesBody(sales, onEditSale, onDeleteSale, salesEditable, onAddSale)
+                    hasSales -> SalesBody(sales, onEditSale, { pendingSale = it }, salesEditable, onAddSale)
                     else -> EmptyDetailBody(onAdd = onAddSale)
                 }
             }
+        }
+
+        // Delete confirmations, naming the item and the exact row (a set can have several copies / sales).
+        val display = BwTheme.currency
+        pendingCopy?.let { copy ->
+            val condition = stringResource(if (copy.condition == Condition.NEW) R.string.sheet_condition_new else R.string.sheet_condition_used)
+            val detail = listOf(condition, copy.dateAdded, "×${copy.qty}", formatMoneyFrom(copy.pricePaid, copy.currency, display))
+                .filter { it.isNotBlank() }.joinToString(" · ")
+            ConfirmDeleteDialog(
+                title = stringResource(R.string.copy_delete_title),
+                message = stringResource(R.string.copy_delete_confirm, name) + "\n" + detail,
+                confirmLabel = stringResource(R.string.action_delete),
+                onConfirm = {
+                    item?.let { onDeleteCopy(it.setNumber, copy.id) }
+                    pendingCopy = null
+                },
+                onCancel = { pendingCopy = null },
+            )
+        }
+        pendingSale?.let { sold ->
+            val detail = listOfNotNull(sold.soldOn, "×${sold.quantity}", formatMoneyFrom(sold.saleValue, sold.currency, display))
+                .filter { it.isNotBlank() }.joinToString(" · ")
+            ConfirmDeleteDialog(
+                title = stringResource(R.string.sale_delete_title),
+                message = stringResource(R.string.sales_delete_confirm, name) + "\n" + detail,
+                confirmLabel = stringResource(R.string.action_delete),
+                onConfirm = {
+                    onDeleteSale(sold.id)
+                    pendingSale = null
+                },
+                onCancel = { pendingSale = null },
+            )
         }
     }
 }
@@ -183,7 +220,7 @@ private fun ToggleChip(label: String, selected: Boolean, modifier: Modifier = Mo
 @Composable
 private fun ColumnScope.CollectionBody(
     item: CollectionItem,
-    onDeleteCopy: (String, String) -> Unit,
+    onRequestDeleteCopy: (Copy) -> Unit,
     onEditCopy: (Copy) -> Unit,
     onAddItem: () -> Unit,
     onSellCopy: (Copy) -> Unit,
@@ -242,7 +279,7 @@ private fun ColumnScope.CollectionBody(
                     painter = painterResource(R.drawable.ic_bw_delete),
                     contentDescription = stringResource(R.string.sd_delete_copy_cd),
                     tint = colors.error,
-                    modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onDeleteCopy(item.setNumber, copy.id) },
+                    modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onRequestDeleteCopy(copy) },
                 )
             }
         }
@@ -274,7 +311,7 @@ private fun ColumnScope.CollectionBody(
 }
 
 @Composable
-private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onDeleteSale: (String) -> Unit, editable: Boolean, onAdd: () -> Unit) {
+private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) -> Unit, onRequestDeleteSale: (SoldItem) -> Unit, editable: Boolean, onAdd: () -> Unit) {
     val colors = BwTheme.colors
     val expanded = remember { mutableStateListOf<String>() }
     // Column header
@@ -321,7 +358,7 @@ private fun ColumnScope.SalesBody(sales: List<SoldItem>, onEditSale: (SoldItem) 
                     painter = painterResource(R.drawable.ic_bw_delete),
                     contentDescription = stringResource(R.string.sd_delete_copy_cd),
                     tint = colors.error,
-                    modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onDeleteSale(sold.id) },
+                    modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onRequestDeleteSale(sold) },
                 )
             }
         }
