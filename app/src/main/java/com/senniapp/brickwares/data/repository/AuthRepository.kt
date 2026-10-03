@@ -11,6 +11,7 @@ import androidx.credentials.exceptions.NoCredentialException
 import com.senniapp.brickwares.data.local.AccountPrefs
 import com.senniapp.brickwares.BuildConfig
 import com.senniapp.brickwares.data.local.AppGraph
+import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.data.remote.SupabaseClientProvider
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -461,6 +462,9 @@ object AuthRepository {
             AppGraph.syncState.clearPullCursors()
             AppGraph.syncState.setLastAccountId("")
             ThemeFavoritesPrefs.clear() // favorited themes are the deleted account's too
+            // …and so is the retirement-alert baseline: now that it is frozen while signed out, it would
+            // otherwise survive to be diffed against the NEXT account's wishlist.
+            RetirementAlertPrefs.clearBaseline()
         }
         client.auth.signOut(SignOutScope.LOCAL)
         SignInResult.Success

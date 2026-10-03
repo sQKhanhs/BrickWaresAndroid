@@ -7,6 +7,7 @@ import com.senniapp.brickwares.data.local.CollectionCopyEntity
 import com.senniapp.brickwares.data.model.Availability
 import com.senniapp.brickwares.data.model.CatalogSet
 import com.senniapp.brickwares.data.model.Minifig
+import com.senniapp.brickwares.data.local.RetirementAlertPrefs
 import com.senniapp.brickwares.data.local.SalesEntity
 import com.senniapp.brickwares.data.local.SyncStateStore
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
@@ -161,6 +162,9 @@ class SyncCoordinator(
             clearLocal()
             syncState.clearPullCursors()
             ThemeFavoritesPrefs.clear()
+            // The retirement-alert baseline describes the PREVIOUS account's wishlist; left in place, the
+            // new account's first pulled rows would be diffed against it and could raise a false alert.
+            RetirementAlertPrefs.clearBaseline()
         }
         // Record local ownership NOW, before syncing: past this point local Room holds this account's data
         // (freshly cleared for a switch, or this account's already), so a later sign-in compares against the

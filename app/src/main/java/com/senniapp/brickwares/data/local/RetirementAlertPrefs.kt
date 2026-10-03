@@ -64,4 +64,14 @@ object RetirementAlertPrefs {
         set(value) {
             cached?.edit()?.putStringSet(KEY_LAST_RETIRED, value)?.apply()
         }
+
+    /**
+     * Forget the baseline (both sets), keeping the on/off toggle. Called when the device changes hands —
+     * a different account signs in, or the account is deleted — because the baseline describes the
+     * PREVIOUS account's wishlist. The next evaluation then finds nothing in [lastWishlist], alerts
+     * nothing, and re-baselines for whoever is signed in.
+     */
+    fun clearBaseline() {
+        cached?.edit()?.remove(KEY_LAST_WISHLIST)?.remove(KEY_LAST_RETIRED)?.apply()
+    }
 }

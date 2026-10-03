@@ -111,18 +111,23 @@ object RetirementAlerts {
         // (no spurious alerts), then persists variant keys for every run after.
         val current = items.map { it.variantKey }.toSet()
         val retiredNow = items.filter { it.status == Availability.RETIRED }.map { it.variantKey }.toSet()
-        val lastWishlist = RetirementAlertPrefs.lastWishlist
-        val lastRetired = RetirementAlertPrefs.lastRetired
-
-        val newlyRetired = retiredNow.filter { it in lastWishlist && it !in lastRetired }
-        // Alerts need an account (the wishlist is account data): never deliver while explicitly signed
-        // out. An unresolved (Loading) session — e.g. a fresh background process — still delivers,
-        // since the toggle can only have been switched on by a signed-in user.
+        // Alerts need an account (the wishlist is account data): while explicitly signed out nothing is
+        // delivered AND the baseline is left untouched — otherwise a set retiring during a signed-out
+        // spell would be recorded silently and never alerted after sign-in (see RetirementRules). An
+        // unresolved (Loading) session — e.g. a fresh background process — still evaluates, since the
+        // toggle can only have been switched on by a signed-in user.
         val signedOut = AuthRepository.authState.value is AuthState.SignedOut
-        if (newlyRetired.isNotEmpty() && RetirementAlertPrefs.enabled && !signedOut) {
-            val names = items.filter { it.variantKey in newlyRetired }.map { it.name }
+        val outcome = RetirementRules.diff(
+            retiredNow = retiredNow,
+            lastWishlist = RetirementAlertPrefs.lastWishlist,
+            lastRetired = RetirementAlertPrefs.lastRetired,
+            signedOut = signedOut,
+        )
+        if (outcome.newlyRetired.isNotEmpty() && RetirementAlertPrefs.enabled) {
+            val names = items.filter { it.variantKey in outcome.newlyRetired }.map { it.name }
             deliver(context, names)
         }
+        if (!outcome.saveBaseline) return
 
         RetirementAlertPrefs.lastWishlist = current
         RetirementAlertPrefs.lastRetired = retiredNow
