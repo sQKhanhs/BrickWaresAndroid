@@ -422,7 +422,10 @@ class SyncCoordinator(
             CollectionCopyEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
                 setNumber = setNumber, name = set?.name ?: fig?.name ?: setNumber,
-                theme = set?.theme ?: fig?.themes?.firstOrNull() ?: "",
+                // A minifig's theme is NOT a server column — it is chosen at add time (the theme page it was
+                // added from). Keep the theme this device already filed the row under while the fig still
+                // belongs to it, rather than reverting to the catalog's first theme on every pull.
+                theme = set?.theme ?: fig?.themeWhenBrowsing(local?.theme) ?: "",
                 subtheme = set?.subtheme ?: "General",
                 releaseYear = set?.releaseYear ?: 0, releaseMonth = set?.releaseMonth ?: 0,
                 pieces = set?.pieces ?: fig?.numParts ?: 0, minifigs = set?.minifigs ?: 0,
@@ -448,7 +451,7 @@ class SyncCoordinator(
             WishlistEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
                 setNumber = setNumber, name = set?.name ?: fig?.name ?: setNumber,
-                theme = set?.theme ?: fig?.themes?.firstOrNull() ?: "",
+                theme = set?.theme ?: fig?.themeWhenBrowsing(local?.theme) ?: "", // keep the chosen theme (see applyCopy)
                 subtheme = set?.subtheme ?: "General",
                 releaseYear = set?.releaseYear ?: 0, releaseMonth = set?.releaseMonth ?: 0,
                 pieces = set?.pieces ?: fig?.numParts ?: 0, minifigs = set?.minifigs ?: 0,
@@ -481,7 +484,7 @@ class SyncCoordinator(
             SalesEntity(
                 id = r.id, setId = r.setId, figNum = r.figNum, itemKind = r.itemKind,
                 setNumber = setNumber, name = set?.name ?: fig?.name ?: setNumber,
-                theme = set?.theme ?: fig?.themes?.firstOrNull() ?: "",
+                theme = set?.theme ?: fig?.themeWhenBrowsing(local?.theme) ?: "", // keep the chosen theme (see applyCopy)
                 releaseYear = set?.releaseYear ?: 0, releaseMonth = set?.releaseMonth ?: 0,
                 imageUrl = set?.imageUrl ?: fig?.imageUrl, retailPrice = set?.retailPrice,
                 quantity = r.quantity, condition = r.condition ?: "new",

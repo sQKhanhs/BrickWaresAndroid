@@ -409,7 +409,8 @@ class SearchViewModel(
         repository.addToWishlist(
             WishlistItem(
                 setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
-                theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+                // The theme page it was added from, not the fig's first theme (see Minifig.themeWhenBrowsing).
+                theme = fig.themeWhenBrowsing(_uiState.value.minifigThemeDetail), releaseYear = 0, releaseMonth = 0,
                 pieces = fig.numParts, minifigs = 0, retailPrice = 0L,
                 status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
             ),
@@ -420,7 +421,7 @@ class SearchViewModel(
     /** A minifig as a fig-num-keyed [CatalogSet] so it flows through the shared Add sheet + collection. */
     private fun minifigAsCatalogSet(fig: Minifig) = CatalogSet(
         setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
-        theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+        theme = fig.themeWhenBrowsing(_uiState.value.minifigThemeDetail), releaseYear = 0, releaseMonth = 0,
         pieces = fig.numParts, minifigs = 0, retailPrice = null,
         status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
     )

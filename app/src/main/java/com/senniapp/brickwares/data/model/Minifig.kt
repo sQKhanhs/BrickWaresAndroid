@@ -21,6 +21,15 @@ data class Minifig(
     /** Distinct themes this fig belongs to. */
     val themes: List<String> get() = themeSubthemes.map { it.first }.distinct()
 
+    /**
+     * The theme to record when this fig is added to the collection / wishlist. A fig can belong to
+     * several themes (it appears in sets of each); added from a theme's page it must be filed under THAT
+     * theme — [openTheme] — not whichever theme the catalog join happens to list first. Falls back to the
+     * first theme when no theme page is open (search results, the detail page) or the fig isn't in it.
+     */
+    fun themeWhenBrowsing(openTheme: String?): String =
+        openTheme?.takeIf { it in themes } ?: themes.firstOrNull() ?: ""
+
     /** Ownership identity for the card owned/wishlisted marking — a minifig has no set_id, so it keys on
      *  its fig_num, matching a minifig CollectionItem/WishlistItem's `variantKey` ("n<fig_num>"). */
     val variantKey: String get() = "n$figNum"

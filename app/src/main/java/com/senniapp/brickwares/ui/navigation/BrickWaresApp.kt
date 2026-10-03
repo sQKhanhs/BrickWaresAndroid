@@ -197,6 +197,9 @@ fun BrickWaresApp(
             if (current != null && current.startsWith("f:")) {
                 MinifigDetailScreen(
                     figNum = current.substring(2),
+                    // Opened over the Search tab's minifig theme page → adds from this detail are filed
+                    // under that theme, like the card's own buttons on the page (null anywhere else).
+                    originTheme = if (selectedTab == BwTab.Search) searchViewModel.uiState.value.minifigThemeDetail else null,
                     onBack = popDetail,
                     // Tapping an "appears in" set pushes that set's detail onto the stack.
                     onOpenSetDetail = openSet,

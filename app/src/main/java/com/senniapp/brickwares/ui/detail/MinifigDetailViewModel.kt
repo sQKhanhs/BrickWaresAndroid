@@ -68,8 +68,16 @@ class MinifigDetailViewModel(
     /** The fig already reported as viewed for this page open (analytics `view_item`, once per open). */
     private var viewedFig: String? = null
 
-    fun load(figNumber: String) {
+    /**
+     * The minifig theme page this detail was opened from (null when opened from anywhere else). A fig
+     * added / wishlisted here is filed under it — the same as the card's own buttons on that page — not
+     * under the fig's first theme (see [Minifig.themeWhenBrowsing]).
+     */
+    private var originTheme: String? = null
+
+    fun load(figNumber: String, originTheme: String? = null) {
         this.figNum = figNumber
+        this.originTheme = originTheme
         valueKey = null
         viewedFig = null
         resolvedFig = null
@@ -185,7 +193,7 @@ class MinifigDetailViewModel(
         repository.addToWishlist(
             WishlistItem(
                 setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
-                theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+                theme = fig.themeWhenBrowsing(originTheme), releaseYear = 0, releaseMonth = 0,
                 pieces = fig.numParts, minifigs = 0, retailPrice = 0L,
                 status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
             ),
@@ -271,7 +279,7 @@ class MinifigDetailViewModel(
     /** A minifig as a fig-num-keyed [CatalogSet] so it flows through the shared Add sheet + collection. */
     private fun figAsCatalogSet(fig: Minifig) = CatalogSet(
         setNumber = fig.figNum, name = fig.name, itemType = ItemType.MINIFIG,
-        theme = fig.themes.firstOrNull() ?: "", releaseYear = 0, releaseMonth = 0,
+        theme = fig.themeWhenBrowsing(originTheme), releaseYear = 0, releaseMonth = 0,
         pieces = fig.numParts, minifigs = 0, retailPrice = null,
         status = Availability.AVAILABLE, imageUrl = fig.imageUrl,
     )

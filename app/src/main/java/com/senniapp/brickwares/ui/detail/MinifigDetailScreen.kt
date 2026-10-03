@@ -75,13 +75,15 @@ fun MinifigDetailScreen(
     showSearchFab: Boolean = false,
     /** Switch to set search: navigate back to the Search tab's set browse home. */
     onSwitchToSetSearch: () -> Unit = {},
+    /** The minifig theme page this detail was opened from, if any — adds here are filed under it. */
+    originTheme: String? = null,
     viewModel: MinifigDetailViewModel = viewModel(),
 ) {
     val scrollState = rememberScrollState()
     // Load the fig and reset scroll to the top whenever the target changes (e.g. tapping a
     // quick-search result), so a new minifig doesn't open at the previous page's scroll offset.
     LaunchedEffect(figNum) {
-        viewModel.load(figNum)
+        viewModel.load(figNum, originTheme)
         scrollState.scrollTo(0)
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
