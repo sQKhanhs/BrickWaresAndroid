@@ -16,6 +16,7 @@
         <include domain="sharedpref" path="brickwares_rate.xml" />
         <include domain="sharedpref" path="brickwares_retirement_alerts.xml" />
         <include domain="sharedpref" path="brickwares_theme_favorites.xml" />
+        <include domain="sharedpref" path="brickwares_theme.xml" />
         <include domain="sharedpref" path="brickwares_account.xml" />
     </cloud-backup>
     <device-transfer>
@@ -25,6 +26,7 @@
         <include domain="sharedpref" path="brickwares_rate.xml" />
         <include domain="sharedpref" path="brickwares_retirement_alerts.xml" />
         <include domain="sharedpref" path="brickwares_theme_favorites.xml" />
+        <include domain="sharedpref" path="brickwares_theme.xml" />
         <include domain="sharedpref" path="brickwares_account.xml" />
     </device-transfer>
 </data-extraction-rules>

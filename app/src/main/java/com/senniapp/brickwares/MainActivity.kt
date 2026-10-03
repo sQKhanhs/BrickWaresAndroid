@@ -3,12 +3,16 @@ package com.senniapp.brickwares
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.senniapp.brickwares.data.local.LocalePrefs
+import com.senniapp.brickwares.data.local.ThemePrefs
 import com.senniapp.brickwares.ui.components.SplashScreen
 import com.senniapp.brickwares.ui.navigation.AuthGate
 import com.senniapp.brickwares.ui.navigation.BrickWaresApp
@@ -52,11 +57,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleNavIntent(intent)
         setContent {
-            // Theme preference lives here so the Settings toggle can re-theme the whole app.
-            var themeMode by rememberSaveable { mutableStateOf(ThemeMode.LIGHT) }
+            // The saved theme choice (Settings → Theme); collected here so a change re-themes the whole app.
+            val themeMode by ThemePrefs.mode.collectAsStateWithLifecycle()
             val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
+            }
+            // Status / nav bar icons follow the APP theme, not the device's: enableEdgeToEdge's default
+            // reads the device setting, so Dark on a light phone (or Light on a dark one) left the icons
+            // invisible against the background.
+            DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
+                    navigationBarStyle = SystemBarStyle.auto(NAV_SCRIM_LIGHT, NAV_SCRIM_DARK) { darkTheme },
+                )
+                onDispose {}
             }
             BrickWaresTheme(darkTheme = darkTheme) {
                 // No login wall: the splash covers only the initial session restore, then the app always
@@ -71,7 +87,7 @@ class MainActivity : ComponentActivity() {
                     if (splash) {
                         SplashScreen()
                     } else {
-                        BrickWaresApp(themeMode = themeMode, onThemeModeChange = { themeMode = it })
+                        BrickWaresApp(themeMode = themeMode, onThemeModeChange = ThemePrefs::set)
                     }
                 }
             }
@@ -94,5 +110,9 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** Minimum time the branded splash stays up so its entrance animation isn't cut off. */
         const val SPLASH_MIN_MS = 1400L
+
+        // enableEdgeToEdge's own nav-bar scrims (3-button navigation), which it keeps private.
+        val NAV_SCRIM_LIGHT = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+        val NAV_SCRIM_DARK = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
     }
 }

@@ -17,6 +17,7 @@ import com.senniapp.brickwares.data.local.InstallId
 import com.senniapp.brickwares.data.local.LocalePrefs
 import com.senniapp.brickwares.data.local.RatePrefs
 import com.senniapp.brickwares.data.local.RetirementAlertPrefs
+import com.senniapp.brickwares.data.local.ThemePrefs
 import com.senniapp.brickwares.data.local.ThemeFavoritesPrefs
 import com.senniapp.brickwares.util.ImagePrefetcher
 import com.senniapp.brickwares.util.Observability
@@ -39,6 +40,7 @@ class BrickWaresApplication : Application(), SingletonImageLoader.Factory {
         LocalePrefs.init(this)
         ThemeFavoritesPrefs.init(this)
         CurrencyPrefs.init(this)
+        ThemePrefs.init(this)
         RetirementAlertPrefs.init(this)
         AnalyticsPrefs.init(this)
         InstallId.init(this)

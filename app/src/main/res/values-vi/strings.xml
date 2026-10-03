@@ -165,6 +165,7 @@
     <string name="settings_currency">Tiền tệ</string>
     <string name="settings_currency_vnd_note">Giá bán lẻ theo VND được quy đổi từ USD (theo tỷ giá quy đổi toàn cầu hiện tại), hoặc từ loại tiền khác nếu không có USD.</string>
     <string name="settings_theme">Giao diện</string>
+    <string name="theme_system">Hệ thống</string>
     <string name="theme_light">Sáng</string>
     <string name="theme_dark">Tối</string>
     <string name="settings_export_csv">Xuất dữ liệu (CSV)</string>

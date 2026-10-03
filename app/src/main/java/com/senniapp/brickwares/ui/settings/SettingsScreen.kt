@@ -346,7 +346,13 @@ private fun SettingsContent(
                     Text(stringResource(R.string.settings_theme), style = BwType.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = colors.text)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ThemeMode.entries.forEach { mode ->
-                            val label = stringResource(if (mode == ThemeMode.DARK) R.string.theme_dark else R.string.theme_light)
+                            val label = stringResource(
+                                when (mode) {
+                                    ThemeMode.SYSTEM -> R.string.theme_system
+                                    ThemeMode.LIGHT -> R.string.theme_light
+                                    ThemeMode.DARK -> R.string.theme_dark
+                                },
+                            )
                             SegmentButton(label = label, selected = mode == themeMode, onClick = { onThemeModeChange(mode) })
                         }
                     }

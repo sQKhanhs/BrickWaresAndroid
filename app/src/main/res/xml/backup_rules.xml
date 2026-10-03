@@ -21,5 +21,6 @@
     <include domain="sharedpref" path="brickwares_rate.xml" />
     <include domain="sharedpref" path="brickwares_retirement_alerts.xml" />
     <include domain="sharedpref" path="brickwares_theme_favorites.xml" />
+    <include domain="sharedpref" path="brickwares_theme.xml" />
     <include domain="sharedpref" path="brickwares_account.xml" />
 </full-backup-content>
