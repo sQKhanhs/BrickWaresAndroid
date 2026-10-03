@@ -12,6 +12,7 @@ import com.senniapp.brickwares.data.repository.AuthRepository
 import com.senniapp.brickwares.data.repository.AuthState
 import com.senniapp.brickwares.data.repository.CollectionRepository
 import com.senniapp.brickwares.data.repository.CollectionRepositoryProvider
+import com.senniapp.brickwares.data.repository.CatalogUnavailableException
 import com.senniapp.brickwares.data.repository.CsvTooNewException
 import com.senniapp.brickwares.data.repository.FeedbackCategory
 import com.senniapp.brickwares.data.repository.FeedbackRepository
@@ -252,11 +253,23 @@ class SettingsViewModel(
                 }
                 repository.importCollectionCsv(csv) // overwrites locally, then syncs and waits
             }.fold(
-                onSuccess = { count -> UiText.Res(R.string.toast_import_success, listOf(count)) },
+                onSuccess = { result ->
+                    // Notes past the server's 2,000-character cap were cut on the way in — say how many.
+                    if (result.truncatedNotes > 0) {
+                        UiText.Res(R.string.toast_import_success_truncated, listOf(result.imported, result.truncatedNotes))
+                    } else {
+                        UiText.Res(R.string.toast_import_success, listOf(result.imported))
+                    }
+                },
                 onFailure = { e ->
-                    // A file from a newer app version → tell the user to update, not a generic error.
-                    if (e is CsvTooNewException) UiText.Res(R.string.toast_import_too_new)
-                    else UiText.Res(R.string.toast_import_failed)
+                    when (e) {
+                        // A file from a newer app version → tell the user to update, not a generic error.
+                        is CsvTooNewException -> UiText.Res(R.string.toast_import_too_new)
+                        // The catalog lookup the file needs failed (captive portal / backend down) — the
+                        // import stopped before changing anything; it's a connection problem, not the file.
+                        is CatalogUnavailableException -> UiText.Res(R.string.toast_import_offline)
+                        else -> UiText.Res(R.string.toast_import_failed)
+                    }
                 },
             )
             _uiState.update { it.copy(importing = false, toastMessage = toast) }

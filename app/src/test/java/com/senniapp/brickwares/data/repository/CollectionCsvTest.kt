@@ -150,6 +150,33 @@ class CollectionCsvTest {
     }
 
     @Test
+    fun `a normal export needs no catalog lookup so it restores offline`() {
+        // Every set row carries its set_id and minifig rows never need one.
+        val parsed = exportAndParse(copies = listOf(copy()), sales = listOf(sale()), wishlist = listOf(wish()))
+        assertTrue(CollectionCsv.numbersNeedingCatalog(parsed).isEmpty())
+    }
+
+    @Test
+    fun `only set rows without a set_id need the catalog`() {
+        val parsed = exportAndParse(
+            copies = listOf(copy(id = "a", setId = null, setNumber = "71050"), copy(id = "b", setId = 1234L, setNumber = "10123")),
+            sales = listOf(sale()), // a minifig row: no set_id, but never looked up
+        )
+        assertEquals(setOf("71050"), CollectionCsv.numbersNeedingCatalog(parsed))
+    }
+
+    @Test
+    fun `notes past the cap are counted and wishlist rows never count`() {
+        val long = "x".repeat(2001)
+        val parsed = exportAndParse(
+            copies = listOf(copy(id = "a", notes = long), copy(id = "b", notes = "x".repeat(2000)), copy(id = "c", notes = null)),
+            wishlist = listOf(wish()),
+        )
+        assertEquals(1, CollectionCsv.overLongNoteCount(parsed, maxChars = 2000))
+        assertEquals(0, CollectionCsv.overLongNoteCount(exportAndParse(copies = listOf(copy())), maxChars = 2000))
+    }
+
+    @Test
     fun `blank lines and a short row are tolerated`() {
         val parsed = CollectionCsv.parse("set_number,item_kind,notes\n10123,set\n\n\n10124,set,x\n")
         assertEquals(2, parsed.rows.size)

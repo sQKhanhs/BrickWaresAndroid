@@ -117,6 +117,25 @@ object CollectionCsv {
     fun recordType(row: Map<String, String>): String =
         row["record_type"]?.trim()?.lowercase()?.ifBlank { null } ?: "collection"
 
+    /**
+     * The set numbers an import must resolve against the catalog: set rows (never minifigs) that carry
+     * no explicit `set_id`. A normal export has a set_id on every set row, so this is empty and the
+     * import needs no network; only hand-edited or legacy rows end up here.
+     */
+    fun numbersNeedingCatalog(parsed: Parsed): Set<String> =
+        parsed.rows.mapNotNull { row ->
+            fun s(k: String) = row[k]?.trim()?.ifBlank { null }
+            val isFig = s("item_kind")?.lowercase() == "minifig"
+            if (isFig || s("set_id") != null) null else s("set_number")
+        }.toSet()
+
+    /**
+     * How many collection / sale rows carry a note longer than [maxChars] — the import cuts those to the
+     * server's cap, and the result reports the count so the cut isn't silent. Wishlist rows have no note.
+     */
+    fun overLongNoteCount(parsed: Parsed, maxChars: Int): Int =
+        parsed.rows.count { row -> recordType(row) != "wishlist" && (row["notes"]?.trim()?.length ?: 0) > maxChars }
+
     /** A parsed CSV: the [header] columns and the header-keyed data [rows]. */
     data class Parsed(val header: List<String>, val rows: List<Map<String, String>>)
 
@@ -171,6 +190,16 @@ object CollectionCsv {
         return records
     }
 }
+
+/** What an import did: rows restored (all three lists) and how many notes were cut to the server's cap. */
+data class CsvImportResult(val imported: Int, val truncatedNotes: Int)
+
+/**
+ * The catalog could not be reached to resolve the rows of an import that carry no `set_id` (offline, a
+ * captive portal, the backend down). Thrown BEFORE the import touches anything, so nothing was changed.
+ */
+class CatalogUnavailableException(cause: Throwable) :
+    Exception("Catalog unreachable while resolving imported sets", cause)
 
 /** A CSV export declares a [fileVersion] newer than [CollectionCsv.FORMAT_VERSION] — the app can't read it. */
 class CsvTooNewException(val fileVersion: Int) :

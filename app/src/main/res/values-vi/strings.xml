@@ -176,6 +176,8 @@
     <string name="toast_import_success">Đã nhập %1$d mục</string>
     <string name="toast_import_failed">Không thể nhập — kiểm tra tệp và thử lại</string>
     <string name="toast_import_too_new">Tệp này thuộc phiên bản BrickWares mới hơn. Hãy cập nhật ứng dụng để nhập.</string>
+    <string name="toast_import_success_truncated">Đã nhập %1$d mục. %2$d ghi chú dài hơn 2.000 ký tự và đã được rút gọn.</string>
+    <string name="toast_import_offline">Không kết nối được danh mục để đối chiếu các bộ trong tệp này. Hãy kiểm tra kết nối và thử lại. Chưa có gì bị thay đổi.</string>
     <string name="settings_importing">Đang nhập…</string>
     <string name="settings_no_internet_title">Không có kết nối internet</string>
     <string name="settings_no_internet_body">Nhập cần kết nối để đồng bộ dữ liệu. Vui lòng thử lại sau.</string>

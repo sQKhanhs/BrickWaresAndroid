@@ -72,6 +72,8 @@ private const val MAX_QTY_DIGITS = 4
  *  would wedge sync in both directions — can't be entered in the first place. [MAX_QTY] also equals
  *  the largest a [MAX_QTY_DIGITS]-digit field can hold. */
 private const val MAX_NOTE_CHARS = 2000
+/** The note character counter appears from this length on (quiet until the cap is in sight). */
+private const val NOTE_COUNTER_FROM = 1800
 private const val MAX_QTY = 9999
 
 /** Debounce before a live-suggestion catalog query fires, so fast typing doesn't hit the DB per key. */
@@ -376,6 +378,16 @@ fun AddToCollectionSheet(
                 modifier = Modifier.fillMaxWidth().height(90.dp),
                 placeholder = { Text(stringResource(R.string.sheet_note_optional)) },
             )
+            // The note stops at the server's cap. Show the count as it gets close, and in the error
+            // colour once it is reached, so typing or pasting past the limit isn't cut without a word.
+            if (note.length >= NOTE_COUNTER_FROM) {
+                Text(
+                    "${note.length} / $MAX_NOTE_CHARS",
+                    style = BwType.body.copy(fontSize = 11.sp),
+                    color = if (note.length >= MAX_NOTE_CHARS) colors.error else colors.textMuted,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
 
             Spacer(Modifier.height(4.dp))
             // A copy needs at least one unit — a typed "0" (or blank) disables submit rather than being

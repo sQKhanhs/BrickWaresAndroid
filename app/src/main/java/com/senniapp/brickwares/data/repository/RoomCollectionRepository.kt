@@ -199,7 +199,7 @@ class RoomCollectionRepository(
             variantOf = { setId, _ -> setId?.let { setsById[it]?.numberVariant } },
         )
 
-    override suspend fun importCollectionCsv(csv: String): Int {
+    override suspend fun importCollectionCsv(csv: String): CsvImportResult {
         val parsed = CollectionCsv.parse(csv)
         // Reject a file that isn't a BrickWares export BEFORE touching anything, so picking the wrong
         // file can't silently wipe user data (a valid but empty export is allowed — it clears everything).
@@ -214,15 +214,25 @@ class RoomCollectionRepository(
         // A row that carries no explicit set_id resolves its variant from the catalog in ONE batch query
         // (Decision 16). Fetch EVERY variant per number — NOT the lowest (fetchSetsByNumbers), which would
         // pin a legacy CMF/SDCC row to variant 1. Minifig rows carry no set_id. See [resolveImportedSetId].
+        // If that lookup is needed and FAILS, the import stops here — before anything is touched. The
+        // Settings gate only knows the device has a network; behind a captive portal (or with the backend
+        // down) the query fails, and defaulting to "no variants" would import every such row as an
+        // unresolved legacy row with no word to the user. A normal export carries set_id on every set row,
+        // so it needs no lookup and still restores fully offline.
         val variantsByNumber: Map<String, List<CatalogSet>> = run {
-            val numbers = parsed.rows.mapNotNull { row ->
-                fun s(k: String) = row[k]?.trim()?.ifBlank { null }
-                val isFig = s("item_kind")?.lowercase() == "minifig"
-                if (isFig || s("set_id") != null) null else s("set_number")
-            }.toSet()
-            runCatching { catalog.fetchVariantsByNumbers(numbers) }.getOrDefault(emptyList())
-                .groupBy { it.setNumber }
+            val numbers = CollectionCsv.numbersNeedingCatalog(parsed)
+            if (numbers.isEmpty()) return@run emptyMap()
+            val variants = try {
+                catalog.fetchVariantsByNumbers(numbers)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw CatalogUnavailableException(e)
+            }
+            variants.groupBy { it.setNumber }
         }
+        // Notes past the server's cap are cut by capNote below; count them so the result can say so.
+        val truncatedNotes = CollectionCsv.overLongNoteCount(parsed, UserDataLimits.MAX_NOTE_CHARS)
         // Split the tagged rows into the three lists (a v1 file has no record_type → all collection).
         val copies = mutableListOf<CollectionCopyEntity>()
         val sales = mutableListOf<SalesEntity>()
@@ -251,7 +261,7 @@ class RoomCollectionRepository(
         // pulled (and the value cache re-warmed). Best-effort: if it fails (offline) the data is already
         // local and a reconnect sync will push it later.
         sync.syncNow()
-        return copies.size + sales.size + wishlist.size
+        return CsvImportResult(imported = copies.size + sales.size + wishlist.size, truncatedNotes = truncatedNotes)
     }
 
     /**

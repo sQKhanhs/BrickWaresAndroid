@@ -179,6 +179,8 @@
     <string name="toast_import_success">Imported %1$d items</string>
     <string name="toast_import_failed">Couldn\'t import — check the file and try again</string>
     <string name="toast_import_too_new">This file is from a newer version of BrickWares. Update the app to import it.</string>
+    <string name="toast_import_success_truncated">Imported %1$d items. %2$d notes were longer than 2,000 characters and were shortened.</string>
+    <string name="toast_import_offline">Couldn\'t reach the catalogue to match the sets in this file. Check your connection and try again. Nothing was changed.</string>
     <string name="settings_importing">Importing…</string>
     <string name="settings_no_internet_title">No internet connection</string>
     <string name="settings_no_internet_body">Importing needs a connection to sync your data. Try again later.</string>

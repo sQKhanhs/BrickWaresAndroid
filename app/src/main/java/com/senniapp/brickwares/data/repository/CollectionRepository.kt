@@ -67,9 +67,12 @@ interface CollectionRepository {
     /**
      * Replaces the collection with the rows in [csv] (overwrite): tombstones the current copies so the
      * removals sync, then inserts the parsed rows as fresh dirty entities and kicks a sync. Returns how
-     * many copies were imported; throws if the text can't be read as the export format.
+     * many rows were imported and how many over-long notes were cut ([CsvImportResult]); throws if the
+     * text can't be read as the export format, [CsvTooNewException] for a newer file version, and
+     * [CatalogUnavailableException] when rows need a catalog lookup that can't be made — in every
+     * failure case BEFORE anything is changed.
      */
-    suspend fun importCollectionCsv(csv: String): Int
+    suspend fun importCollectionCsv(csv: String): CsvImportResult
 
     /** Sold items (Sales sub-view), exposed as a [Flow] so the list updates as sales are recorded. */
     fun getSoldItems(): Flow<List<SoldItem>>
