@@ -21,25 +21,35 @@ class SyncRulesTest {
         // the tombstone supersede B's stale dirty edit, so B never pushes it and X stays deleted.
         val t1 = 1_000L
         val t2 = 2_000L
-        assertTrue(SyncRules.remoteWins(localUpdatedAt = t1, remoteUpdatedAt = t2))
+        assertTrue(SyncRules.remoteWins(localUpdatedAt = t1, localDirty = true, remoteUpdatedAt = t2))
     }
 
     @Test
     fun `an older remote row never overwrites a newer local edit`() {
         // A deleted X at t1; B edited X at t2 > t1 offline. B keeps its edit and pushes it, and the
         // server trigger accepts it (t2 >= t1) — the row is legitimately resurrected everywhere.
-        assertFalse(SyncRules.remoteWins(localUpdatedAt = 2_000L, remoteUpdatedAt = 1_000L))
+        assertFalse(SyncRules.remoteWins(localUpdatedAt = 2_000L, localDirty = true, remoteUpdatedAt = 1_000L))
+        assertFalse(SyncRules.remoteWins(localUpdatedAt = 2_000L, localDirty = false, remoteUpdatedAt = 1_000L))
     }
 
     @Test
-    fun `an equal timestamp keeps local`() {
-        // Same instant on both sides (typically the same edit echoed back) — no churn, local stays.
-        assertFalse(SyncRules.remoteWins(localUpdatedAt = 5_000L, remoteUpdatedAt = 5_000L))
+    fun `on an exact tie a dirty local edit is kept and pushed`() {
+        // The unpushed edit must not be thrown away; the server accepts an equal stamp, so it lands.
+        assertFalse(SyncRules.remoteWins(localUpdatedAt = 5_000L, localDirty = true, remoteUpdatedAt = 5_000L))
+    }
+
+    @Test
+    fun `on an exact tie a clean local row takes the server's version so devices converge`() {
+        // Phone and tablet both edit a row stamped P by a fast clock; both stamp P+1 (nextStamp). The
+        // server accepts both pushes — the later one is what it holds. The device whose push landed
+        // FIRST is now clean with stamp P+1 and pulls the other's version, also P+1: it must take it,
+        // or the two devices would show different contents for the row indefinitely.
+        assertTrue(SyncRules.remoteWins(localUpdatedAt = 5_000L, localDirty = false, remoteUpdatedAt = 5_000L))
     }
 
     @Test
     fun `a row unknown locally is always taken`() {
-        assertTrue(SyncRules.remoteWins(localUpdatedAt = null, remoteUpdatedAt = 1L))
+        assertTrue(SyncRules.remoteWins(localUpdatedAt = null, localDirty = false, remoteUpdatedAt = 1L))
     }
 
     // ---- Pull paging: keyset cursor on (server_updated_at, id) ----
@@ -170,6 +180,52 @@ class SyncRulesTest {
     fun `already-deleted rows and the survivor itself are never returned`() {
         val active = listOf(wish("keep", setId = 1), wish("gone", setId = 1, deleted = true))
         assertTrue(SyncRules.wishlistDuplicates(active, keepId = "keep", setId = 1, figNum = null).isEmpty())
+    }
+
+    // ---- Monotonic stamps: LWW must not depend on device clocks agreeing ----
+
+    @Test
+    fun `a new row takes the device clock`() {
+        assertEquals(5_000L, SyncRules.nextStamp(now = 5_000L, previous = null))
+    }
+
+    @Test
+    fun `an edit on a normal clock takes the device clock`() {
+        assertEquals(9_000L, SyncRules.nextStamp(now = 9_000L, previous = 5_000L))
+    }
+
+    @Test
+    fun `an edit on a slow clock is still newer than the version it replaces`() {
+        // The tablet's clock runs 5 minutes fast and stamped X at 10:05. The phone (correct clock, 10:02)
+        // pulls X and edits it. A raw clock stamp (10:02) would be OLDER than the row it edits and lose.
+        val tabletStamp = 605_000L
+        val phoneNow = 602_000L
+        val stamp = SyncRules.nextStamp(now = phoneNow, previous = tabletStamp)
+        assertTrue(stamp > tabletStamp)
+        // …so the phone's edit wins on the tablet's next pull, and passes the server's stale-update guard.
+        assertTrue(SyncRules.remoteWins(localUpdatedAt = tabletStamp, localDirty = false, remoteUpdatedAt = stamp))
+    }
+
+    @Test
+    fun `two edits within the same millisecond still order`() {
+        val first = SyncRules.nextStamp(now = 1_000L, previous = null)
+        val second = SyncRules.nextStamp(now = 1_000L, previous = first)
+        assertTrue(second > first)
+    }
+
+    // ---- Value contributions follow what the server kept ----
+
+    @Test
+    fun `only rows the server kept publish a value point`() {
+        // a landed, b was silently skipped by the stale-update trigger (absent from the returned ids).
+        val pushed = listOf(Row("a", null), Row("b", null), Row("c", null))
+        val kept = SyncRules.keptByServer(pushed, landed = setOf("a", "c")) { it.id }
+        assertEquals(listOf("a", "c"), kept.map { it.id })
+    }
+
+    @Test
+    fun `nothing landed means nothing is published`() {
+        assertTrue(SyncRules.keptByServer(listOf(Row("a", null)), landed = emptySet()) { it.id }.isEmpty())
     }
 
     // ---- Retry schedule ----

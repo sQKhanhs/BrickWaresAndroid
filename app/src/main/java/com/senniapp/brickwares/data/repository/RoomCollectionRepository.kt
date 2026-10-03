@@ -420,7 +420,7 @@ class RoomCollectionRepository(
                     match.copy(
                         quantity = capQty(match.quantity + copy.qty),
                         pricePaid = capPrice(match.pricePaid + copy.pricePaid),
-                        updatedAt = now, dirty = true,
+                        updatedAt = SyncRules.nextStamp(now, match.updatedAt), dirty = true,
                     ),
                 )
             } else {
@@ -472,7 +472,8 @@ class RoomCollectionRepository(
                 quantity = capQty(copy.qty), condition = copy.condition.dbName(),
                 pricePaid = capPrice(copy.pricePaid), currency = copy.currency.name,
                 acquiredOn = copy.dateAdded.ifBlank { null },
-                notes = capNote(copy.note), updatedAt = System.currentTimeMillis(), dirty = true,
+                notes = capNote(copy.note),
+                updatedAt = SyncRules.nextStamp(System.currentTimeMillis(), existing.updatedAt), dirty = true,
             ),
         )
         // Reflect the edited paid price in the community value cache immediately (Decision 17).
@@ -511,7 +512,7 @@ class RoomCollectionRepository(
                     quantity = capQty(match.quantity + qty),
                     pricePaid = capPrice(match.pricePaid + paid),
                     salePrice = capPrice(match.salePrice + salePrice),
-                    updatedAt = now, dirty = true,
+                    updatedAt = SyncRules.nextStamp(now, match.updatedAt), dirty = true,
                 ),
             )
         } else {
@@ -568,7 +569,7 @@ class RoomCollectionRepository(
                     quantity = capQty(match.quantity + sellQty),
                     pricePaid = capPrice(match.pricePaid + soldPaid),
                     salePrice = capPrice(match.salePrice + salePrice),
-                    updatedAt = now, dirty = true,
+                    updatedAt = SyncRules.nextStamp(now, match.updatedAt), dirty = true,
                 ),
             )
         } else {
@@ -593,7 +594,7 @@ class RoomCollectionRepository(
                 copy.copy(
                     quantity = available - sellQty,
                     pricePaid = copy.pricePaid - soldPaidCopyCcy,
-                    updatedAt = now, dirty = true,
+                    updatedAt = SyncRules.nextStamp(now, copy.updatedAt), dirty = true,
                 ),
             )
         }
@@ -617,7 +618,7 @@ class RoomCollectionRepository(
                 quantity = capQty(quantity), condition = condition.dbName(),
                 pricePaid = capPrice(pricePaid), salePrice = capPrice(salePrice), currency = currency.name,
                 soldOn = soldOn?.ifBlank { null }, notes = capNote(note),
-                updatedAt = System.currentTimeMillis(), dirty = true,
+                updatedAt = SyncRules.nextStamp(System.currentTimeMillis(), existing.updatedAt), dirty = true,
             ),
         )
         // Reflect the edited sale price in the community value cache immediately (Decision 17).

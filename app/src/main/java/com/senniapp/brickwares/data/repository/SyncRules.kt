@@ -41,10 +41,17 @@ internal object SyncRules {
      * Last-writer-wins on the CLIENT `updated_at`: a remote row replaces the local one only when it is
      * strictly newer. A dirty (unpushed) local edit that is newer-or-equal keeps winning and is pushed;
      * an older dirty edit is superseded by the newer remote row (e.g. another device's delete) so it can
-     * never resurrect it. Ties keep local — the push then re-sends the same values, which is harmless.
+     * never resurrect it. On an exact tie the server's version wins over a clean local row (see below).
      */
-    fun remoteWins(localUpdatedAt: Long?, remoteUpdatedAt: Long): Boolean =
-        localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt
+    fun remoteWins(localUpdatedAt: Long?, localDirty: Boolean, remoteUpdatedAt: Long): Boolean =
+        localUpdatedAt == null ||
+            remoteUpdatedAt > localUpdatedAt ||
+            // An exact tie: two devices can now stamp the same value (both stamping previous + 1 over a
+            // row from a faster clock — see nextStamp). The server accepts both pushes, so whichever
+            // landed last is the truth. A CLEAN local row therefore takes the server's version (that is
+            // what makes the devices converge); a DIRTY one keeps its unpushed edit and pushes it, which
+            // the server also accepts on a tie — and the other, clean, device then takes that.
+            (remoteUpdatedAt == localUpdatedAt && !localDirty)
 
     /** A page shorter than the page size is the last one. */
     fun isLastPage(received: Int, pageSize: Int = PULL_PAGE_SIZE): Boolean = received < pageSize
@@ -81,6 +88,27 @@ internal object SyncRules {
             row.id != keepId && !row.deleted &&
                 ((setId != null && row.setId == setId) || (figNum != null && row.figNum == figNum))
         }
+
+    /**
+     * The client `updated_at` for a write over an EXISTING row: never older than — or equal to — the
+     * version being replaced, whatever this device's clock says. Last-writer-wins compares raw device
+     * clocks, so a device whose clock runs behind would stamp an edit OLDER than the row it just pulled
+     * from a faster-clocked device, and that edit would silently lose (locally on the next pull, and on
+     * the server to the reject_stale_update trigger). `previous + 1` guarantees "edited after seeing it"
+     * always reads as newer. A brand-new row (no [previous]) simply takes [now]. The tombstone SQL in
+     * the DAOs applies the same rule (`MAX(:ts, updatedAt + 1)`).
+     */
+    fun nextStamp(now: Long, previous: Long?): Long = if (previous == null) now else maxOf(now, previous + 1)
+
+    /**
+     * Of the rows a push sent, the ones whose value contribution may be published: only those the
+     * server actually KEPT. The reject_stale_update trigger silently skips a row older than the server's
+     * copy (the upsert still answers success), and publishing that row's price would overwrite the newer
+     * point another device contributed. [landed] = the ids the upsert returned (`Prefer:
+     * return=representation` lists exactly the rows that were inserted or updated).
+     */
+    fun <T> keptByServer(pushed: List<T>, landed: Set<String>, idOf: (T) -> String): List<T> =
+        pushed.filter { idOf(it) in landed }
 
     /** Full-precision parse of a PostgREST timestamptz ("…+00:00" or "…Z"); null when unparseable. */
     fun parseInstant(s: String): Instant? =

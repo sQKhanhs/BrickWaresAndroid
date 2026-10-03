@@ -20,6 +20,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -223,30 +224,46 @@ class SyncCoordinator(
         val failures = mutableListOf<Throwable>()
         runCatching {
             collectionDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
-                val rejected = upsertRows("collection_copies", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
-                dirty.forEach { if (it.id !in rejected) collectionDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-                contributeValues(dirty.filter { it.id !in rejected }) // publish paid prices as community value points (Decision 17)
-                if (rejected.isNotEmpty()) failures += rejectedError("collection_copies", rejected)
+                val outcome = upsertRows("collection_copies", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in outcome.rejected) collectionDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                // Publish paid prices as community value points (Decision 17) — but ONLY for rows the server
+                // kept. A row the reject_stale_update trigger silently skipped is older than the server's
+                // copy; its price must not overwrite the newer point another device contributed.
+                contributeValues(SyncRules.keptByServer(dirty, outcome.landed) { it.id })
+                if (outcome.rejected.isNotEmpty()) failures += rejectedError("collection_copies", outcome.rejected)
             }
         }.onFailure { if (it is CancellationException) throw it; failures += it }
         runCatching {
             wishlistDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
-                val rejected = upsertRows("wishlist_items", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
-                dirty.forEach { if (it.id !in rejected) wishlistDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-                if (rejected.isNotEmpty()) failures += rejectedError("wishlist_items", rejected)
+                val outcome = upsertRows("wishlist_items", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in outcome.rejected) wishlistDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                if (outcome.rejected.isNotEmpty()) failures += rejectedError("wishlist_items", outcome.rejected)
             }
         }.onFailure { if (it is CancellationException) throw it; failures += it }
         runCatching {
             salesDao.getDirty().takeIf { it.isNotEmpty() }?.let { dirty ->
                 // Includes minifig sales (fig_num, no set_id) — they used to be dropped here yet marked clean.
-                val rejected = upsertRows("sales", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
-                dirty.forEach { if (it.id !in rejected) salesDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
-                contributeSaleValues(dirty.filter { it.id !in rejected }) // a realized sale price is a community value point too (Decision 17)
-                if (rejected.isNotEmpty()) failures += rejectedError("sales", rejected)
+                val outcome = upsertRows("sales", dirty.mapNotNull { it.toRemote(uid) }) { it.id }
+                dirty.forEach { if (it.id !in outcome.rejected) salesDao.clearDirtyIfUnchanged(it.id, it.updatedAt) }
+                // A realized sale price is a community value point too (Decision 17) — kept rows only, as above.
+                contributeSaleValues(SyncRules.keptByServer(dirty, outcome.landed) { it.id })
+                if (outcome.rejected.isNotEmpty()) failures += rejectedError("sales", outcome.rejected)
             }
         }.onFailure { if (it is CancellationException) throw it; failures += it }
         failures.firstOrNull()?.let { throw it }
     }
+
+    /**
+     * What one table's push did. [landed] = ids the server actually wrote (inserted or updated);
+     * [rejected] = ids it refused for their content. A pushed id in neither set was silently skipped by
+     * the reject_stale_update trigger (the server already holds a newer version): its dirty flag is
+     * cleared like a landed row — the next pull brings the newer version — but it publishes nothing.
+     */
+    private data class PushOutcome(val landed: Set<String>, val rejected: Set<String>)
+
+    /** The one column asked back from an upsert, to learn which rows the server kept. */
+    @Serializable
+    private data class IdOnly(val id: String)
 
     private fun rejectedError(table: String, rejected: Set<String>) =
         IllegalStateException("$table: ${rejected.size} row(s) rejected by the server (${rejected.joinToString()})")
@@ -261,26 +278,45 @@ class SyncCoordinator(
      * would fail N times for the same reason, N non-fatals each) and propagates so the sync counts as
      * failed and is retried on the backoff.
      */
-    private suspend inline fun <reified R : Any> upsertRows(table: String, rows: List<R>, idOf: (R) -> String): Set<String> {
-        if (rows.isEmpty()) return emptySet()
+    private suspend inline fun <reified R : Any> upsertRows(table: String, rows: List<R>, idOf: (R) -> String): PushOutcome {
+        if (rows.isEmpty()) return PushOutcome(emptySet(), emptySet())
         try {
-            client.from(table).upsert(rows)
-            return emptySet()
+            return PushOutcome(landed = upsertReturningIds(table, rows, idOf), rejected = emptySet())
         } catch (e: RestException) {
             if (!e.isRowRejection()) throw e
             Timber.tag(TAG).w(e, "$table batch rejected (${e.statusCode}) — pushing row by row")
         }
+        val landed = mutableSetOf<String>()
         val rejected = mutableSetOf<String>()
         for (row in rows) {
             try {
-                client.from(table).upsert(row)
+                landed += upsertReturningIds(table, listOf(row), idOf)
             } catch (e: RestException) {
                 if (!e.isRowRejection()) throw e
                 rejected += idOf(row)
                 Timber.tag(TAG).w("$table push rejected row ${idOf(row)}: ${e.statusCode} ${e.error}")
             }
         }
-        return rejected
+        return PushOutcome(landed, rejected)
+    }
+
+    /**
+     * Upsert [rows] and return the ids the server actually wrote. `select("id")` makes PostgREST answer
+     * with the inserted/updated rows (`Prefer: return=representation`); a row the BEFORE UPDATE trigger
+     * skipped is simply absent. If the answer can't be read as an id list (it always should be — the
+     * owner may SELECT its own rows), fall back to "everything sent landed", the behaviour before this
+     * check existed, rather than failing a push that did succeed.
+     */
+    private suspend inline fun <reified R : Any> upsertReturningIds(table: String, rows: List<R>, idOf: (R) -> String): Set<String> {
+        val result = client.from(table).upsert(rows) { select(Columns.list("id")) }
+        return try {
+            result.decodeList<IdOnly>().mapTo(mutableSetOf()) { it.id }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "$table upsert returned no readable id list — assuming every row landed")
+            rows.mapTo(mutableSetOf()) { idOf(it) }
+        }
     }
 
     /** A rejection caused by the row itself: 400 (CHECK / not-null) or 409 (unique / FK) — not 401/404/5xx. */
@@ -417,7 +453,7 @@ class SyncCoordinator(
         // dirty (an unpushed edit), so a newer remote delete/edit supersedes a stale offline edit instead
         // of being blocked forever by the dirty flag. A dirty local that is newer-or-equal still wins and
         // is pushed. Pairs with pull-before-push and the server reject_stale_update trigger.
-        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
+        if (!SyncRules.remoteWins(local?.updatedAt, local?.dirty ?: false, remoteAt)) return
         // Polymorphic: reconstruct denormalized display fields from the set OR the minifig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
@@ -447,7 +483,7 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = wishlistDao.getById(r.id)
         // Newer-wins even over a dirty local row (see applyCopy).
-        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
+        if (!SyncRules.remoteWins(local?.updatedAt, local?.dirty ?: false, remoteAt)) return
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null
         val setNumber = set?.setNumber ?: fig?.figNum ?: return
@@ -479,7 +515,7 @@ class SyncCoordinator(
         val remoteAt = parseIso(r.updatedAt)
         val local = salesDao.getById(r.id)
         // Newer-wins even over a dirty local row (see applyCopy).
-        if (!SyncRules.remoteWins(local?.updatedAt, remoteAt)) return
+        if (!SyncRules.remoteWins(local?.updatedAt, local?.dirty ?: false, remoteAt)) return
         // Polymorphic like copies: a minifig sale has fig_num only — reconstruct from the fig catalog.
         val set = r.setId?.let { sets[it] }
         val fig = if (set == null) r.figNum?.let { figs[it] } else null

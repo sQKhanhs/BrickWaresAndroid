@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.Flow
  * DAOs for the offline-first user-data tables. Reads expose live [Flow]s (Room emits on every write,
  * so the UI is reactive). [getDirty]/[clearDirtyIfUnchanged] and [upsertAll] serve the sync engine's push/pull;
  * [clearAll] is the "discard local" branch of the account-switch guard.
+ *
+ * Every tombstone stamps `updatedAt = MAX(:ts, updatedAt + 1)` — the SQL form of [SyncRules.nextStamp]:
+ * a delete is always NEWER than the version it deletes, even when this device's clock runs behind the
+ * device that wrote that version, so last-writer-wins can't discard it.
  */
 @Dao
 interface CollectionDao {
@@ -24,7 +28,7 @@ interface CollectionDao {
     suspend fun activeCount(): Int
 
     /** Tombstone every active copy (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
-    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE deleted = 0")
     suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM collection_copies WHERE dirty = 1")
@@ -51,17 +55,17 @@ interface CollectionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<CollectionCopyEntity>)
 
-    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE id = :id")
     suspend fun markDeleted(id: String, ts: Long)
 
     /** Tombstone the LEGACY copies of a number (set_id-less rows only). `setId IS NULL` is essential:
      *  without it, deleting a legacy row would also wipe every cataloged shared-number variant that
      *  shares this set_number (e.g. removing a legacy "71050" would delete 71050-2, 71050-4, …). */
-    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
     suspend fun markDeletedBySetNumber(setNumber: String, ts: Long)
 
     /** Tombstone every active copy of one EXACT set (by set_id) — removes just this shared-number variant. */
-    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setId = :setId AND deleted = 0")
+    @Query("UPDATE collection_copies SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE setId = :setId AND deleted = 0")
     suspend fun markDeletedBySetId(setId: Long, ts: Long)
 
     /** Clear dirty ONLY if the row hasn't been rewritten since the push snapshot (its updatedAt still
@@ -86,7 +90,7 @@ interface WishlistDao {
     suspend fun activeCount(): Int
 
     /** Tombstone every active item (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
-    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE deleted = 0")
     suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM wishlist_items WHERE dirty = 1")
@@ -119,16 +123,16 @@ interface WishlistDao {
     )
     suspend fun activeMatching(setId: Long?, figNum: String?): List<WishlistEntity>
 
-    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE id = :id")
     suspend fun markDeleted(id: String, ts: Long)
 
     /** Tombstone the LEGACY wishlist row for a number (set_id-less rows only). `setId IS NULL` prevents
      *  a legacy removal from also wiping every cataloged shared-number variant sharing this set_number. */
-    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE setNumber = :setNumber AND setId IS NULL AND deleted = 0")
     suspend fun markDeletedBySetNumber(setNumber: String, ts: Long)
 
     /** Tombstone the active wishlist row for one EXACT set (by set_id) — removes just this variant. */
-    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = :ts WHERE setId = :setId AND deleted = 0")
+    @Query("UPDATE wishlist_items SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE setId = :setId AND deleted = 0")
     suspend fun markDeletedBySetId(setId: Long, ts: Long)
 
     /** See [CollectionDao.clearDirtyIfUnchanged] — clears only when the row is unchanged since the snapshot. */
@@ -152,7 +156,7 @@ interface SalesDao {
     suspend fun activeCount(): Int
 
     /** Tombstone every active sale (dirty so the deletes sync) — the "overwrite" half of a CSV import. */
-    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = :ts WHERE deleted = 0")
+    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE deleted = 0")
     suspend fun markAllActiveDeleted(ts: Long)
 
     @Query("SELECT * FROM sales WHERE dirty = 1")
@@ -173,7 +177,7 @@ interface SalesDao {
     @Query("SELECT * FROM sales WHERE deleted = 0 AND setId = :setId")
     suspend fun activeForSetId(setId: Long): List<SalesEntity>
 
-    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = :ts WHERE id = :id")
+    @Query("UPDATE sales SET deleted = 1, dirty = 1, updatedAt = MAX(:ts, updatedAt + 1) WHERE id = :id")
     suspend fun markDeleted(id: String, ts: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
